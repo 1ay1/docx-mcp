@@ -1,0 +1,852 @@
+#include "schema/schema.hpp"
+
+#include <charconv>
+#include <cmath>
+#include <map>
+#include <mutex>
+#include <regex>
+#include <unordered_map>
+
+#include "schema/schema_data.hpp"
+#include "util/util.hpp"
+
+namespace docx::schema {
+
+using namespace data;
+
+std::string_view type_name_of(ValueKind k);
+
+namespace {
+
+const char* S(std::uint32_t i) { return strings[i]; }
+
+std::string_view attr_qname(const RawAttr& a) {
+    std::string_view q = S(a.qname);
+    if (!q.empty() && q[0] == ':') q.remove_prefix(1);  // unqualified attribute
+    return q;
+}
+
+struct Flat {
+    // child qname -> (type, rank)
+    std::unordered_map<std::string, std::pair<TypeId, int>> kids;
+    std::vector<ChildInfo> order;
+    bool has_any = false;
+};
+
+struct Index {
+    std::unordered_map<std::string, std::vector<TypeId>> by_qname;
+    std::unordered_map<std::string, TypeId> roots;
+    std::unordered_map<std::string, std::string> uri_by_prefix, prefix_by_uri;
+    std::vector<std::int32_t> particle;  // effective root particle per type
+    std::vector<std::pair<std::uint32_t, std::uint32_t>> attr_range;
+    std::vector<std::pair<std::uint32_t, std::uint32_t>> text_vals;
+    mutable std::vector<std::unique_ptr<Flat>> flat;
+    mutable std::mutex mu;
+};
+
+const Index& idx() {
+    static Index* I = [] {
+        auto* ix = new Index;
+        ix->particle.resize(n_types);
+        ix->attr_range.resize(n_types);
+        ix->text_vals.resize(n_types);
+        ix->flat.resize(n_types);
+        for (std::size_t i = 0; i < n_types; i++) {
+            const RawType& t = types[i];
+            if (t.qname) ix->by_qname[S(t.qname)].push_back(TypeId(i));
+            std::int32_t p = t.particle;
+            auto ar = std::make_pair(t.attr_begin, t.attr_end);
+            auto tv = std::make_pair(t.val_begin, t.val_end);
+            if (t.base >= 0) {
+                const RawType& b = types[t.base];
+                if (p < 0) p = b.particle;
+                if (ar.first == ar.second) ar = {b.attr_begin, b.attr_end};
+                if (tv.first == tv.second) tv = {b.val_begin, b.val_end};
+            }
+            ix->particle[i] = p;
+            ix->attr_range[i] = ar;
+            ix->text_vals[i] = tv;
+        }
+        for (std::size_t i = 0; i < n_parts; i++)
+            if (parts[i].root >= 0) ix->roots.emplace(S(types[parts[i].root].qname), parts[i].root);
+        for (std::size_t i = 0; i < n_namespaces; i++) {
+            std::string p = S(namespaces[i].prefix), u = S(namespaces[i].uri);
+            if (p.empty() && u.empty()) continue;
+            ix->uri_by_prefix.emplace(p, u);
+            ix->prefix_by_uri.emplace(u, p);
+        }
+        ix->uri_by_prefix["xml"] = "http://www.w3.org/XML/1998/namespace";
+        return ix;
+    }();
+    return *I;
+}
+
+// Flatten a content model into child qname -> (type, rank). Children of a
+// choice, or of anything repeatable, share a rank: they may interleave.
+void flatten(std::int32_t pi, Flat& f, int& next, int shared) {
+    const RawParticle& p = particles[pi];
+    bool repeat = p.max != 1;
+    if (p.kind == 0) {
+        if (p.type < 0) return;
+        int r = shared >= 0 ? shared : next++;
+        std::string q = S(types[p.type].qname);
+        if (!f.kids.count(q)) {
+            f.kids.emplace(q, std::make_pair(TypeId(p.type), r));
+            f.order.push_back({q, TypeId(p.type), p.min, p.max});
+        }
+        return;
+    }
+    if (p.kind == 5) { f.has_any = true; return; }
+    int sh = shared;
+    if (sh < 0 && (repeat || p.kind == 2 || p.kind == 4)) sh = next++;
+    for (std::uint32_t c = p.child_begin; c < p.child_end; c++) flatten(particle_children[c], f, next, sh);
+}
+
+const Flat& flat_of(TypeId t) {
+    const Index& I = idx();
+    std::lock_guard lk(I.mu);
+    auto& slot = I.flat[t];
+    if (!slot) {
+        slot = std::make_unique<Flat>();
+        int next = 0;
+        if (I.particle[t] >= 0) flatten(I.particle[t], *slot, next, -1);
+    }
+    return *slot;
+}
+
+std::string_view local(std::string_view q) {
+    auto c = q.find(':');
+    return c == std::string_view::npos ? q : q.substr(c + 1);
+}
+std::string_view prefix(std::string_view q) {
+    auto c = q.find(':');
+    return c == std::string_view::npos ? std::string_view{} : q.substr(0, c);
+}
+
+bool is_mc(std::string_view q) { return prefix(q) == "mc"; }
+
+// The element an mc:AlternateContent stands for (first child of Fallback, or
+// of the first Choice).
+pugi::xml_node ac_proxy(pugi::xml_node ac) {
+    for (auto c : ac.children()) {
+        if (std::string_view(c.name()) == "mc:Fallback") {
+            for (auto k : c.children()) if (k.type() == pugi::node_element) return k;
+        }
+    }
+    for (auto c : ac.children()) {
+        if (std::string_view(c.name()) == "mc:Choice")
+            for (auto k : c.children()) if (k.type() == pugi::node_element) return k;
+    }
+    return {};
+}
+
+int rank_of(TypeId parent, pugi::xml_node child) {
+    std::string_view n = child.name();
+    if (n == "mc:AlternateContent") {
+        auto p = ac_proxy(child);
+        if (!p) return -1;
+        n = p.name();
+    }
+    const Flat& f = flat_of(parent);
+    auto it = f.kids.find(std::string(n));
+    return it == f.kids.end() ? -1 : it->second.second;
+}
+
+// ── values ───────────────────────────────────────────────────────────────
+
+bool parse_int(std::string_view s, long double& out) {
+    s = std::string_view(s);
+    std::string t = util::trim(s);
+    if (t.empty()) return false;
+    std::size_t i = 0;
+    if (t[0] == '+' || t[0] == '-') i = 1;
+    if (i == t.size()) return false;
+    for (std::size_t k = i; k < t.size(); k++) if (t[k] < '0' || t[k] > '9') return false;
+    out = std::strtold(t.c_str(), nullptr);
+    return true;
+}
+
+bool parse_float(std::string_view s, long double& out) {
+    std::string t = util::trim(s);
+    if (t == "INF") { out = INFINITY; return true; }
+    if (t == "-INF") { out = -INFINITY; return true; }
+    if (t == "NaN") { out = NAN; return true; }
+    if (t.empty()) return false;
+    static const std::regex re(R"([+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?)");
+    if (!std::regex_match(t, re)) return false;
+    out = std::strtold(t.c_str(), nullptr);
+    return true;
+}
+
+bool int_in(std::string_view s, long double lo, long double hi) {
+    long double v;
+    return parse_int(s, v) && v >= lo && v <= hi;
+}
+
+bool datetime_ok(std::string_view s) {
+    static const std::regex re(
+        R"(-?\d{4,}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d+)?)?)?(Z|[+-]\d{2}:\d{2})?|\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?|-?\d{4,}(-\d{2})?(Z|[+-]\d{2}:\d{2})?)");
+    return std::regex_match(std::string(util::trim(s)), re);
+}
+
+bool enum_has(std::int32_t ei, std::string_view v) {
+    if (ei < 0) return true;
+    const RawEnum& e = enums[ei];
+    for (auto f = e.facet_begin; f < e.facet_end; f++)
+        if (v == S(enum_facets[f])) return true;
+    return false;
+}
+
+std::vector<std::string_view> tokens(std::string_view s) {
+    std::vector<std::string_view> v;
+    std::size_t i = 0;
+    while (i < s.size()) {
+        while (i < s.size() && std::isspace((unsigned char)s[i])) i++;
+        std::size_t b = i;
+        while (i < s.size() && !std::isspace((unsigned char)s[i])) i++;
+        if (i > b) v.push_back(s.substr(b, i - b));
+    }
+    return v;
+}
+
+bool kind_ok(ValueKind k, std::int32_t ei, std::string_view v) {
+    switch (k) {
+        case ValueKind::String: return true;
+        case ValueKind::Boolean: return v == "true" || v == "false" || v == "1" || v == "0";
+        case ValueKind::OnOff:
+            return v == "true" || v == "false" || v == "on" || v == "off" || v == "1" || v == "0";
+        case ValueKind::TrueFalse: return v == "t" || v == "f" || v == "true" || v == "false";
+        case ValueKind::TrueFalseBlank: return v.empty() || v == "t" || v == "f" || v == "true" || v == "false";
+        case ValueKind::Byte: return int_in(v, 0, 255);
+        case ValueKind::SByte: return int_in(v, -128, 127);
+        case ValueKind::Int16: return int_in(v, -32768, 32767);
+        case ValueKind::UInt16: return int_in(v, 0, 65535);
+        case ValueKind::Int32: return int_in(v, -2147483648.0L, 2147483647.0L);
+        case ValueKind::UInt32: return int_in(v, 0, 4294967295.0L);
+        case ValueKind::Int64: return int_in(v, -9223372036854775808.0L, 9223372036854775807.0L);
+        case ValueKind::UInt64: return int_in(v, 0, 18446744073709551615.0L);
+        case ValueKind::Integer: { long double d; return parse_int(v, d); }
+        case ValueKind::Decimal: {
+            long double d;
+            std::string t = util::trim(v);
+            if (t == "INF" || t == "-INF" || t == "NaN") return false;
+            return parse_float(v, d) && t.find_first_of("eE") == std::string::npos;
+        }
+        case ValueKind::Double:
+        case ValueKind::Single: { long double d; return parse_float(v, d); }
+        case ValueKind::HexBinary: {
+            if (v.size() % 2) return false;
+            for (char c : v) if (!std::isxdigit((unsigned char)c)) return false;
+            return true;
+        }
+        case ValueKind::Base64Binary: return util::base64_decode(v).has_value();
+        case ValueKind::DateTime: return datetime_ok(v);
+        case ValueKind::Enum: return enum_has(ei, v);
+        case ValueKind::List: return true;
+    }
+    return true;
+}
+
+bool number_ok(const RawValidator& rv, ValueKind own, std::string_view v) {
+    long double d;
+    bool parsed;
+    switch (rv.num_kind) {
+        case 1: parsed = parse_int(v, d); break;
+        case 2: parsed = parse_int(v, d) && d >= 0; break;
+        case 3: parsed = parse_float(v, d); break;
+        case 4: return kind_ok(ValueKind::Boolean, -1, v);
+        default:
+            if (own == ValueKind::Double || own == ValueKind::Single || own == ValueKind::Decimal)
+                parsed = parse_float(v, d);
+            else if (own == ValueKind::String)
+                parsed = parse_float(v, d);
+            else
+                parsed = kind_ok(own, -1, v) && parse_float(v, d);
+    }
+    if (!parsed) return false;
+    if ((rv.flags & 1) && !(d >= (long double)rv.min)) return false;
+    if ((rv.flags & 2) && !(d > (long double)rv.min)) return false;
+    if ((rv.flags & 4) && !(d <= (long double)rv.max)) return false;
+    if ((rv.flags & 8) && !(d < (long double)rv.max)) return false;
+    return true;
+}
+
+bool ncname_ok(std::string_view s) {
+    if (s.empty()) return false;
+    auto u = util::to_u32(s);
+    auto start = [](char32_t c) {
+        return c == '_' || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c >= 0xC0;
+    };
+    if (!start(u[0])) return false;
+    for (char32_t c : u)
+        if (!(start(c) || c == '-' || c == '.' || (c >= '0' && c <= '9') || c == 0xB7)) return false;
+    return true;
+}
+
+const std::regex& pattern(std::uint32_t si) {
+    static std::mutex mu;
+    static std::map<std::uint32_t, std::regex> cache;
+    std::lock_guard lk(mu);
+    auto it = cache.find(si);
+    if (it == cache.end()) it = cache.emplace(si, std::regex(S(si), std::regex::ECMAScript)).first;
+    return it->second;
+}
+
+bool string_ok(const RawValidator& rv, std::string_view v, bool is_list) {
+    if (rv.flags & (1 << 5) || is_list) {
+        for (auto t : tokens(v)) {
+            RawValidator one = rv;
+            one.flags &= ~(1 << 5);
+            if (!string_ok(one, t, false)) return false;
+        }
+        return true;
+    }
+    std::size_t len = util::u32_length(v);
+    if (rv.flags & (1 << 6)) {
+        if (v.size() % 2) return false;
+        for (char ch : v) if (!std::isxdigit((unsigned char)ch)) return false;
+        len = v.size() / 2;
+    }
+    if (rv.length >= 0 && len != std::size_t(rv.length)) return false;
+    if (rv.min_len >= 0 && len < std::size_t(rv.min_len)) return false;
+    if (rv.max_len >= 0 && len > std::size_t(rv.max_len)) return false;
+    if ((rv.flags & (1 << 1)) || (rv.flags & (1 << 3))) if (!ncname_ok(v)) return false;
+    if (rv.flags & (1 << 2)) {
+        auto c = v.find(':');
+        if (c == std::string_view::npos ? !ncname_ok(v) : !(ncname_ok(v.substr(0, c)) && ncname_ok(v.substr(c + 1))))
+            return false;
+    }
+    if (rv.pattern) {
+        if (!std::regex_match(std::string(v), pattern(rv.pattern))) return false;
+    }
+    return true;
+}
+
+bool validator_ok(const RawValidator& rv, ValueKind own, std::int32_t own_enum, std::string_view v, bool is_list) {
+    switch (rv.kind) {
+        case 0: return true;  // required handled separately
+        case 1: return string_ok(rv, v, false);
+        case 2: {
+            if ((rv.flags & 16) || is_list) {
+                for (auto t : tokens(v)) if (!number_ok(rv, own, t)) return false;
+                return true;
+            }
+            return number_ok(rv, own, v);
+        }
+        case 3: return enum_has(rv.enum_index, v);
+    }
+    return true;
+}
+
+// Check a value against kind + validators. Returns "" if fine.
+std::string check_value(const RawAttr& a, std::string_view v) {
+    ValueKind k = ValueKind(a.kind);
+    bool is_list = k == ValueKind::List;
+    if (is_list) {
+        for (auto t : tokens(v))
+            if (!kind_ok(ValueKind(a.item_kind), a.enum_index, t)) return "invalid list item '" + std::string(t) + "'";
+    } else if (!kind_ok(k, a.enum_index, v)) {
+        if (k == ValueKind::Enum) {
+            std::string allowed;
+            const RawEnum& e = enums[a.enum_index];
+            for (auto f = e.facet_begin; f < e.facet_end && f < e.facet_begin + 40; f++)
+                allowed += std::string(allowed.empty() ? "" : ", ") + S(enum_facets[f]);
+            return "value '" + std::string(v) + "' is not one of: " + allowed;
+        }
+        return "value '" + std::string(v) + "' is not a valid " + std::string(type_name_of(k));
+    }
+    // Group by union id: plain validators must all pass, each union group needs one.
+    std::map<int, bool> unions;
+    for (auto i = a.val_begin; i < a.val_end; i++) {
+        const RawValidator& rv = validators[i];
+        if (rv.kind == 0) continue;
+        bool ok;
+        if (k == ValueKind::HexBinary && rv.kind == 1) {
+            RawValidator hv = rv;
+            hv.flags |= 1 << 6;
+            ok = string_ok(hv, v, false);
+        } else {
+            ok = validator_ok(rv, k, a.enum_index, v, is_list);
+        }
+        if (rv.union_id < 0) {
+            if (!ok) return "value '" + std::string(v) + "' violates a constraint";
+        } else {
+            unions[rv.union_id] = unions[rv.union_id] || ok;
+        }
+    }
+    for (auto& [id, ok] : unions)
+        if (!ok) return "value '" + std::string(v) + "' matches none of the allowed forms";
+    return "";
+}
+
+}  // namespace
+
+std::string_view type_name_of(ValueKind k) {
+    switch (k) {
+        case ValueKind::Boolean: return "boolean";
+        case ValueKind::OnOff: return "on/off value";
+        case ValueKind::TrueFalse:
+        case ValueKind::TrueFalseBlank: return "t/f value";
+        case ValueKind::DateTime: return "dateTime";
+        case ValueKind::HexBinary: return "hexBinary";
+        case ValueKind::Base64Binary: return "base64Binary";
+        case ValueKind::Double:
+        case ValueKind::Single:
+        case ValueKind::Decimal: return "number";
+        case ValueKind::String: return "string";
+        default: return "integer in range";
+    }
+}
+
+std::string_view uri_of_prefix(std::string_view p) {
+    auto& m = idx().uri_by_prefix;
+    auto it = m.find(std::string(p));
+    return it == m.end() ? std::string_view{} : std::string_view(it->second);
+}
+std::string_view prefix_of_uri(std::string_view u) {
+    auto& m = idx().prefix_by_uri;
+    auto it = m.find(std::string(u));
+    return it == m.end() ? std::string_view{} : std::string_view(it->second);
+}
+bool namespace_known(std::string_view uri) { return !prefix_of_uri(uri).empty(); }
+
+TypeId root_type(std::string_view q) {
+    auto& I = idx();
+    if (auto it = I.roots.find(std::string(q)); it != I.roots.end()) return it->second;
+    if (auto it = I.by_qname.find(std::string(q)); it != I.by_qname.end() && it->second.size() == 1)
+        return it->second[0];
+    return NoType;
+}
+
+TypeId part_root_type(std::string_view ct) {
+    // Generic XML parts (custom XML data, ribbon) are typed by relationship, not content type.
+    if (ct == "application/xml" || ct == "text/xml") return NoType;
+    // The main part's content type varies with the file kind (docx/docm/dotx/dotm).
+    static const char* mains[] = {
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml",
+        "application/vnd.ms-word.document.macroEnabled.main+xml",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.template.main+xml",
+        "application/vnd.ms-word.template.macroEnabledTemplate.main+xml"};
+    for (auto m : mains)
+        if (ct == m) return root_type("w:document");
+    for (std::size_t i = 0; i < n_parts; i++)
+        if (parts[i].root >= 0 && ct == S(parts[i].content_type)) return parts[i].root;
+    return NoType;
+}
+
+TypeId child_type(TypeId parent, std::string_view q) {
+    if (parent < 0) return NoType;
+    const Flat& f = flat_of(parent);
+    auto it = f.kids.find(std::string(q));
+    return it == f.kids.end() ? NoType : it->second.first;
+}
+
+std::string_view type_key(TypeId t) { return t < 0 ? "" : S(types[t].key); }
+std::string_view type_qname(TypeId t) { return t < 0 ? "" : S(types[t].qname); }
+std::string_view type_summary(TypeId t) { return t < 0 ? "" : S(types[t].summary); }
+bool is_leaf_text(TypeId t) { return t >= 0 && (types[t].flags & 2); }
+
+std::vector<ChildInfo> children_of(TypeId t) {
+    if (t < 0) return {};
+    return flat_of(t).order;
+}
+
+std::vector<AttrInfo> attributes_of(TypeId t) {
+    std::vector<AttrInfo> v;
+    if (t < 0) return v;
+    auto [b, e] = idx().attr_range[t];
+    for (auto i = b; i < e; i++) {
+        const RawAttr& a = attrs[i];
+        AttrInfo ai;
+        ai.qname = attr_qname(a);
+        ai.kind = ValueKind(a.kind);
+        if (a.enum_index >= 0) {
+            const RawEnum& en = enums[a.enum_index];
+            for (auto f = en.facet_begin; f < en.facet_end; f++) ai.enum_values.push_back(S(enum_facets[f]));
+        }
+        for (auto k = a.val_begin; k < a.val_end; k++)
+            if (validators[k].kind == 0 && validators[k].flags) ai.required = true;
+        v.push_back(std::move(ai));
+    }
+    return v;
+}
+
+int child_rank(TypeId parent, std::string_view q) {
+    if (parent < 0) return -1;
+    const Flat& f = flat_of(parent);
+    auto it = f.kids.find(std::string(q));
+    return it == f.kids.end() ? -1 : it->second.second;
+}
+
+TypeId type_of(pugi::xml_node n) {
+    if (!n || n.type() != pugi::node_element) return NoType;
+    std::vector<pugi::xml_node> chain;
+    for (auto c = n; c && c.type() == pugi::node_element; c = c.parent()) chain.push_back(c);
+    TypeId t = root_type(chain.back().name());
+    for (std::size_t i = chain.size() - 1; i-- > 0;) {
+        std::string_view nm = chain[i].name();
+        if (is_mc(nm)) continue;  // AlternateContent/Choice/Fallback are transparent
+        t = child_type(t, nm);
+        if (t < 0) return NoType;
+    }
+    return t;
+}
+
+namespace {
+
+pugi::xml_node insert_at_rank(pugi::xml_node parent, TypeId pt, std::string_view q) {
+    int r = child_rank(pt, q);
+    pugi::xml_node after;
+    int last = -1;
+    for (auto c : parent.children()) {
+        if (c.type() != pugi::node_element) continue;
+        int cr = rank_of(pt, c);
+        if (cr < 0) cr = last;  // unknown: rides with its predecessor
+        if (r >= 0 && cr > r) break;
+        after = c;
+        last = cr;
+    }
+    if (r < 0) return parent.append_child(std::string(q).c_str());
+    if (!after) return parent.prepend_child(std::string(q).c_str());
+    return parent.insert_child_after(std::string(q).c_str(), after);
+}
+
+}  // namespace
+
+pugi::xml_node ensure_child(pugi::xml_node parent, std::string_view q) {
+    if (auto c = parent.child(std::string(q).c_str())) return c;
+    return insert_at_rank(parent, type_of(parent), q);
+}
+
+pugi::xml_node insert_child(pugi::xml_node parent, std::string_view q) {
+    return insert_at_rank(parent, type_of(parent), q);
+}
+
+void place_child(pugi::xml_node parent, pugi::xml_node child) {
+    TypeId pt = type_of(parent);
+    int r = rank_of(pt, child);
+    if (r < 0) return;
+    pugi::xml_node after;
+    int last = -1;
+    for (auto c : parent.children()) {
+        if (c == child || c.type() != pugi::node_element) continue;
+        int cr = rank_of(pt, c);
+        if (cr < 0) cr = last;
+        if (cr > r) break;
+        after = c;
+        last = cr;
+    }
+    if (after) parent.insert_move_after(child, after);
+    else parent.prepend_move(child);
+}
+
+void sort_children(pugi::xml_node parent) {
+    TypeId pt = type_of(parent);
+    if (pt < 0) return;
+    std::vector<std::pair<int, pugi::xml_node>> v;
+    int last = -1;
+    bool sorted = true;
+    for (auto c : parent.children()) {
+        int r = c.type() == pugi::node_element ? rank_of(pt, c) : -1;
+        if (r < 0) r = last;
+        if (r < last) sorted = false;
+        v.emplace_back(r, c);
+        last = r;
+    }
+    if (sorted) return;
+    std::stable_sort(v.begin(), v.end(), [](auto& a, auto& b) { return a.first < b.first; });
+    for (auto& [r, c] : v) parent.append_move(c);
+}
+
+// ── validation ───────────────────────────────────────────────────────────
+
+namespace {
+
+struct Ctx {
+    std::vector<Issue>* out;
+    const ValidateOptions* opt;
+};
+
+using Ign = std::vector<std::string>;  // ignorable prefixes in scope
+
+std::string path_of(pugi::xml_node n) {
+    std::vector<std::string> segs;
+    for (auto c = n; c && c.type() == pugi::node_element; c = c.parent()) {
+        int i = 1;
+        for (auto s = c.previous_sibling(c.name()); s; s = s.previous_sibling(c.name())) i++;
+        segs.push_back(std::string(c.name()) + "[" + std::to_string(i) + "]");
+    }
+    std::string p;
+    for (auto it = segs.rbegin(); it != segs.rend(); ++it) p += "/" + *it;
+    return p;
+}
+
+void add(Ctx& c, pugi::xml_node n, std::string msg) {
+    if (c.out->size() < c.opt->max_issues) c.out->push_back({path_of(n), std::move(msg)});
+}
+
+// Element sequence matcher (greedy, like the SDK's particle validators).
+struct Matcher {
+    const std::vector<std::pair<std::string, pugi::xml_node>>& kids;
+
+    bool any_ok(std::uint8_t ns, std::string_view q, TypeId parent) const {
+        std::string_view pre = prefix(q);
+        std::string_view parent_pre = prefix(type_qname(parent));
+        switch (ns) {
+            case 0: return true;
+            case 1: return pre != parent_pre && !pre.empty();
+            case 2: return pre.empty();
+            case 3: return pre == parent_pre;
+        }
+        return true;
+    }
+
+    // Try to match one occurrence of particle p at pos. Returns new pos or -1.
+    long once(std::int32_t pi, long pos, TypeId parent) const {
+        const RawParticle& p = particles[pi];
+        switch (p.kind) {
+            case 0: {
+                if (pos < (long)kids.size() && p.type >= 0 && kids[pos].first == S(types[p.type].qname)) return pos + 1;
+                return -1;
+            }
+            case 5: {
+                if (pos < (long)kids.size() && any_ok(p.any_ns, kids[pos].first, parent)) return pos + 1;
+                return -1;
+            }
+            case 1:
+            case 3: {
+                long cur = pos;
+                for (auto c = p.child_begin; c < p.child_end; c++) {
+                    long n = occurs(particle_children[c], cur, parent);
+                    if (n < 0) return -1;
+                    cur = n;
+                }
+                return cur;
+            }
+            case 2: {
+                long best = -1;
+                for (auto c = p.child_begin; c < p.child_end; c++) {
+                    long n = occurs(particle_children[c], pos, parent);
+                    if (n > best) best = n;
+                    if (n > pos) return n;
+                }
+                return best;
+            }
+            case 4: {
+                long cur = pos;
+                std::vector<bool> used(p.child_end - p.child_begin, false);
+                bool progress = true;
+                while (progress) {
+                    progress = false;
+                    for (auto c = p.child_begin; c < p.child_end; c++) {
+                        if (used[c - p.child_begin]) continue;
+                        long n = once(particle_children[c], cur, parent);
+                        if (n > cur) { used[c - p.child_begin] = true; cur = n; progress = true; }
+                    }
+                }
+                for (auto c = p.child_begin; c < p.child_end; c++)
+                    if (!used[c - p.child_begin] && particles[particle_children[c]].min > 0) return -1;
+                return cur;
+            }
+        }
+        return -1;
+    }
+
+    long occurs(std::int32_t pi, long pos, TypeId parent) const {
+        const RawParticle& p = particles[pi];
+        long cur = pos;
+        std::uint32_t count = 0;
+        while (p.max == 0 || count < p.max) {
+            long n = once(pi, cur, parent);
+            if (n < 0) break;
+            if (n == cur) { count = std::max<std::uint32_t>(count, p.min); break; }
+            cur = n;
+            count++;
+        }
+        if (count < p.min) {
+            // An all-optional body that matched nothing still satisfies min.
+            long z = once(pi, cur, parent);
+            if (z == cur) return cur;
+            return -1;
+        }
+        return cur;
+    }
+};
+
+bool ignorable(const Ign& ign, std::string_view q) {
+    std::string_view pre = prefix(q);
+    if (pre.empty()) return false;
+    for (auto& p : ign) if (p == pre) return true;
+    return false;
+}
+
+// Ignorable scope after applying n's own mc:Ignorable.
+Ign scope_of(const Ign& outer, pugi::xml_node n) {
+    auto a = n.attribute("mc:Ignorable");
+    if (!a) return outer;
+    Ign s = outer;
+    for (auto& t : util::split(util::trim(a.value()), ' ')) if (!t.empty()) s.push_back(t);
+    return s;
+}
+
+void validate_node(Ctx& c, pugi::xml_node n, TypeId t, const Ign& outer);
+
+void validate_attrs(Ctx& c, pugi::xml_node n, TypeId t, const Ign& ign) {
+    auto [b, e] = idx().attr_range[t];
+    for (auto a : n.attributes()) {
+        std::string_view q = a.name();
+        if (q == "xmlns" || util::starts_with(q, "xmlns:")) continue;
+        if (is_mc(q)) continue;
+        bool found = false;
+        for (auto i = b; i < e; i++) {
+            if (attr_qname(attrs[i]) != q) continue;
+            found = true;
+            std::string why = check_value(attrs[i], a.value());
+            if (!why.empty()) add(c, n, "attribute " + std::string(q) + ": " + why);
+            break;
+        }
+        if (!found && !ignorable(ign, q)) {
+            std::string_view pre = prefix(q);
+            if (pre != "xml")
+                add(c, n, "unexpected attribute " + std::string(q) + " on " + std::string(n.name()));
+        }
+    }
+    for (auto i = b; i < e; i++) {
+        const RawAttr& ra = attrs[i];
+        bool req = false;
+        for (auto k = ra.val_begin; k < ra.val_end; k++)
+            if (validators[k].kind == 0) req = validators[k].flags != 0;
+        if (req && !n.attribute(std::string(attr_qname(ra)).c_str()))
+            add(c, n, "missing required attribute " + std::string(attr_qname(ra)));
+    }
+}
+
+// The branch of an AlternateContent that a Microsoft365 consumer takes: the
+// first Choice whose Requires prefixes are all known namespaces, else Fallback.
+pugi::xml_node ac_select(pugi::xml_node ac) {
+    for (auto ch : ac.children()) {
+        if (std::string_view(ch.name()) != "mc:Choice") continue;
+        std::string req = util::trim(ch.attribute("mc:Requires").value());
+        if (req.empty()) req = util::trim(ch.attribute("Requires").value());
+        if (req.empty()) continue;
+        bool ok = true;
+        for (auto& p : util::split(req, ' ')) {
+            if (p.empty()) continue;
+            if (uri_of_prefix(p).empty()) { ok = false; break; }
+        }
+        if (ok) return ch;
+    }
+    for (auto ch : ac.children())
+        if (std::string_view(ch.name()) == "mc:Fallback") return ch;
+    return {};
+}
+
+struct Kid {
+    std::string q;
+    pugi::xml_node n;
+    Ign ign;  // scope the child lives in
+};
+
+// Logical children after MCE preprocessing: ignorable elements skipped,
+// AlternateContent replaced by its selected branch's content.
+void collect_kids(pugi::xml_node n, TypeId t, const Ign& ign, std::vector<Kid>& kids) {
+    for (auto k : n.children()) {
+        if (k.type() != pugi::node_element) continue;
+        std::string_view q = k.name();
+        if (q == "mc:AlternateContent") {
+            Ign s = scope_of(ign, k);
+            auto br = ac_select(k);
+            if (br) collect_kids(br, t, scope_of(s, br), kids);
+            continue;
+        }
+        Ign s = scope_of(ign, k);
+        // Like the SDK: an element the parent's model doesn't know is skipped
+        // when its namespace is ignorable; known ones are always validated.
+        if (child_type(t, q) < 0 && ignorable(s, q)) continue;
+        kids.push_back({std::string(q), k, std::move(s)});
+    }
+}
+
+void validate_node(Ctx& c, pugi::xml_node n, TypeId t, const Ign& ign) {
+    if (c.out->size() >= c.opt->max_issues) return;
+    validate_attrs(c, n, t, ign);
+    const RawType& rt = types[t];
+    if (rt.flags & 2) {
+        // leaf text: check text validators
+        auto [vb, ve] = idx().text_vals[t];
+        for (auto i = vb; i < ve; i++) {
+            const RawValidator& rv = validators[i];
+            if (rv.kind == 0) continue;
+            if (!validator_ok(rv, ValueKind::String, -1, n.text().get(), false))
+                add(c, n, "text content '" + std::string(n.text().get()) + "' is not valid");
+        }
+        for (auto k : n.children())
+            if (k.type() == pugi::node_element) add(c, k, "element not allowed inside text element");
+        return;
+    }
+    std::vector<Kid> kids;
+    collect_kids(n, t, ign, kids);
+    std::vector<std::pair<std::string, pugi::xml_node>> known;
+    for (auto& k : kids) known.emplace_back(k.q, k.n);
+    std::int32_t pi = idx().particle[t];
+    if (pi < 0) {
+        if (!known.empty()) add(c, known[0].second, "element " + known[0].first + " is not allowed in " + std::string(n.name()));
+        return;
+    }
+    Matcher m{known};
+    long end = m.occurs(pi, 0, t);
+    if (end < 0 || end < (long)known.size()) {
+        // Point at the first unknown or out-of-order child.
+        const Flat& f = flat_of(t);
+        bool reported = false;
+        int last_rank = -1;
+        for (auto& k : known) {
+            auto it = f.kids.find(k.first);
+            if (it == f.kids.end()) {
+                add(c, k.second, "element " + k.first + " is not allowed in " + std::string(n.name()));
+                reported = true;
+                break;
+            }
+            if (it->second.second < last_rank) {
+                add(c, k.second, "element " + k.first + " is out of order in " + std::string(n.name()));
+                reported = true;
+                break;
+            }
+            last_rank = it->second.second;
+        }
+        if (!reported) add(c, n, "content of " + std::string(n.name()) + " does not match its schema (missing required child or too many occurrences)");
+    }
+    for (auto& k : kids) {
+        TypeId ct = child_type(t, k.q);
+        if (ct >= 0) validate_node(c, k.n, ct, k.ign);
+    }
+}
+
+}  // namespace
+
+std::vector<Issue> validate(pugi::xml_node root, const ValidateOptions& opt) {
+    std::vector<Issue> out;
+    Ctx c{&out, &opt};
+    TypeId t = root_type(root.name());
+    if (t < 0) {
+        out.push_back({"/" + std::string(root.name()), "unknown root element"});
+        return out;
+    }
+    validate_node(c, root, t, scope_of({}, root));
+    return out;
+}
+
+bool value_valid(TypeId t, std::string_view q, std::string_view v, std::string* why) {
+    if (t < 0) return true;
+    auto [b, e] = idx().attr_range[t];
+    for (auto i = b; i < e; i++) {
+        if (attr_qname(attrs[i]) != q) continue;
+        std::string w = check_value(attrs[i], v);
+        if (why) *why = w;
+        return w.empty();
+    }
+    if (why) *why = "unknown attribute";
+    return false;
+}
+
+}  // namespace docx::schema

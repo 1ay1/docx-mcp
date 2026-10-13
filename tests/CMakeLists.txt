@@ -1,0 +1,2 @@
+add_executable(probe_validate probe_validate.cpp)
+target_link_libraries(probe_validate PRIVATE docx_core)
