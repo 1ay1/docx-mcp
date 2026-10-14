@@ -318,4 +318,20 @@ TEST(reject_nested_inserted_rows) {
     }
 }
 
+// a tracked TOC wraps runs inside its hyperlinks, never the hyperlinks
+TEST(tracked_toc_valid) {
+    auto d = sample(false);
+    auto ps = paragraphs(d.body());
+    format_paragraph(d, ps[1], Json{{"style", "Heading 1"}}, {});
+    insert_toc(d, ps[0], Json::object(), {true});
+    for (auto h : xml::descendants(d.body(), "w:hyperlink")) CHECK(std::string_view(h.parent().name()) != "w:ins");
+    std::string why;
+    CHECK_EQ(schema_issues(d, &why), 0);
+    if (!why.empty()) std::printf("    %s\n", why.c_str());
+    reject_revisions(d, {});
+    CHECK(!xml::first_descendant(d.body(), "w:hyperlink"));
+    CHECK(!xml::first_descendant(d.body(), "w:sdt"));
+    CHECK_EQ(schema_issues(d), 0);
+}
+
 int main(int argc, char** argv) { return t::run(argc, argv); }

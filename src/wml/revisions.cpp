@@ -156,6 +156,14 @@ void remove_mark(pugi::xml_node p) {
         for (auto c : p.parent().children())
             if (name_is(c, "w:p") || name_is(c, "w:tbl")) blocks_in_parent++;
         bool sect = p.child("w:pPr").child("w:sectPr");
+        // the only paragraph of a block content control: the control goes with it
+        // (its own container then keeps whatever it needs)
+        auto sc = p.parent();
+        if (empty && blocks_in_parent == 1 && !sect && name_is(sc, "w:sdtContent") && name_is(sc.parent(), "w:sdt")) {
+            auto sdt = sc.parent();
+            sdt.parent().remove_child(sdt);
+            return;
+        }
         // the container must keep at least one paragraph
         if (empty && blocks_in_parent > 1 && !sect) {
             p.parent().remove_child(p);
@@ -484,6 +492,13 @@ void run_pass(Ctx& c, pugi::xml_node root) {
         resolve_container(c, k, is_add == c.accept);
     }
     drop_empty_math(root);
+    // hyperlinks / simple fields / smart tags left with no runs were wholly
+    // inside removed content; Word drops them too. Before the marks, so an
+    // emptied paragraph is seen as empty.
+    for (auto q : {"w:hyperlink", "w:fldSimple", "w:smartTag"})
+        for (auto e : xml::descendants(root, q))
+            if (e.parent() && !xml::first_descendant(e, "w:r") && !xml::first_descendant(e, "m:oMath"))
+                e.parent().remove_child(e);
 
     // 3. paragraph marks (collect first; removing marks reshapes the tree)
     std::vector<std::pair<pugi::xml_node, pugi::xml_node>> marks;  // (p, rev)
@@ -519,13 +534,18 @@ void run_pass(Ctx& c, pugi::xml_node root) {
         if (!ins.parent() || !name_is(ins.parent(), "w:numPr") || !c.want(ins)) continue;
         resolve_numpr_ins(c, ins);
     }
-    // empty rPr / pPr / trPr / tcPr left behind
+    // empty rPr / pPr / trPr / tcPr left behind. Not inside a *PrChange: an
+    // empty one there records "no formatting before" and is required.
+    auto in_change = [](pugi::xml_node e) {
+        std::string_view pq = e.parent().name();
+        return pq.size() > 6 && pq.substr(pq.size() - 6) == "Change";
+    };
     for (auto q : {"w:rPr", "w:trPr", "w:tblPrEx"}) {
         for (auto e : xml::descendants(root, q))
-            if (!e.first_child() && !e.first_attribute()) e.parent().remove_child(e);
+            if (!e.first_child() && !e.first_attribute() && !in_change(e)) e.parent().remove_child(e);
     }
     for (auto e : xml::descendants(root, "w:pPr"))
-        if (!e.first_child() && !e.first_attribute()) e.parent().remove_child(e);
+        if (!e.first_child() && !e.first_attribute() && !in_change(e)) e.parent().remove_child(e);
 
     if (!any_left(root, {"w:moveFrom", "w:moveTo"})) drop_move_ranges(root);
     for (auto p : xml::descendants(root, "w:p")) tidy(p);

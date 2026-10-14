@@ -33,6 +33,19 @@ std::string pct_decode(std::string_view s) {
     return o;
 }
 
+// The stored form of a part name (OPC Part 2 §6.2.2): characters outside
+// the URI pchar set are percent-encoded as UTF-8; '/' separates segments.
+std::string pct_encode(std::string_view s) {
+    static const char* hex = "0123456789ABCDEF";
+    std::string o;
+    for (unsigned char c : s) {
+        bool ok = std::isalnum(c) || std::strchr("-._~!$&'()*+,;=:@/", c);
+        if (ok && c < 0x80) o += char(c);
+        else { o += '%'; o += hex[c >> 4]; o += hex[c & 15]; }
+    }
+    return o;
+}
+
 std::string ext_of(std::string_view name) {
     auto slash = name.rfind('/');
     auto dot = name.rfind('.');
@@ -293,7 +306,7 @@ util::Bytes Package::to_bytes(int level) const {
         ~Guard() { mz_zip_writer_end(z); }
     } guard{&za};
     auto add = [&, level](const std::string& name, const std::string& data) {
-        std::string zn = name[0] == '/' ? name.substr(1) : name;
+        std::string zn = name == "[Content_Types].xml" ? name : pct_encode(name[0] == '/' ? name.substr(1) : name);
         if (!mz_zip_writer_add_mem(&za, zn.c_str(), data.data(), data.size(), (mz_uint)level))
             throw std::runtime_error("zip write failed for " + zn);
     };
@@ -318,7 +331,7 @@ util::Bytes Package::to_bytes(int level) const {
             auto d2 = defs.find(ext_of(part.name));
             if (d2 != defs.end() && d2->second == part.content_type) continue;
             auto e = root.append_child("Override");
-            e.append_attribute("PartName") = part.name.c_str();
+            e.append_attribute("PartName") = pct_encode(part.name).c_str();
             // an entry nobody typed: keep the bytes as a generic part rather than drop them
             e.append_attribute("ContentType") = part.content_type.empty() ? "application/octet-stream" : part.content_type.c_str();
         }

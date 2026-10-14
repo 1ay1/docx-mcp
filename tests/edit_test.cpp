@@ -307,6 +307,22 @@ TEST(reject_keeps_required_paragraphs) {
     CHECK_EQ(schema_issues(d), 0);
 }
 
+// accepting one revision must leave the others' recorded old properties intact
+TEST(partial_accept_keeps_prop_changes) {
+    auto d = sample(true);
+    auto p = paragraphs(d.body())[0];
+    format_paragraph(d, p, Json{{"style", "Heading 2"}}, {});
+    insert_text(d, p, 1, U"x", nullptr, {});
+    std::string ins_id;
+    for (auto& r : list_revisions(d))
+        if (r.type == "insertion") ins_id = r.id;
+    RevFilter f;
+    f.ids = {ins_id};
+    accept_revisions(d, f);
+    CHECK(p.child("w:pPr").child("w:pPrChange").child("w:pPr"));
+    CHECK_EQ(schema_issues(d), 0);
+}
+
 // copies of comment anchors (from edits that copy a paragraph) are dropped
 TEST(dedupe_comment_anchors) {
     auto d = sample(false);

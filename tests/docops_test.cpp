@@ -255,4 +255,16 @@ TEST(untyped_parts_kept) {
     CHECK(re.pkg().has("custom/blob.bin"));
 }
 
+// a part name with a space is stored percent-encoded and found again
+TEST(encoded_part_names) {
+    auto d = Document::create();
+    d.pkg().add_part("/word/media/my image.png", "image/png", util::Bytes{1, 2, 3});
+    auto b = d.to_bytes();
+    std::string raw(b.begin(), b.end());
+    CHECK(raw.find("word/media/my%20image.png") != std::string::npos);
+    auto re = Document::from_bytes(b);
+    CHECK(re.pkg().has("/word/media/my image.png"));
+    CHECK(re.pkg().has("/word/media/my%20image.png"));
+}
+
 int main(int argc, char** argv) { return t::run(argc, argv); }

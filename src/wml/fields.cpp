@@ -365,16 +365,7 @@ void insert_toc(Document& d, pugi::xml_node p, const Json& opts_in, const EditOp
     }
     build_toc_entries(d, content, lo, hi, links, instr);
     if (tracking(d, o)) {
-        for (auto tp : xml::descendants(content, "w:p")) {
-            stamp(d, schema::ensure_child(schema::ensure_child(schema::ensure_child(tp, "w:pPr"), "w:rPr"), "w:ins"));
-            std::vector<pugi::xml_node> kids;
-            for (auto k : tp.children()) if (std::string_view(k.name()) == "w:r" || std::string_view(k.name()) == "w:hyperlink") kids.push_back(k);
-            for (auto k : kids) {
-                auto ins = tp.insert_child_before("w:ins", k);
-                stamp(d, ins);
-                ins.append_move(k);
-            }
-        }
+        for (auto tp : xml::descendants(content, "w:p")) mark_paragraph_inserted(d, tp);
     }
     set_update_fields(d);
     xml::declare(xml::root_of(p), "w14", true);
