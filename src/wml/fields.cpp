@@ -180,7 +180,7 @@ int heading_level(Document& d, pugi::xml_node p) {
     // outline level from direct pPr or the style chain (Heading 1..9 carry outlineLvl)
     std::function<int(pugi::xml_node)> from = [&](pugi::xml_node ppr) -> int {
         if (auto o = ppr.child("w:outlineLvl")) {
-            int v = std::stoi(xml::attr(o, "w:val", "9"));
+            int v = util::to_int(xml::attr(o, "w:val", "9"));
             return v < 9 ? v + 1 : 0;
         }
         return -1;
@@ -238,9 +238,9 @@ std::string toc_bookmark(Document& d, pugi::xml_node p) {
 
 long right_tab(Document& d) {
     auto sp = d.body().child("w:sectPr");
-    long w = std::stol(xml::attr(sp.child("w:pgSz"), "w:w", "12240"));
-    long l = std::stol(xml::attr(sp.child("w:pgMar"), "w:left", "1440"));
-    long r = std::stol(xml::attr(sp.child("w:pgMar"), "w:right", "1440"));
+    long w = util::to_long(xml::attr(sp.child("w:pgSz"), "w:w", "12240"));
+    long l = util::to_long(xml::attr(sp.child("w:pgMar"), "w:left", "1440"));
+    long r = util::to_long(xml::attr(sp.child("w:pgMar"), "w:right", "1440"));
     return w - l - r;
 }
 
@@ -724,7 +724,7 @@ pugi::xml_node abstract_of(Document& d, int num_id) {
 
 std::pair<int, int> num_of(Document& d, pugi::xml_node p) {
     auto np = p.child("w:pPr").child("w:numPr");
-    if (np) return {std::stoi(xml::attr(np.child("w:numId"), "w:val", "0")), std::stoi(xml::attr(np.child("w:ilvl"), "w:val", "0"))};
+    if (np) return {util::to_int(xml::attr(np.child("w:numId"), "w:val", "0")), util::to_int(xml::attr(np.child("w:ilvl"), "w:val", "0"))};
     // from the paragraph style
     std::string sid = xml::attr(p.child("w:pPr").child("w:pStyle"), "w:val");
     std::set<std::string> seen;
@@ -733,7 +733,7 @@ std::pair<int, int> num_of(Document& d, pugi::xml_node p) {
         auto s = find_style(d, sid);
         if (!s) break;
         if (auto snp = s.child("w:pPr").child("w:numPr"))
-            return {std::stoi(xml::attr(snp.child("w:numId"), "w:val", "0")), std::stoi(xml::attr(snp.child("w:ilvl"), "w:val", "0"))};
+            return {util::to_int(xml::attr(snp.child("w:numId"), "w:val", "0")), util::to_int(xml::attr(snp.child("w:ilvl"), "w:val", "0"))};
         sid = xml::attr(s.child("w:basedOn"), "w:val");
     }
     return {0, 0};
@@ -813,7 +813,7 @@ std::string list_label(Document& d, pugi::xml_node p) {
                     if (auto so = ov.child("w:startOverride")) return so.attribute("w:val").as_int();
         }
         for (auto l : a.children("w:lvl"))
-            if (l.attribute("w:ilvl").as_int() == lvl) return std::stoi(xml::attr(l.child("w:start"), "w:val", "1"));
+            if (l.attribute("w:ilvl").as_int() == lvl) return util::to_int(xml::attr(l.child("w:start"), "w:val", "1"));
         return 1;
     };
     // Word keeps counters per num instance; a deeper level resets when a

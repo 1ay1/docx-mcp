@@ -51,11 +51,30 @@ int main(int argc, char** argv) {
     for (auto& f : files) {
         total++;
         std::string stage = "open";
+        const char* out = std::getenv("ROBUST_OUT");
+        auto dump = [&](const util::Bytes& b, const char* sub) {
+            if (!out) return;
+            auto dir = fs::path(out) / sub;
+            fs::create_directories(dir);
+            std::FILE* fp = std::fopen((dir / f.filename()).string().c_str(), "wb");
+            std::fwrite(b.data(), 1, b.size(), fp);
+            std::fclose(fp);
+        };
         try {
             auto d = Document::open(f.string());
-            int base = issues(d);
+            // open repairs known faults, so even Word's broken files must come out valid
+            std::string wb;
+            int base = issues(d, &wb);
+            if (base) {
+                bad++;
+                std::printf("UNREPAIRED %s (%d)\n  %s\n", f.filename().string().c_str(), base, wb.c_str());
+                continue;
+            }
             d.author.name = "Robot";
             stage = "edits";
+            dump(d.to_bytes(), "roundtrip");
+            d = Document::from_bytes(d.to_bytes());
+            d.author.name = "Robot";
             for (bool track : {true, false}) {
                 EditOpts o{track};
                 if (auto p = pick(d, 0)) {
@@ -85,28 +104,25 @@ int main(int argc, char** argv) {
             }
             stage = "save";
             auto bytes = d.to_bytes();
-            if (const char* out = std::getenv("ROBUST_OUT")) {
-                fs::create_directories(out);
-                std::FILE* fp = std::fopen((std::string(out) + "/" + f.filename().string()).c_str(), "wb");
-                std::fwrite(bytes.data(), 1, bytes.size(), fp);
-                std::fclose(fp);
-            }
+            dump(bytes, "edited");
             auto re = Document::from_bytes(bytes);
             std::string why;
             int after = issues(re, &why);
             stage = "accept";
             auto a = Document::from_bytes(bytes);
             accept_revisions(a, {});
+            dump(a.to_bytes(), "accepted");
             std::string wa;
             int ai = issues(a, &wa);
             stage = "reject";
             auto r = Document::from_bytes(bytes);
             reject_revisions(r, {});
+            dump(r.to_bytes(), "rejected");
             std::string wr;
             int ri = issues(r, &wr);
             // accept/reject resolve the pre-existing tracked markup too, so
             // compare against the original's issue count
-            if (after > base || ai > base || ri > base) {
+            if (after || ai || ri) {
                 bad++;
                 std::printf("NEW ISSUES %s (base %d, edited %d, accepted %d, rejected %d)\n  %s\n  %s\n  %s\n",
                             f.filename().string().c_str(), base, after, ai, ri, why.c_str(), wa.c_str(), wr.c_str());

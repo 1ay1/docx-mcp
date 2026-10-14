@@ -18,6 +18,8 @@ struct StyleInfo {
 };
 
 pugi::xml_node find_style(Document& d, const std::string& id_or_name);
+// Word's built-in definition (not added to the document), or null.
+pugi::xml_node builtin_style(const std::string& id_or_name);
 // Ensure a style exists: when missing and it's a Word built-in (by id or
 // English name, e.g. "Heading1" / "heading 1"), add Word's definition plus
 // the styles it depends on. Returns the styleId. Throws if unknown.

@@ -9,6 +9,7 @@
 #include "schema/schema.hpp"
 #include "util/assets.hpp"
 #include "util/util.hpp"
+#include "wml/repair.hpp"
 #include "xml/xml.hpp"
 
 namespace docx::wml {
@@ -93,6 +94,7 @@ Document Document::from_bytes(const util::Bytes& b) {
         if (schema::part_root_type(pct) < 0) continue;
         auto& x = d.pkg_.xml(name);
         xml::normalize(x);
+        repair_part(d, x.document_element());
     }
     return d;
 }
@@ -236,12 +238,13 @@ pugi::xml_node Document::core_props(bool c) {
     std::string name = pkg_.related("/", opc::rt::coreProps);
     if ((name.empty() || !pkg_.has(name)) && c) {
         std::string now = util::now_iso8601();
+        std::string who = util::xml_escape(author.name);
         std::string x = std::string(kXmlDecl) +
             "<cp:coreProperties xmlns:cp=\"http://schemas.openxmlformats.org/package/2006/metadata/core-properties\" "
             "xmlns:dc=\"http://purl.org/dc/elements/1.1/\" xmlns:dcterms=\"http://purl.org/dc/terms/\" "
             "xmlns:dcmitype=\"http://purl.org/dc/dcmitype/\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">"
-            "<dc:title></dc:title><dc:subject></dc:subject><dc:creator>" + author.name + "</dc:creator>"
-            "<cp:keywords></cp:keywords><dc:description></dc:description><cp:lastModifiedBy>" + author.name +
+            "<dc:title></dc:title><dc:subject></dc:subject><dc:creator>" + who + "</dc:creator>"
+            "<cp:keywords></cp:keywords><dc:description></dc:description><cp:lastModifiedBy>" + who +
             "</cp:lastModifiedBy><cp:revision>1</cp:revision>"
             "<dcterms:created xsi:type=\"dcterms:W3CDTF\">" + now + "</dcterms:created>"
             "<dcterms:modified xsi:type=\"dcterms:W3CDTF\">" + now + "</dcterms:modified></cp:coreProperties>";

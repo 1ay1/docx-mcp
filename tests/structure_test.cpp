@@ -246,4 +246,58 @@ TEST(equation) {
     save(d, "equation");
 }
 
+// tracked column edits never leave cellIns and cellDel on one cell
+TEST(tracked_column_insert_delete) {
+    auto d = sample(false);
+    auto t = insert_table(d, paragraphs(d.body())[0], true, {{"a", "b"}, {"c", "d"}}, Json::object(), {});
+    d.set_track_changes(true);
+    insert_column(d, t, 1, true, {});
+    CHECK_EQ((int)xml::descendants(t, "w:cellIns").size(), 2);
+    delete_column(d, t, 2, {});  // own insertion: just goes
+    CHECK_EQ((int)xml::descendants(t, "w:cellIns").size(), 0);
+    CHECK_EQ((int)xml::children(xml::children(t, "w:tr")[0], "w:tc").size(), 2);
+    insert_column(d, t, 1, true, {});
+    d.author.name = "Someone Else";
+    delete_column(d, t, 2, {});  // another author's insertion: becomes a deletion
+    for (auto tcpr : xml::descendants(t, "w:tcPr"))
+        CHECK(!(tcpr.child("w:cellIns") && tcpr.child("w:cellDel")));
+    CHECK_EQ((int)xml::descendants(t, "w:cellDel").size(), 2);
+    save(d, "tracked_column_insert_delete");
+}
+
+// a row inserted by one author and deleted by another: accept and reject both resolve it
+TEST(tracked_row_inserted_then_deleted) {
+    auto d = sample(false);
+    auto t = insert_table(d, paragraphs(d.body())[0], true, {{"a", "b"}, {"c", "d"}}, Json::object(), {});
+    d.set_track_changes(true);
+    d.author.name = "First";
+    insert_row(d, t, 0, true, {"x", "y"}, {});
+    d.author.name = "Second";
+    delete_row(d, t, 1, {});
+    auto tr = xml::children(t, "w:tr")[1];
+    CHECK(tr.child("w:trPr").child("w:ins") && tr.child("w:trPr").child("w:del"));
+    auto b = d.to_bytes();
+    for (bool acc : {true, false}) {
+        auto x = Document::from_bytes(b);
+        if (acc) accept_revisions(x, {}); else reject_revisions(x, {});
+        CHECK_EQ((int)list_revisions(x).size(), 0);
+        CHECK_EQ((int)xml::children(tables(x)[0], "w:tr").size(), 2);
+    }
+    save(d, "tracked_row_inserted_then_deleted");
+}
+
+TEST(cell_format_text_and_margins) {
+    auto d = sample(false);
+    auto t = insert_table(d, paragraphs(d.body())[0], true, {{"a", "b"}}, Json::object(), {});
+    format_cell(d, cell(t, 0, 0), Json{{"bold", true}, {"alignment", "center"}, {"shading", "EEEEEE"}}, {});
+    CHECK(xml::first_descendant(cell(t, 0, 0), "w:b"));
+    CHECK(xml::first_descendant(cell(t, 0, 0), "w:jc"));
+    format_table(d, t, Json{{"cell_margins", 5}}, {});
+    CHECK(t.child("w:tblPr").child("w:tblCellMar").child("w:top"));
+    bool threw = false;
+    try { format_table(d, t, Json{{"cell_margins", Json{{"middle", 3}}}}, {}); } catch (std::exception&) { threw = true; }
+    CHECK(threw);
+    save(d, "cell_format_text_and_margins");
+}
+
 int main(int argc, char** argv) { return t::run(argc, argv); }

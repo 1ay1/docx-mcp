@@ -155,14 +155,14 @@ bool check_password(Document& d, const std::string& password) {
         // ECMA attribute set: algorithmName/hashValue/saltValue/spinCount
         auto salt = util::base64_decode(xml::attr(dp, "w:saltValue"));
         if (!salt) return false;
-        int spin = std::stoi(xml::attr(dp, "w:spinCount", "0"));
+        int spin = util::to_int(xml::attr(dp, "w:spinCount", "0"));
         return protection_hash(password, *salt, spin, alg_of(xml::attr(dp, "w:algorithmName", "SHA-1"))) == xml::attr(dp, "w:hashValue");
     }
     if (!xml::attr(dp, "w:hash").empty()) {
         auto salt = util::base64_decode(xml::attr(dp, "w:salt"));
         if (!salt) return false;
-        int spin = std::stoi(xml::attr(dp, "w:cryptSpinCount", "0"));
-        int sid = std::stoi(xml::attr(dp, "w:cryptAlgorithmSid", "4"));
+        int spin = util::to_int(xml::attr(dp, "w:cryptSpinCount", "0"));
+        int sid = util::to_int(xml::attr(dp, "w:cryptAlgorithmSid", "4"));
         return protection_hash(password, *salt, spin, alg_of_sid(sid)) == xml::attr(dp, "w:hash");
     }
     return true;  // no password set
@@ -258,8 +258,8 @@ Json custom_properties(Document& d) {
         std::string t = v.name();
         std::string text = v.text().get();
         if (t == "vt:bool") j[n] = text == "true" || text == "1";
-        else if (t == "vt:i4" || t == "vt:i8" || t == "vt:int") j[n] = std::stoll(text);
-        else if (t == "vt:r8" || t == "vt:r4") j[n] = std::stod(text);
+        else if (t == "vt:i4" || t == "vt:i8" || t == "vt:int") j[n] = (long long)util::to_double(text);
+        else if (t == "vt:r8" || t == "vt:r4") j[n] = util::to_double(text);
         else j[n] = text;
     }
     return j;
@@ -311,10 +311,10 @@ Json settings_json(Document& d) {
     j["update_fields_on_open"] = (bool)st.child("w:updateFields");
     j["even_odd_headers"] = (bool)st.child("w:evenAndOddHeaders");
     j["mirror_margins"] = (bool)st.child("w:mirrorMargins");
-    j["default_tab_stop"] = std::stod(xml::attr(st.child("w:defaultTabStop"), "w:val", "720")) / 20;
-    j["zoom"] = std::stoi(xml::attr(st.child("w:zoom"), "w:percent", "100"));
+    j["default_tab_stop"] = util::to_double(xml::attr(st.child("w:defaultTabStop"), "w:val", "720")) / 20;
+    j["zoom"] = util::to_int(xml::attr(st.child("w:zoom"), "w:percent", "100"));
     for (auto cs : xml::children(st.child("w:compat"), "w:compatSetting"))
-        if (xml::attr(cs, "w:name") == "compatibilityMode") j["compatibility_mode"] = std::stoi(xml::attr(cs, "w:val", "15"));
+        if (xml::attr(cs, "w:name") == "compatibilityMode") j["compatibility_mode"] = util::to_int(xml::attr(cs, "w:val", "15"));
     j["protection"] = protection_info(d);
     j["do_not_track_moves"] = (bool)st.child("w:doNotTrackMoves");
     j["do_not_track_formatting"] = (bool)st.child("w:doNotTrackFormatting");
@@ -335,7 +335,18 @@ void set_settings(Document& d, const Json& props) {
         if (on) { auto e = schema::ensure_child(st, q); xml::remove_attr(e, "w:val"); }
         else st.remove_child(q);
     };
-    for (auto& [k, v] : props.items()) {
+    // models send "true", "yes", "120%", "0.5in": take them
+    auto flag = [](const std::string& k, const Json& v) {
+        if (v.is_boolean()) return v.get<bool>();
+        if (v.is_number()) return v.get<double>() != 0;
+        std::string s = v.is_string() ? util::lower(util::trim(v.get<std::string>())) : "";
+        if (s == "true" || s == "yes" || s == "on" || s == "1") return true;
+        if (s == "false" || s == "no" || s == "off" || s == "0") return false;
+        throw std::runtime_error("setting '" + k + "' must be true or false");
+    };
+    for (auto& [k, raw] : props.items()) {
+        Json v = raw;
+        if (k != "default_tab_stop" && k != "zoom" && k != "compatibility_mode") v = flag(k, raw);
         if (k == "track_changes") d.set_track_changes(v.get<bool>());
         else if (k == "update_fields_on_open") {
             if (v.get<bool>()) xml::set_attr(schema::ensure_child(st, "w:updateFields"), "w:val", "true");
@@ -350,8 +361,15 @@ void set_settings(Document& d, const Json& props) {
         else if (k == "embed_true_type_fonts") toggle("w:embedTrueTypeFonts", v.get<bool>());
         else if (k == "hide_spelling_errors") toggle("w:hideSpellingErrors", v.get<bool>());
         else if (k == "hide_grammar_errors") toggle("w:hideGrammaticalErrors", v.get<bool>());
-        else if (k == "default_tab_stop") xml::set_attr(schema::ensure_child(st, "w:defaultTabStop"), "w:val", std::to_string(std::lround(v.get<double>() * 20)));
-        else if (k == "zoom") xml::set_attr(schema::ensure_child(st, "w:zoom"), "w:percent", std::to_string(v.get<int>()));
+        else if (k == "default_tab_stop") {
+            long tw = util::length_twips(v);
+            if (tw <= 0) throw std::runtime_error("default_tab_stop must be positive");
+            xml::set_attr(schema::ensure_child(st, "w:defaultTabStop"), "w:val", std::to_string(tw));
+        } else if (k == "zoom") {
+            double z = v.is_number() ? v.get<double>() : util::to_double(v.is_string() ? v.get<std::string>() : "", -1);
+            if (z < 10 || z > 500) throw std::runtime_error("zoom is a percentage from 10 to 500");
+            xml::set_attr(schema::ensure_child(st, "w:zoom"), "w:percent", std::to_string(std::lround(z)));
+        }
         else if (k == "show_markup" || k == "show_formatting_changes" || k == "show_insertions_deletions" || k == "show_comments") {
             auto rv = schema::ensure_child(st, "w:revisionView");
             const char* a = k == "show_markup" ? "w:markup" : k == "show_formatting_changes" ? "w:formatting"
@@ -367,7 +385,7 @@ void set_settings(Document& d, const Json& props) {
                 xml::set_attr(cs, "w:uri", "http://schemas.microsoft.com/office/word");
             }
             xml::set_attr(cs, "w:val", std::to_string(v.get<int>()));
-        } else throw std::runtime_error("unknown setting '" + k + "'");
+        } else throw std::runtime_error(util::unknown_key("setting", k, {"track_changes", "update_fields_on_open", "even_odd_headers", "mirror_margins", "gutter_at_top", "do_not_track_moves", "do_not_track_formatting", "auto_hyphenation", "embed_true_type_fonts", "hide_spelling_errors", "hide_grammar_errors", "default_tab_stop", "zoom", "show_markup", "show_formatting_changes", "show_insertions_deletions", "show_comments", "compatibility_mode"}));
     }
 }
 
@@ -528,14 +546,14 @@ Json outline(Document& d) {
     for (auto p : paragraphs(d.body(), false)) {
         std::string sid = xml::attr(p.child("w:pPr").child("w:pStyle"), "w:val");
         int lvl = 0;
-        if (auto o = p.child("w:pPr").child("w:outlineLvl")) lvl = std::stoi(xml::attr(o, "w:val", "9")) + 1;
+        if (auto o = p.child("w:pPr").child("w:outlineLvl")) lvl = util::to_int(xml::attr(o, "w:val", "9")) + 1;
         else {
             std::set<std::string> seen;
             for (std::string s = sid; !s.empty() && !seen.count(s);) {
                 seen.insert(s);
                 auto st = find_style(d, s);
                 if (!st) break;
-                if (auto o = st.child("w:pPr").child("w:outlineLvl")) { lvl = std::stoi(xml::attr(o, "w:val", "9")) + 1; break; }
+                if (auto o = st.child("w:pPr").child("w:outlineLvl")) { lvl = util::to_int(xml::attr(o, "w:val", "9")) + 1; break; }
                 s = xml::attr(st.child("w:basedOn"), "w:val");
             }
         }
@@ -582,7 +600,7 @@ std::string to_text(Document& d, const std::string& view, bool md) {
                     t = std::string(sid[7] - '0' + (d.body() ? 1 : 0), '#') + " " + t;
                 std::string label = list_label(d, b);
                 if (!label.empty()) {
-                    int lvl = std::stoi(xml::attr(b.child("w:pPr").child("w:numPr").child("w:ilvl"), "w:val", "0"));
+                    int lvl = util::to_int(xml::attr(b.child("w:pPr").child("w:numPr").child("w:ilvl"), "w:val", "0"));
                     t = std::string(lvl * 2, ' ') + (label == "\u2022" || label == "o" || label == "\u25AA" ? "-" : label) + " " + t;
                 }
             }

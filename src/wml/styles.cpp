@@ -63,6 +63,8 @@ pugi::xml_node builtin(const std::string& key) {
 
 }  // namespace
 
+pugi::xml_node builtin_style(const std::string& key) { return builtin(key); }
+
 pugi::xml_node find_style(Document& d, const std::string& key) {
     auto st = d.styles(false);
     if (!st) return {};
@@ -118,7 +120,7 @@ std::vector<StyleInfo> list_styles(Document& d, bool latent) {
             i.in_use = used.count(i.id) > 0 || xml::attr(s, "w:default") == "1";
             i.hidden = s.child("w:semiHidden") || s.child("w:hidden");
             i.quick = s.child("w:qFormat");
-            if (auto u = s.child("w:uiPriority")) i.ui_priority = std::stoi(xml::attr(u, "w:val", "-1"));
+            if (auto u = s.child("w:uiPriority")) i.ui_priority = util::to_int(xml::attr(u, "w:val", "-1"));
             have.insert(i.id);
             v.push_back(i);
         }
@@ -194,7 +196,7 @@ std::string upsert_style(Document& d, const std::string& id_in, const Json& prop
                 xml::set_attr(s, "w:default", "1");
             }
         } else {
-            throw std::runtime_error("unknown style property '" + k + "'");
+            throw std::runtime_error(util::unknown_key("style property", k, {"name", "type", "based_on", "next", "link", "ui_priority", "quick_style", "hidden", "paragraph", "run", "default"}));
         }
     }
     return xml::attr(s, "w:styleId");

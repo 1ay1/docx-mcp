@@ -18,16 +18,7 @@ namespace {
 
 bool tracking(Document& d, const EditOpts& o) { return o.track ? *o.track : d.track_changes(); }
 
-long twips_of(const Json& v) {
-    if (v.is_number()) return std::lround(v.get<double>() * 20);
-    std::string s = v.get<std::string>();
-    if (s.ends_with("in")) return std::lround(std::stod(s) * 1440);
-    if (s.ends_with("cm")) return std::lround(std::stod(s) * 1440 / 2.54);
-    if (s.ends_with("mm")) return std::lround(std::stod(s) * 144 / 2.54);
-    if (s.ends_with("pt")) return std::lround(std::stod(s) * 20);
-    if (s.ends_with("tw")) return std::stol(s);
-    return std::lround(std::stod(s) * 20);
-}
+long twips_of(const Json& v) { return util::length_twips(v); }
 
 // Text width of the section the node is in (page width - margins), twips.
 long text_width(Document& d, pugi::xml_node near) {
@@ -36,13 +27,13 @@ long text_width(Document& d, pugi::xml_node near) {
         if (auto s = n.child("w:pPr").child("w:sectPr")) { sect = s; break; }
     }
     if (!sect) sect = d.body().child("w:sectPr");
-    long w = std::stol(xml::attr(sect.child("w:pgSz"), "w:w", "12240"));
-    long l = std::stol(xml::attr(sect.child("w:pgMar"), "w:left", "1440"));
-    long r = std::stol(xml::attr(sect.child("w:pgMar"), "w:right", "1440"));
+    long w = util::to_long(xml::attr(sect.child("w:pgSz"), "w:w", "12240"));
+    long l = util::to_long(xml::attr(sect.child("w:pgMar"), "w:left", "1440"));
+    long r = util::to_long(xml::attr(sect.child("w:pgMar"), "w:right", "1440"));
     return std::max(720L, w - l - r);
 }
 
-int span_of(pugi::xml_node tc) { return std::max(1, std::stoi(xml::attr(tc.child("w:tcPr").child("w:gridSpan"), "w:val", "1"))); }
+int span_of(pugi::xml_node tc) { return std::max(1, util::to_int(xml::attr(tc.child("w:tcPr").child("w:gridSpan"), "w:val", "1"))); }
 
 pugi::xml_node new_cell(Document& d, pugi::xml_node tr, pugi::xml_node before, long width, const std::string& text) {
     auto tc = before ? tr.insert_child_before("w:tc", before) : tr.append_child("w:tc");
@@ -256,7 +247,7 @@ void insert_column(Document& d, pugi::xml_node tbl, int at, bool after, const Ed
     auto grid = tbl.child("w:tblGrid");
     auto cols = xml::children(grid, "w:gridCol");
     if (at < 0 || at >= (int)cols.size()) throw std::runtime_error("column out of range");
-    long w = std::stol(xml::attr(cols[at], "w:w", "1440"));
+    long w = util::to_long(xml::attr(cols[at], "w:w", "1440"));
     // Word splits the reference column's width
     long half = std::max(1L, w / 2);
     xml::set_attr(cols[at], "w:w", std::to_string(w - half));
@@ -291,26 +282,39 @@ void delete_column(Document& d, pugi::xml_node tbl, int col, const EditOpts& o) 
     auto cols = xml::children(grid, "w:gridCol");
     if (col < 0 || col >= (int)cols.size()) throw std::runtime_error("column out of range");
     bool track = tracking(d, o);
+    int removed = 0, rows = 0;
     for (auto tr : tbl.children("w:tr")) {
+        rows++;
         int c = 0;
         for (auto tc : xml::children(tr, "w:tc")) {
             int span = span_of(tc);
             if (col >= c && col < c + span) {
+                auto ci = tc.child("w:tcPr").child("w:cellIns");
                 if (span > 1) {
                     xml::set_attr(tc.child("w:tcPr").child("w:gridSpan"), "w:val", std::to_string(span - 1));
-                } else if (track) {
-                    stamp(d, schema::ensure_child(schema::ensure_child(tc, "w:tcPr"), "w:cellDel"));
-                    track_deleted_content(d, tc);
-                } else {
+                } else if (!track || (ci && xml::attr(ci, "w:author") == d.author.name)) {
+                    // untracked, or deleting a cell this author inserted: it just goes
                     tr.remove_child(tc);
+                    removed++;
+                } else {
+                    // cellIns/cellDel/cellMerge are a schema choice: a deletion replaces the insertion mark
+                    auto tcpr = schema::ensure_child(tc, "w:tcPr");
+                    tcpr.remove_child("w:cellIns");
+                    tcpr.remove_child("w:cellMerge");
+                    stamp(d, schema::ensure_child(tcpr, "w:cellDel"));
+                    track_deleted_content(d, tc);
                 }
                 break;
             }
             c += span;
         }
     }
-    if (!track) grid.remove_child(cols[col]);
-    if (!track && !xml::first_descendant(tbl, "w:tc")) delete_table(d, tbl, o);
+    if (!track || removed == rows) grid.remove_child(cols[col]);
+    if (!xml::first_descendant(tbl, "w:tc")) {
+        EditOpts untracked;
+        untracked.track = false;
+        delete_table(d, tbl, untracked);
+    }
 }
 
 void merge_cells(Document& d, pugi::xml_node tbl, int r1, int c1, int r2, int c2) {
@@ -336,7 +340,7 @@ void merge_cells(Document& d, pugi::xml_node tbl, int r1, int c1, int r2, int c2
         if (first_start != c1 || last_end != c2) throw std::runtime_error("merge range cuts through a merged cell");
         auto keep = covered[0];
         long width = 0;
-        for (auto tc : covered) width += std::stol(xml::attr(tc.child("w:tcPr").child("w:tcW"), "w:w", "0"));
+        for (auto tc : covered) width += util::to_long(xml::attr(tc.child("w:tcPr").child("w:tcW"), "w:w", "0"));
         // horizontal: Word appends the other cells' paragraphs to the first (non-empty ones)
         for (std::size_t i = 1; i < covered.size(); i++) {
             for (auto p : xml::children(covered[i], "w:p")) {
@@ -414,7 +418,7 @@ void format_table(Document& d, pugi::xml_node tbl, const Json& props, const Edit
             auto w = schema::ensure_child(tblpr, "w:tblW");
             if (v.is_string() && v.get<std::string>().ends_with("%")) {
                 xml::set_attr(w, "w:type", "pct");
-                xml::set_attr(w, "w:w", std::to_string(std::lround(std::stod(v.get<std::string>()) * 50)));
+                xml::set_attr(w, "w:w", std::to_string(std::lround(std::clamp(util::to_double(v.get<std::string>()), 0.0, 100.0) * 50)));
             } else if (v.is_string() && v.get<std::string>() == "auto") {
                 xml::set_attr(w, "w:type", "auto");
                 xml::set_attr(w, "w:w", "0");
@@ -430,10 +434,22 @@ void format_table(Document& d, pugi::xml_node tbl, const Json& props, const Edit
         } else if (k == "layout") enum_attr(schema::ensure_child(tblpr, "w:tblLayout"), "w:type", v.get<std::string>() == "autofit" ? "autofit" : v.get<std::string>());
         else if (k == "cell_margins") {
             auto m = schema::ensure_child(tblpr, "w:tblCellMar");
-            for (auto& [side, sv] : v.items()) {
-                auto e = schema::ensure_child(m, "w:" + side);
+            auto set = [&](const std::string& side, const Json& sv) {
+                // Word writes w:left/w:right for LTR tables; start/end are aliases
+                static const std::map<std::string, std::string> sides = {
+                    {"top", "top"}, {"bottom", "bottom"}, {"left", "left"}, {"right", "right"},
+                    {"start", "left"}, {"end", "right"}};
+                auto it = sides.find(util::lower(side));
+                if (it == sides.end())
+                    throw std::runtime_error(util::unknown_key("cell margin side", side, {"top", "bottom", "left", "right"}));
+                auto e = schema::ensure_child(m, "w:" + it->second);
                 xml::set_attr(e, "w:w", std::to_string(twips_of(sv)));
                 xml::set_attr(e, "w:type", "dxa");
+            };
+            if (v.is_object()) {
+                for (auto& [side, sv] : v.items()) set(side, sv);
+            } else {
+                for (auto side : {"top", "left", "bottom", "right"}) set(side, v);
             }
         } else if (k == "header_row" || k == "first_column" || k == "last_row" || k == "last_column" || k == "banded_rows" || k == "banded_columns") {
             auto look = schema::ensure_child(tblpr, "w:tblLook");
@@ -474,7 +490,7 @@ void format_table(Document& d, pugi::xml_node tbl, const Json& props, const Edit
                 for (auto tc : tr.children("w:tc")) {
                     long w = 0;
                     int span = span_of(tc);
-                    for (int s = 0; s < span && c + s < (int)cols.size(); s++) w += std::stol(xml::attr(cols[c + s], "w:w", "0"));
+                    for (int s = 0; s < span && c + s < (int)cols.size(); s++) w += util::to_long(xml::attr(cols[c + s], "w:w", "0"));
                     xml::set_attr(schema::ensure_child(schema::ensure_child(tc, "w:tcPr"), "w:tcW"), "w:w", std::to_string(w));
                     xml::set_attr(tc.child("w:tcPr").child("w:tcW"), "w:type", "dxa");
                     c += span;
@@ -482,14 +498,19 @@ void format_table(Document& d, pugi::xml_node tbl, const Json& props, const Edit
             }
             xml::set_attr(schema::ensure_child(tblpr, "w:tblLayout"), "w:type", "fixed");
         } else {
-            throw std::runtime_error("unknown table property '" + k + "'");
+            throw std::runtime_error(util::unknown_key("table property", k, {"style", "alignment", "width", "indent", "layout", "borders", "cell_margins", "column_widths", "row_height", "header_row", "repeat_header", "first_column", "last_row", "last_column", "banded_rows", "banded_columns"}));
         }
     }
 }
 
 void format_cell(Document& d, pugi::xml_node tc, const Json& props, const EditOpts& o) {
     auto tcpr = schema::ensure_child(tc, "w:tcPr");
-    if (tracking(d, o) && !tcpr.child("w:tcPrChange")) {
+    bool cell_level = false;
+    for (auto& [k, v] : props.items())
+        if (k == "shading" || k == "fill" || k == "vertical_align" || k == "width" || k == "borders" ||
+            k == "text_direction" || k == "no_wrap")
+            cell_level = true;
+    if (cell_level && tracking(d, o) && !tcpr.child("w:tcPrChange")) {
         pugi::xml_document old;
         auto op = old.append_child("w:tcPr");
         for (auto c : tcpr.children()) {
@@ -522,7 +543,17 @@ void format_cell(Document& d, pugi::xml_node tc, const Json& props, const EditOp
                 int n = (int)analyze(p).vis.size();
                 if (n) format_runs(d, p, 0, n, v, o);
             }
-        } else throw std::runtime_error("unknown cell property '" + k + "'");
+        } else if (is_run_prop(k)) {
+            // {"bold": true} on a cell means its text
+            for (auto p : xml::children(tc, "w:p")) {
+                int n = (int)analyze(p).vis.size();
+                if (n) format_runs(d, p, 0, n, Json{{k, v}}, o);
+            }
+        } else if (is_para_prop(k)) {
+            for (auto p : xml::children(tc, "w:p")) format_paragraph(d, p, Json{{k, v}}, o);
+        } else throw std::runtime_error(util::unknown_key("cell property", k, {"shading", "fill", 
+            "vertical_align", "width", "borders", "text_direction", "no_wrap", "run", "paragraph"}) +
+            "; run and paragraph properties like bold or alignment also apply to the cell text");
     }
 }
 

@@ -145,6 +145,13 @@ int main(int argc, char** argv) {
             } catch (const std::bad_alloc&) {
                 r.content = {mcp::text("error: out of memory while running " + def->name)};
                 r.isError = true;
+            } catch (const nlohmann::json::exception& e) {
+                // a value of the wrong type inside an object argument ("zoom": "120%")
+                std::string m = e.what();
+                if (auto p = m.find("] "); p != std::string::npos) m = m.substr(p + 2);
+                r.content = {mcp::text("error: a value has the wrong type (" + m +
+                                       "); check the property types in the tool description")};
+                r.isError = true;
             } catch (const std::exception& e) {
                 r.content = {mcp::text(std::string("error: ") + e.what())};
                 r.isError = true;

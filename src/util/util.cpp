@@ -1,6 +1,12 @@
 #include "util/util.hpp"
 
 #include <array>
+#include <cerrno>
+#include <cmath>
+#include <cstdlib>
+#include <stdexcept>
+
+#include <nlohmann/json.hpp>
 #include <chrono>
 #include <cstring>
 #include <ctime>
@@ -344,6 +350,18 @@ std::string xml_safe(std::string_view s) {
     return to_utf8(out);
 }
 
+std::string xml_escape(std::string_view s) {
+    std::string o;
+    for (char c : xml_safe(s)) {
+        if (c == '&') o += "&amp;";
+        else if (c == '<') o += "&lt;";
+        else if (c == '>') o += "&gt;";
+        else if (c == '"') o += "&quot;";
+        else o += c;
+    }
+    return o;
+}
+
 std::string lower(std::string_view s) {
     std::string o(s);
     for (auto& c : o) if (c >= 'A' && c <= 'Z') c = char(c - 'A' + 'a');
@@ -370,6 +388,81 @@ std::vector<std::string> split(std::string_view s, char sep) {
         }
     }
     return out;
+}
+
+std::string unknown_key(std::string_view what, std::string_view key, const std::vector<std::string_view>& valid) {
+    auto dist = [](std::string_view a, std::string_view b) {
+        std::vector<std::size_t> prev(b.size() + 1), cur(b.size() + 1);
+        for (std::size_t j = 0; j <= b.size(); j++) prev[j] = j;
+        for (std::size_t i = 1; i <= a.size(); i++) {
+            cur[0] = i;
+            for (std::size_t j = 1; j <= b.size(); j++)
+                cur[j] = std::min({prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] == b[j - 1] ? 0 : 1)});
+            std::swap(prev, cur);
+        }
+        return prev[b.size()];
+    };
+    std::string k = lower(key), best;
+    std::size_t bd = 3;
+    for (auto v : valid) {
+        std::size_t dd = dist(k, v);
+        // also catch prefixes/suffixes: "margin" -> "cell_margins"
+        if (dd > 2 && k.size() >= 4 && std::string_view(v).find(k) != std::string_view::npos) dd = 2;
+        if (dd < bd) { bd = dd; best = v; }
+    }
+    std::string m = "unknown " + std::string(what) + " '" + std::string(key) + "'";
+    m += " (";
+    if (!best.empty()) m += "did you mean '" + best + "'? ";
+    m += "valid: ";
+    for (std::size_t i = 0; i < valid.size(); i++) m += (i ? ", " : "") + std::string(valid[i]);
+    return m + ")";
+}
+
+long to_long(std::string_view s, long def) {
+    double d = to_double(s, (double)def);
+    if (!(d == d)) return def;
+    // clamp to int range so callers can narrow safely
+    if (d > 2147483647.0) return 2147483647L;
+    if (d < -2147483648.0) return -2147483647L - 1;
+    return (long)d;
+}
+
+double to_double(std::string_view s, double def) {
+    std::string t(trim(s));
+    if (t.empty()) return def;
+    char* end = nullptr;
+    errno = 0;
+    double d = std::strtod(t.c_str(), &end);
+    if (end == t.c_str() || errno == ERANGE || !(d == d)) return def;
+    return d;
+}
+
+long length_twips(const nlohmann::json& v) {
+    double tw;
+    if (v.is_number()) {
+        tw = v.get<double>() * 20;
+    } else if (v.is_string()) {
+        std::string s = lower(trim(v.get<std::string>()));
+        char* end = nullptr;
+        double n = std::strtod(s.c_str(), &end);
+        std::string unit = trim(std::string_view(end));
+        // strtod also takes "inf", "nan" and hex; only plain decimals are lengths
+        bool plain = end != s.c_str() && s.find_first_of("xXnN") >= std::size_t(end - s.c_str());
+        if (!plain)
+            throw std::runtime_error("bad length '" + v.get<std::string>() + "' (use points, or a unit: 12pt, 1in, 2.5cm, 10mm)");
+        static const std::pair<const char*, double> units[] = {
+            {"", 20}, {"pt", 20}, {"in", 1440}, {"inch", 1440}, {"inches", 1440}, {"\"", 1440}, {"cm", 1440 / 2.54},
+            {"mm", 144 / 2.54}, {"pc", 240}, {"pi", 240}, {"tw", 1}, {"twip", 1}, {"twips", 1}, {"dxa", 1}};
+        double f = -1;
+        for (auto& [u, k] : units)
+            if (unit == u) f = k;
+        if (f < 0) throw std::runtime_error("unknown length unit '" + unit + "' (pt, in, cm, mm, pc, tw)");
+        tw = n * f;
+    } else {
+        throw std::runtime_error("a length must be a number of points or a string like \"1in\"");
+    }
+    if (!(tw == tw) || tw > 31680 || tw < -31680) throw std::runtime_error("length out of range (at most 22 inches)");
+    return std::lround(tw);
 }
 
 }  // namespace docx::util

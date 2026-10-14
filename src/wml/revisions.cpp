@@ -249,13 +249,13 @@ void resolve_cell(Ctx& c, pugi::xml_node tc, pugi::xml_node rev, bool cell_survi
     // removing a cell: the cell before it absorbs its grid span (Word merges
     // the space into the previous cell)
     int span = std::max(1, xml::attr(tc.child("w:tcPr").child("w:gridSpan"), "w:val", "1") == "" ? 1 :
-                           std::stoi(xml::attr(tc.child("w:tcPr").child("w:gridSpan"), "w:val", "1")));
+                           util::to_int(xml::attr(tc.child("w:tcPr").child("w:gridSpan"), "w:val", "1")));
     auto prev = tc.previous_sibling("w:tc");
     auto tr = tc.parent();
     tr.remove_child(tc);
     if (prev) {
         auto ptcpr = schema::ensure_child(prev, "w:tcPr");
-        int ps = std::stoi(xml::attr(ptcpr.child("w:gridSpan"), "w:val", "1"));
+        int ps = util::to_int(xml::attr(ptcpr.child("w:gridSpan"), "w:val", "1"));
         xml::set_attr(schema::ensure_child(ptcpr, "w:gridSpan"), "w:val", std::to_string(ps + span));
     }
 }
@@ -395,10 +395,24 @@ void run_pass(Ctx& c, pugi::xml_node root) {
     for (auto tr : xml::descendants(root, "w:tr")) {
         auto trpr = tr.child("w:trPr");
         if (!trpr) continue;
-        if (auto ins = trpr.child("w:ins"); ins && c.want(ins)) { resolve_row(c, tr, ins, c.accept); continue; }
-        if (auto del = trpr.child("w:del"); del && c.want(del)) { resolve_row(c, tr, del, !c.accept); continue; }
+        // a row can be both inserted and deleted (by another author): the
+        // deletion decides on accept, the insertion on reject
+        auto ins = trpr.child("w:ins"), del = trpr.child("w:del");
+        if (ins && del) {
+            auto first = c.accept ? del : ins, second = c.accept ? ins : del;
+            if (c.want(first)) {
+                if (c.want(second)) c.hit(second);
+                resolve_row(c, tr, first, false);
+                continue;
+            }
+            if (c.want(second)) { c.hit(second); trpr.remove_child(second); }
+            continue;
+        }
+        if (ins && c.want(ins)) { resolve_row(c, tr, ins, c.accept); continue; }
+        if (del && c.want(del)) { resolve_row(c, tr, del, !c.accept); continue; }
     }
     for (auto tc : xml::descendants(root, "w:tc")) {
+        if (!tc.parent()) continue;
         auto tcpr = tc.child("w:tcPr");
         if (!tcpr) continue;
         if (auto ins = tcpr.child("w:cellIns"); ins && c.want(ins)) { resolve_cell(c, tc, ins, c.accept); continue; }

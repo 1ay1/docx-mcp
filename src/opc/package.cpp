@@ -85,6 +85,64 @@ struct StringWriter : pugi::xml_writer {
     void write(const void* data, std::size_t size) override { out.append(static_cast<const char*>(data), size); }
 };
 
+// XML 1.0 allows tab, LF, CR, U+0020-D7FF, U+E000-FFFD, U+10000-10FFFF.
+bool xml_char_ok(std::uint32_t c) {
+    return c == 0x9 || c == 0xA || c == 0xD || (c >= 0x20 && c <= 0xD7FF) || (c >= 0xE000 && c <= 0xFFFD) ||
+           (c >= 0x10000 && c <= 0x10FFFF);
+}
+
+// Drop what XML 1.0 forbids from serialized output, so no edit path can make
+// a part Word refuses to open: control characters (pugixml writes them as
+// &#N; references), U+FFFE/FFFF, and invalid UTF-8 (replaced with U+FFFD).
+std::string strip_invalid_xml(std::string s) {
+    std::string o;
+    o.reserve(s.size());
+    std::size_t i = 0, n = s.size();
+    bool changed = false;
+    while (i < n) {
+        unsigned char c = (unsigned char)s[i];
+        if (c == '&' && i + 2 < n && s[i + 1] == '#') {
+            std::size_t j = i + 2;
+            bool hex = j < n && (s[j] == 'x' || s[j] == 'X');
+            if (hex) j++;
+            std::size_t k = j;
+            while (k < n && std::isxdigit((unsigned char)s[k]) && k - j < 8) k++;
+            if (k < n && s[k] == ';' && k > j) {
+                std::uint32_t v = (std::uint32_t)std::strtoul(s.substr(j, k - j).c_str(), nullptr, hex ? 16 : 10);
+                if (!xml_char_ok(v)) { i = k + 1; changed = true; continue; }
+            }
+            o += s[i++];
+            continue;
+        }
+        if (c < 0x80) {
+            if (xml_char_ok(c)) o += char(c);
+            else changed = true;
+            i++;
+            continue;
+        }
+        int len = c >= 0xF0 ? 4 : c >= 0xE0 ? 3 : c >= 0xC0 ? 2 : 0;
+        std::uint32_t v = len == 4 ? c & 0x07 : len == 3 ? c & 0x0F : c & 0x1F;
+        bool ok = len > 0 && i + len <= n && c < 0xF5 && c != 0xC0 && c != 0xC1;
+        for (int t = 1; ok && t < len; t++) {
+            unsigned char cc = (unsigned char)s[i + t];
+            if ((cc & 0xC0) != 0x80) ok = false;
+            v = (v << 6) | (cc & 0x3F);
+        }
+        // overlong forms and surrogates are invalid UTF-8 too
+        if (ok && ((len == 3 && v < 0x800) || (len == 4 && v < 0x10000) || (v >= 0xD800 && v <= 0xDFFF))) ok = false;
+        if (!ok) {
+            o += "\xEF\xBF\xBD";
+            i++;
+            changed = true;
+            continue;
+        }
+        if (xml_char_ok(v)) o.append(s, i, len);
+        else changed = true;
+        i += len;
+    }
+    return changed ? o : s;
+}
+
 const char* XML_DECL = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\r\n";
 
 std::string serialize_rels(const Rels& r) {
@@ -103,7 +161,13 @@ std::string serialize_rels(const Rels& r) {
 
 }  // namespace
 
-std::string key_of(std::string_view name) { return util::lower(pct_decode(name)); }
+std::string key_of(std::string_view name) {
+    // part names are absolute; tolerate "word/styles.xml" and backslashes
+    std::string s = util::lower(pct_decode(name));
+    std::replace(s.begin(), s.end(), '\\', '/');
+    if (s.empty() || s[0] != '/') s.insert(s.begin(), '/');
+    return s;
+}
 
 std::string xml_to_string(const pugi::xml_document& d) {
     StringWriter w;
@@ -112,7 +176,7 @@ std::string xml_to_string(const pugi::xml_document& d) {
         if (c.type() == pugi::node_declaration) continue;
         c.print(w, "", pugi::format_raw, pugi::encoding_utf8);
     }
-    return XML_DECL + w.out;
+    return XML_DECL + strip_invalid_xml(std::move(w.out));
 }
 
 // ── Rels ─────────────────────────────────────────────────────────────────
@@ -167,10 +231,16 @@ Package Package::from_bytes(const util::Bytes& zip) {
     util::Bytes ctypes;
     bool have_ct = false;
     mz_uint n = mz_zip_reader_get_num_files(&za);
+    // refuse zip bombs: Word itself won't open parts this large
+    constexpr std::uint64_t kMaxPart = 1ull << 30, kMaxTotal = 4ull << 30;
+    std::uint64_t total = 0;
     for (mz_uint i = 0; i < n; i++) {
         mz_zip_archive_file_stat st;
         if (!mz_zip_reader_file_stat(&za, i, &st)) continue;
         if (st.m_is_directory) continue;
+        total += st.m_uncomp_size;
+        if (st.m_uncomp_size > kMaxPart || total > kMaxTotal)
+            throw std::runtime_error(std::string("package part too large to open: ") + st.m_filename);
         std::size_t sz = 0;
         void* data = mz_zip_reader_extract_to_heap(&za, i, &sz, 0);
         if (!data) throw std::runtime_error(std::string("cannot inflate ") + st.m_filename + " (the file is damaged)");
@@ -178,6 +248,7 @@ Package Package::from_bytes(const util::Bytes& zip) {
         mz_free(data);
         std::string zname = st.m_filename;
         for (auto& c : zname) if (c == '\\') c = '/';
+        while (!zname.empty() && zname[0] == '/') zname.erase(0, 1);
         if (util::iequals(zname, "[Content_Types].xml")) { ctypes = std::move(b); have_ct = true; continue; }
         raw.emplace_back("/" + zname, std::move(b));
     }
@@ -207,8 +278,8 @@ Package Package::from_bytes(const util::Bytes& zip) {
         if (auto it = overrides.find(k); it != overrides.end()) part.content_type = it->second;
         else if (auto d = p.defaults.find(ext_of(name)); d != p.defaults.end()) part.content_type = d->second;
         part.bytes = std::move(bytes);
-        p.order_.push_back(k);
-        p.parts_.emplace(k, std::move(part));
+        // a damaged zip can repeat a name; keep the first like Word does
+        if (p.parts_.emplace(k, std::move(part)).second) p.order_.push_back(k);
     }
     return p;
 }
@@ -244,12 +315,12 @@ util::Bytes Package::to_bytes() const {
             auto it = parts_.find(k);
             if (it == parts_.end()) continue;
             const Part& part = it->second;
-            if (part.content_type.empty()) continue;
             auto d2 = defs.find(ext_of(part.name));
             if (d2 != defs.end() && d2->second == part.content_type) continue;
             auto e = root.append_child("Override");
             e.append_attribute("PartName") = part.name.c_str();
-            e.append_attribute("ContentType") = part.content_type.c_str();
+            // an entry nobody typed: keep the bytes as a generic part rather than drop them
+            e.append_attribute("ContentType") = part.content_type.empty() ? "application/octet-stream" : part.content_type.c_str();
         }
         add("[Content_Types].xml", xml_to_string(d));
     }
@@ -259,7 +330,6 @@ util::Bytes Package::to_bytes() const {
         auto it = parts_.find(k);
         if (it == parts_.end()) continue;
         const Part& part = it->second;
-        if (part.content_type.empty()) continue;  // not a part in OPC terms
         if (part.xml && part.dirty) add(part.name, xml_to_string(*part.xml));
         else add(part.name, std::string(part.bytes.begin(), part.bytes.end()));
         if (auto r = rels_.find(k); r != rels_.end() && !r->second.items.empty())

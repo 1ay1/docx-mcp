@@ -21,16 +21,7 @@ namespace {
 
 bool tracking(Document& d, const EditOpts& o) { return o.track ? *o.track : d.track_changes(); }
 
-long twips_of(const Json& v) {
-    if (v.is_number()) return std::lround(v.get<double>() * 20);
-    std::string s = v.get<std::string>();
-    if (s.ends_with("in")) return std::lround(std::stod(s) * 1440);
-    if (s.ends_with("cm")) return std::lround(std::stod(s) * 1440 / 2.54);
-    if (s.ends_with("mm")) return std::lround(std::stod(s) * 144 / 2.54);
-    if (s.ends_with("pt")) return std::lround(std::stod(s) * 20);
-    if (s.ends_with("tw")) return std::stol(s);
-    return std::lround(std::stod(s) * 20);
-}
+long twips_of(const Json& v) { return util::length_twips(v); }
 
 // Insert a run (already built, detached under a holder) at visible pos.
 pugi::xml_node place_run(Document& d, pugi::xml_node p, int pos, pugi::xml_node run_src, const EditOpts& o) {
@@ -198,9 +189,9 @@ pugi::xml_node insert_picture(Document& d, pugi::xml_node p, int pos, const util
     // Word scales a too-wide picture down to the text width
     long tw_twips = 9360;
     if (auto sp = d.body().child("w:sectPr")) {
-        long w = std::stol(xml::attr(sp.child("w:pgSz"), "w:w", "12240"));
-        long l = std::stol(xml::attr(sp.child("w:pgMar"), "w:left", "1440"));
-        long r = std::stol(xml::attr(sp.child("w:pgMar"), "w:right", "1440"));
+        long w = util::to_long(xml::attr(sp.child("w:pgSz"), "w:w", "12240"));
+        long l = util::to_long(xml::attr(sp.child("w:pgMar"), "w:left", "1440"));
+        long r = util::to_long(xml::attr(sp.child("w:pgMar"), "w:right", "1440"));
         tw_twips = w - l - r;
     }
     double max_cx = tw_twips * 635.0;
@@ -310,19 +301,19 @@ void insert_section_break(Document& d, pugi::xml_node p, const std::string& type
 Json section_json(Document& d, pugi::xml_node s) {
     Json j;
     auto sz = s.child("w:pgSz");
-    double w = std::stod(xml::attr(sz, "w:w", "12240")) / 20, h = std::stod(xml::attr(sz, "w:h", "15840")) / 20;
+    double w = util::to_double(xml::attr(sz, "w:w", "12240")) / 20, h = util::to_double(xml::attr(sz, "w:h", "15840")) / 20;
     j["page_width"] = w;
     j["page_height"] = h;
     j["orientation"] = xml::attr(sz, "w:orient", w > h ? "landscape" : "portrait");
     auto m = s.child("w:pgMar");
     Json mj;
     for (auto a : {"top", "bottom", "left", "right", "header", "footer", "gutter"})
-        mj[a] = std::stod(xml::attr(m, std::string("w:") + a, "0")) / 20;
+        mj[a] = util::to_double(xml::attr(m, std::string("w:") + a, "0")) / 20;
     j["margins"] = mj;
     j["type"] = xml::attr(s.child("w:type"), "w:val", "nextPage");
     if (auto c = s.child("w:cols")) {
-        j["columns"] = std::stoi(xml::attr(c, "w:num", "1"));
-        j["column_space"] = std::stod(xml::attr(c, "w:space", "720")) / 20;
+        j["columns"] = util::to_int(xml::attr(c, "w:num", "1"));
+        j["column_space"] = util::to_double(xml::attr(c, "w:space", "720")) / 20;
     }
     j["title_page"] = (bool)s.child("w:titlePg");
     Json hf = Json::object();
@@ -337,7 +328,7 @@ Json section_json(Document& d, pugi::xml_node s) {
     j["headers_footers"] = hf;
     if (auto pn = s.child("w:pgNumType")) {
         Json pj;
-        if (pn.attribute("w:start")) pj["start"] = std::stoi(xml::attr(pn, "w:start"));
+        if (pn.attribute("w:start")) pj["start"] = util::to_int(xml::attr(pn, "w:start"));
         if (pn.attribute("w:fmt")) pj["format"] = xml::attr(pn, "w:fmt");
         j["page_numbers"] = pj;
     }
@@ -363,7 +354,7 @@ void format_section(Document& d, int index, const Json& props, const EditOpts& o
     for (auto& [k, v] : props.items()) {
         if (k == "orientation") {
             auto sz = schema::ensure_child(s, "w:pgSz");
-            long w = std::stol(xml::attr(sz, "w:w", "12240")), h = std::stol(xml::attr(sz, "w:h", "15840"));
+            long w = util::to_long(xml::attr(sz, "w:w", "12240")), h = util::to_long(xml::attr(sz, "w:h", "15840"));
             bool land = v.get<std::string>() == "landscape";
             if (land != (w > h)) { xml::set_attr(sz, "w:w", std::to_string(h)); xml::set_attr(sz, "w:h", std::to_string(w)); }
             if (land) xml::set_attr(sz, "w:orient", "landscape");
@@ -404,7 +395,7 @@ void format_section(Document& d, int index, const Json& props, const EditOpts& o
             auto pn = schema::ensure_child(s, "w:pgNumType");
             if (v.contains("start")) xml::set_attr(pn, "w:start", std::to_string(v["start"].get<int>()));
             if (v.contains("format")) xml::set_attr(pn, "w:fmt", v["format"].get<std::string>());
-        } else throw std::runtime_error("unknown section property '" + k + "'");
+        } else throw std::runtime_error(util::unknown_key("page setup key", k, {"orientation", "paper", "page_width", "page_height", "margins", "columns", "column_space", "type", "title_page", "vertical_align", "line_numbers", "page_numbers"}));
     }
     // pPr even-and-odd headers live in settings
     if (props.contains("even_odd_headers")) {

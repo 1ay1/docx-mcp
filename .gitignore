@@ -2,3 +2,5 @@ build/
 *.pdf
 tests/corpus/**/*.pdf
 .agentty/
+__pycache__/
+/out/

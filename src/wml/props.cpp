@@ -6,6 +6,8 @@
 #include <map>
 #include <cctype>
 #include <cmath>
+#include <cstring>
+#include <cstdlib>
 #include <stdexcept>
 
 #include "schema/schema.hpp"
@@ -19,18 +21,7 @@ namespace docx::wml {
 namespace {
 
 // Parse a length into twips. Plain numbers are points.
-long twips(const Json& v) {
-    if (v.is_number()) return std::lround(v.get<double>() * 20);
-    std::string s = util::trim(v.get<std::string>());
-    auto num = [&](std::size_t n) { return std::stod(s.substr(0, s.size() - n)); };
-    if (s.ends_with("tw") || s.ends_with("twips")) return std::lround(std::stod(s));
-    if (s.ends_with("pt")) return std::lround(num(2) * 20);
-    if (s.ends_with("in")) return std::lround(num(2) * 1440);
-    if (s.ends_with("cm")) return std::lround(num(2) * 1440 / 2.54);
-    if (s.ends_with("mm")) return std::lround(num(2) * 144 / 2.54);
-    if (s.ends_with("pc") || s.ends_with("pi")) return std::lround(num(2) * 240);
-    return std::lround(std::stod(s) * 20);
-}
+long twips(const Json& v) { return util::length_twips(v); }
 
 std::string hexcolor(const Json& v) {
     std::string s = v.get<std::string>();
@@ -47,6 +38,21 @@ std::string hexcolor(const Json& v) {
         c = char(std::toupper((unsigned char)c));
     }
     return s;
+}
+
+// Line spacing as a multiple: 1.15, "1.5", "double", "1.5 lines". 0 if it's a length.
+double line_multiple(const Json& v) {
+    if (v.is_number()) return v.get<double>();
+    if (!v.is_string()) return 0;
+    std::string s = util::lower(util::trim(v.get<std::string>()));
+    if (s == "single") return 1;
+    if (s == "double") return 2;
+    if (s == "one and a half" || s == "1.5 lines") return 1.5;
+    for (auto suf : {" lines", " line", "lines", "x"})
+        if (s.size() > std::strlen(suf) && s.ends_with(suf)) s = util::trim(s.substr(0, s.size() - std::strlen(suf)));
+    char* end = nullptr;
+    double d = std::strtod(s.c_str(), &end);
+    return (end != s.c_str() && *end == 0) ? d : 0;
 }
 
 bool truthy(const Json& v) {
@@ -174,6 +180,10 @@ void apply_rpr_json(Document& d, pugi::xml_node rpr, const Json& props) {
         else if (k == "math") onoff(rpr, "w:oMath", v);
         else if (k == "font" || k == "font_name") {
             if (v.is_null()) { rpr.remove_child("w:rFonts"); continue; }
+            if (v.is_array() && v.size() == 1 && v[0].is_string()) {  // ["Arial"]
+                apply_rpr_json(d, rpr, Json{{k, v[0]}});
+                continue;
+            }
             auto f = schema::ensure_child(rpr, "w:rFonts");
             for (auto a : {"w:asciiTheme", "w:hAnsiTheme", "w:eastAsiaTheme", "w:cstheme"}) xml::remove_attr(f, a);
             if (v.is_string()) {
@@ -196,7 +206,10 @@ void apply_rpr_json(Document& d, pugi::xml_node rpr, const Json& props) {
             }
         } else if (k == "size" || k == "font_size") {
             if (v.is_null()) { rpr.remove_child("w:sz"); rpr.remove_child("w:szCs"); continue; }
-            long hp = std::lround(v.get<double>() * 2);
+            // points: 11, "11", "11pt", "10.5"
+            double pt = v.is_number() ? v.get<double>() : util::length_twips(v) / 20.0;
+            if (pt < 1 || pt > 1638) throw std::runtime_error("font size must be 1 to 1638 points");
+            long hp = std::lround(pt * 2);
             val(rpr, "w:sz", v, std::to_string(hp));
             val(rpr, "w:szCs", v, std::to_string(hp));
         } else if (k == "color") {
@@ -321,8 +334,9 @@ void apply_ppr_json(Document& d, pugi::xml_node ppr, const Json& props) {
             if (k == "line_spacing") {
                 // number = multiple of single (1.15, 1.5, 2); "12pt" = exact/at least
                 if (v.is_null()) { xml::remove_attr(s, "w:line"); xml::remove_attr(s, "w:lineRule"); }
-                else if (v.is_number()) {
-                    xml::set_attr(s, "w:line", std::to_string(std::lround(v.get<double>() * 240)));
+                else if (double m = line_multiple(v); m > 0) {
+                    if (m > 132) throw std::runtime_error("line_spacing multiple is too large");
+                    xml::set_attr(s, "w:line", std::to_string(std::lround(m * 240)));
                     xml::set_attr(s, "w:lineRule", "auto");
                 } else {
                     xml::set_attr(s, "w:line", std::to_string(twips(v)));
@@ -418,6 +432,27 @@ void apply_ppr_json(Document& d, pugi::xml_node ppr, const Json& props) {
     xml::fix_declarations(xml::root_of(ppr));
 }
 
+// Keep these in step with the appliers above (props_keys test checks it).
+bool is_run_prop(const std::string& k) {
+    static const std::set<std::string> s = {
+        "all_caps", "bold", "border", "caps", "character_spacing", "color", "complex_script", "double_strike",
+        "effect", "emboss", "emphasis_mark", "engrave", "font", "font_name", "font_size", "hidden", "highlight",
+        "imprint", "italic", "kerning", "lang", "language", "math", "no_proof", "outline", "position", "rtl",
+        "scale", "shading", "shadow", "size", "small_caps", "snap_to_grid", "spacing", "spec_vanish", "strike",
+        "strikethrough", "style", "subscript", "superscript", "underline", "vertical_align", "web_hidden", "xml"};
+    return s.count(k) > 0;
+}
+bool is_para_prop(const std::string& k) {
+    static const std::set<std::string> s = {
+        "align", "alignment", "bidi", "borders", "contextual_spacing", "first_line_indent", "frame",
+        "hanging_indent", "indent_left", "indent_right", "justification", "keep_lines", "keep_together",
+        "keep_with_next", "left_indent", "line_rule", "line_spacing", "list", "mirror_indents", "numbering",
+        "outline_level", "page_break_before", "right_indent", "rtl", "shading", "space_after", "space_after_auto",
+        "space_before", "space_before_auto", "style", "suppress_auto_hyphens", "suppress_line_numbers", "tabs",
+        "text_alignment", "text_direction", "widow_control", "xml"};
+    return s.count(k) > 0;
+}
+
 namespace {
 std::optional<bool> on(pugi::xml_node pr, const char* q) {
     auto e = pr.child(q);
@@ -425,7 +460,7 @@ std::optional<bool> on(pugi::xml_node pr, const char* q) {
     std::string v = xml::attr(e, "w:val", "true");
     return !(v == "0" || v == "false" || v == "off");
 }
-double pts(const std::string& tw) { return tw.empty() ? 0 : std::stod(tw) / 20.0; }
+double pts(const std::string& tw) { return util::to_double(tw) / 20.0; }
 }  // namespace
 
 Json rpr_to_json(pugi::xml_node r) {
@@ -443,7 +478,7 @@ Json rpr_to_json(pugi::xml_node r) {
         if (!a.empty()) j["font"] = a;
         else if (!xml::attr(f, "w:asciiTheme").empty()) j["font"] = Json{{"ascii_theme", xml::attr(f, "w:asciiTheme")}};
     }
-    if (auto s = r.child("w:sz")) j["size"] = std::stod(xml::attr(s, "w:val", "0")) / 2.0;
+    if (auto s = r.child("w:sz")) j["size"] = util::to_double(xml::attr(s, "w:val", "0")) / 2.0;
     if (auto c = r.child("w:color")) {
         if (!xml::attr(c, "w:themeColor").empty()) j["color"] = Json{{"theme", xml::attr(c, "w:themeColor")}, {"rgb", xml::attr(c, "w:val")}};
         else j["color"] = xml::attr(c, "w:val");
@@ -471,7 +506,7 @@ Json ppr_to_json(pugi::xml_node p) {
         if (s.attribute("w:after")) j["space_after"] = pts(xml::attr(s, "w:after"));
         if (s.attribute("w:line")) {
             std::string rule = xml::attr(s, "w:lineRule", "auto");
-            double line = std::stod(xml::attr(s, "w:line"));
+            double line = util::to_double(xml::attr(s, "w:line"));
             if (rule == "auto") j["line_spacing"] = line / 240.0;
             else { j["line_spacing"] = std::to_string(line / 20.0) + "pt"; j["line_rule"] = rule; }
         }
@@ -484,10 +519,10 @@ Json ppr_to_json(pugi::xml_node p) {
         if (auto v = xml::attr(i, "w:hanging"); !v.empty()) j["hanging_indent"] = pts(v);
     }
     if (auto np = p.child("w:numPr")) {
-        j["numbering"] = {{"num_id", std::stoi(xml::attr(np.child("w:numId"), "w:val", "0"))},
-                          {"level", std::stoi(xml::attr(np.child("w:ilvl"), "w:val", "0"))}};
+        j["numbering"] = {{"num_id", util::to_int(xml::attr(np.child("w:numId"), "w:val", "0"))},
+                          {"level", util::to_int(xml::attr(np.child("w:ilvl"), "w:val", "0"))}};
     }
-    if (auto o = p.child("w:outlineLvl")) j["outline_level"] = std::stoi(xml::attr(o, "w:val", "9")) + 1;
+    if (auto o = p.child("w:outlineLvl")) j["outline_level"] = util::to_int(xml::attr(o, "w:val", "9")) + 1;
     if (auto s = p.child("w:shd")) j["shading"] = xml::attr(s, "w:fill");
     return j;
 }

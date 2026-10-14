@@ -6,6 +6,8 @@
 #include <string_view>
 #include <vector>
 
+#include <nlohmann/json_fwd.hpp>
+
 namespace docx::util {
 
 using Bytes = std::vector<std::uint8_t>;
@@ -35,11 +37,27 @@ std::size_t u32_length(std::string_view s);
 
 // Strip characters that can't appear in XML 1.0.
 std::string xml_safe(std::string_view s);
+// xml_safe plus &<>" escaped, for text spliced into XML source.
+std::string xml_escape(std::string_view s);
 
 std::string lower(std::string_view s);
 bool iequals(std::string_view a, std::string_view b);
 bool starts_with(std::string_view s, std::string_view p);
 std::string trim(std::string_view s);
 std::vector<std::string> split(std::string_view s, char sep);
+
+// "unknown <what> 'k' (did you mean 'x'? valid: a, b, ...)"
+std::string unknown_key(std::string_view what, std::string_view key, const std::vector<std::string_view>& valid);
+
+// Numbers read from document markup: tolerate junk the way Word does
+// (leading number wins, otherwise the default), never throw.
+long to_long(std::string_view s, long def = 0);
+inline int to_int(std::string_view s, int def = 0) { return (int)to_long(s, def); }
+double to_double(std::string_view s, double def = 0);
+
+// A length argument in twips: a number is points, or a string with a unit
+// (pt, in, cm, mm, pc/pi, tw/twips, "1.5 in"). Throws a clear message on junk
+// or absurd sizes (beyond 22 inches either way, Word's page limit).
+long length_twips(const nlohmann::json& v);
 
 }  // namespace docx::util

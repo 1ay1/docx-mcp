@@ -62,15 +62,16 @@ const Json kRunFmt = fmt_schema(
      {"highlight", {{"type", "string"}, {"description", "yellow, green, cyan, red, ... or none"}}},
      {"superscript", {{"type", "boolean"}}}, {"subscript", {{"type", "boolean"}}},
      {"style", {{"type", "string"}, {"description", "character style, e.g. Strong"}}}});
+const Json kLen = {{"type", Json::array({"number", "string"})}, {"description", "points, or with a unit: \"0.5in\", \"1cm\", \"6pt\""}};
 const Json kParaFmt = fmt_schema(
     "Paragraph formatting (Word names). Lengths in points or with a unit (\"0.5in\", \"1cm\"). null removes. More keys: "
     "line_rule, first_line_indent, hanging_indent, keep_together, page_break_before, widow_control, outline_level, "
     "shading, borders, tabs, bidi.",
     {{"style", {{"type", "string"}, {"description", "e.g. \"Heading 1\", \"Title\", \"Quote\""}}},
      {"alignment", {{"type", "string"}, {"description", "left, center, right, both (justified)"}}},
-     {"space_before", {{"type", "number"}}}, {"space_after", {{"type", "number"}}},
-     {"line_spacing", {{"description", "multiple like 1.15 or exact like \"14pt\""}}},
-     {"indent_left", {{"description", "points or \"0.5in\""}}}, {"indent_right", {{"description", "points"}}},
+     {"space_before", kLen}, {"space_after", kLen},
+     {"line_spacing", {{"type", Json::array({"number", "string"})}, {"description", "multiple like 1.15 or exact like \"14pt\""}}},
+     {"indent_left", kLen}, {"indent_right", kLen},
      {"keep_with_next", {{"type", "boolean"}}}});
 
 // ── argument helpers ─────────────────────────────────────────────────────
@@ -161,15 +162,22 @@ EditOpts track(const Json& a) {
 
 Session& sess(Sessions& S, const Json& a) {
     auto& s = S.get(need(a, "doc"));
+    // per-call override; the wrapper in add() restores the session author afterwards
     if (a.contains("author") && a["author"].is_string() && !sarg(a, "author").empty()) s.doc.author.name = sarg(a, "author");
     return s;
 }
 
-// Every mutating tool snapshots first so undo works.
+// The session a mutating call is working on, so a failure can roll it back.
+thread_local Session* g_txn = nullptr;
+thread_local bool g_txn_snap = false;
+
+// Every mutating tool snapshots first so undo works, and so a failed call
+// leaves the document as it was.
 Session& mut(Sessions& S, const Json& a) {
     auto& s = sess(S, a);
     s.undo.push_back(s.doc.to_bytes());
     if (s.undo.size() > 30) s.undo.erase(s.undo.begin());
+    if (!g_txn) { g_txn = &s; g_txn_snap = true; }
     s.dirty = true;
     return s;
 }
@@ -320,6 +328,41 @@ std::vector<ToolDef> make_tools() {
                 if (auto it = common.find(k); it != common.end()) p["description"] = it->second;
                 else p.erase("description");
             }
+        // A failed call leaves the document as it was, and a per-call author
+        // doesn't stick to the session.
+        t.run = [run = std::move(t.run), sets_author = t.name == "open_document" || t.name == "create_document"](
+                    Sessions& S, const Json& a) -> Json {
+            Session* target = nullptr;
+            wml::Author author;
+            bool dirty = false;
+            if (a.contains("doc") && a["doc"].is_string()) {
+                try { target = &S.get(a["doc"].get<std::string>()); } catch (...) {}
+                if (target) { author = target->doc.author; dirty = target->dirty; }
+            }
+            auto alive = [&](Session* s) {
+                for (auto& [h, x] : S.all()) if (x == s) return true;
+                return false;
+            };
+            g_txn = nullptr;
+            g_txn_snap = false;
+            try {
+                Json out = run(S, a);
+                if (target && alive(target) && !sets_author) target->doc.author = author;
+                g_txn = nullptr;
+                return out;
+            } catch (...) {
+                if (g_txn && g_txn_snap && alive(g_txn) && !g_txn->undo.empty()) {
+                    auto keep = g_txn->doc.author;
+                    g_txn->doc = Document::from_bytes(g_txn->undo.back());
+                    g_txn->doc.author = keep;
+                    g_txn->undo.pop_back();
+                    if (g_txn == target) g_txn->dirty = dirty;
+                }
+                if (target && alive(target)) target->doc.author = author;
+                g_txn = nullptr;
+                throw;
+            }
+        };
         T.push_back(std::move(t));
     };
 
@@ -390,13 +433,13 @@ std::vector<ToolDef> make_tools() {
          false, false, [](Sessions& S, const Json& a) {
              auto& s = sess(S, a);
              int n = iarg(a, "steps", 1), done = 0;
-             std::string author = s.doc.author.name;
+             auto author = s.doc.author;
              while (n-- > 0 && !s.undo.empty()) {
                  s.doc = Document::from_bytes(s.undo.back());
                  s.undo.pop_back();
                  done++;
              }
-             s.doc.author.name = author;
+             s.doc.author = author;
              return Json{{"undone", done}, {"remaining", s.undo.size()}};
          }});
 
@@ -720,8 +763,11 @@ std::vector<ToolDef> make_tools() {
          [](Sessions& S, const Json& a) {
              auto& s = sess(S, a);
              auto st = find_style(s.doc, need(a, "style"));
-             if (!st) throw std::runtime_error("style not found");
+             bool in_doc = (bool)st;
+             if (!st) st = builtin_style(need(a, "style"));
+             if (!st) throw std::runtime_error("style '" + sarg(a, "style") + "' not found; list_styles shows what exists");
              return Json{{"id", xml::attr(st, "w:styleId")}, {"name", xml::attr(st.child("w:name"), "w:val")}, {"type", xml::attr(st, "w:type")},
+                         {"in_document", in_doc},
                          {"based_on", xml::attr(st.child("w:basedOn"), "w:val")}, {"next", xml::attr(st.child("w:next"), "w:val")},
                          {"paragraph", ppr_to_json(st.child("w:pPr"))}, {"run", rpr_to_json(st.child("w:rPr"))}};
          }});
@@ -770,7 +816,7 @@ std::vector<ToolDef> make_tools() {
                  auto p = find_para(s.doc, id).p;
                  auto np = p.child("w:pPr").child("w:numPr");
                  if (!np) throw std::runtime_error("paragraph " + id + " is not in a list");
-                 format_paragraph(s.doc, p, {{"numbering", {{"num_id", std::stoi(xml::attr(np.child("w:numId"), "w:val"))}, {"level", iarg(a, "level", 0)}}}}, track(a));
+                 format_paragraph(s.doc, p, {{"numbering", {{"num_id", util::to_int(xml::attr(np.child("w:numId"), "w:val"))}, {"level", iarg(a, "level", 0)}}}}, track(a));
              }
              return Json{{"ok", true}};
          }});

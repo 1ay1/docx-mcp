@@ -196,4 +196,63 @@ TEST(compare_corpus_pairs) {
     CHECK_EQ(ok, n);
 }
 
+// Word-authored files with faults the schema rejects come out valid.
+TEST(repair_on_open) {
+    for (auto f : {"oxpt/HC032-Named-Color.docx", "oxpt/HC002-Hebrew-01.docx", "oxpt/WC/WC004-Large.docx",
+                   "oxpt/RP/RP013-Deleted-Math-Control-Char.docx", "oxpt/RP/RP014-Inserted-Math-Control-Char.docx",
+                   "oxpt/RP/RP001-Tracked-Revisions-01.docx", "oxpt/RP/RP001-Tracked-Revisions-01-Accepted.docx"}) {
+        auto d = Document::open(std::string(DOCX_CORPUS) + "/" + f);
+        std::string why;
+        CHECK_EQ(schema_issues(d, &why), 0);
+        if (!why.empty()) std::printf("    %s: %s\n", f, why.c_str());
+    }
+    // the math fix keeps the revision: rejecting the insertion still removes the "2"
+    auto d = Document::open(std::string(DOCX_CORPUS) + "/oxpt/RP/RP014-Inserted-Math-Control-Char.docx");
+    CHECK_EQ((int)list_revisions(d).size(), 1);
+    reject_revisions(d, {});
+    CHECK(analyze(paragraphs(d.body())[0]).utf8().find("A=2") == std::string::npos);
+}
+
+// Control characters and broken UTF-8 never reach the saved XML.
+TEST(invalid_xml_chars_dropped) {
+    auto d = Document::create();
+    set_core_properties(d, Json{{"title", std::string("t\x01i\x1ftle\xff")}});
+    auto p = paragraphs(d.body())[0];
+    insert_text(d, p, 0, U"a\u0002b", nullptr, {});
+    auto b = d.to_bytes();
+    auto re = Document::from_bytes(b);
+    std::string why;
+    CHECK_EQ(schema_issues(re, &why), 0);
+    auto& core = re.pkg().xml(re.pkg().related("/", opc::rt::coreProps));
+    std::string title = core.document_element().child("dc:title").text().get();
+    CHECK_EQ(title, std::string("title\xEF\xBF\xBD"));
+}
+
+TEST(lengths) {
+    CHECK_EQ(util::length_twips(Json(12)), 240L);
+    CHECK_EQ(util::length_twips(Json("1in")), 1440L);
+    CHECK_EQ(util::length_twips(Json("1 in")), 1440L);
+    CHECK_EQ(util::length_twips(Json("2.54cm")), 1440L);
+    CHECK_EQ(util::length_twips(Json("240tw")), 240L);
+    CHECK_EQ(util::length_twips(Json("6")), 120L);
+    for (auto bad : {"1 parsec", "inf", "nan", "0x10", "", "1e308", "abc"}) {
+        bool threw = false;
+        try { util::length_twips(Json(bad)); } catch (std::exception&) { threw = true; }
+        if (!threw) std::printf("    accepted: %s\n", bad);
+        CHECK(threw);
+    }
+    CHECK_EQ(util::to_int("12abc"), 12);
+    CHECK_EQ(util::to_int("junk", 7), 7);
+    CHECK_EQ(util::to_int("99999999999999"), 2147483647);
+}
+
+// zip entries nobody gave a content type survive a save
+TEST(untyped_parts_kept) {
+    auto d = Document::create();
+    d.pkg().add_part("/custom/blob.bin", "", util::Bytes{1, 2, 3});
+    auto re = Document::from_bytes(d.to_bytes());
+    CHECK(re.pkg().has("/custom/blob.bin"));
+    CHECK(re.pkg().has("custom/blob.bin"));
+}
+
 int main(int argc, char** argv) { return t::run(argc, argv); }

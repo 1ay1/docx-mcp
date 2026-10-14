@@ -68,6 +68,9 @@ void format_paragraph(Document& d, pugi::xml_node p, const Json& props, const Ed
 // Run/paragraph property JSON <-> XML.
 void apply_rpr_json(Document& d, pugi::xml_node rpr, const Json& props);
 void apply_ppr_json(Document& d, pugi::xml_node ppr, const Json& props);
+// Whether `key` is a run / paragraph property name the appliers accept.
+bool is_run_prop(const std::string& key);
+bool is_para_prop(const std::string& key);
 Json rpr_to_json(pugi::xml_node rpr);
 Json ppr_to_json(pugi::xml_node ppr);
 

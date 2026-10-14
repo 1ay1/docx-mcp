@@ -12,6 +12,11 @@
 #include <fcntl.h>
 #include <io.h>
 #include <windows.h>
+#else
+#include <cerrno>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #endif
 
 namespace docx::util {
@@ -104,27 +109,71 @@ std::uintmax_t file_size(std::string_view path) {
 
 void write_file_atomic(std::string_view path, const Bytes& data) {
     fs::path target = u8path(path);
-    fs::path dir = target.parent_path();
     std::error_code ec;
+    // saving to a symlink updates the file it points at, like Word
+    if (fs::is_symlink(target, ec)) {
+        auto real = fs::canonical(target, ec);
+        if (!ec) target = real;
+    }
+    fs::path dir = target.parent_path();
     if (!dir.empty() && !fs::exists(dir, ec)) throw std::runtime_error("folder does not exist: " + path_utf8(dir));
     fs::path tmp = target;
     tmp += u8path(".tmp~" + std::to_string(random_u32()));
+#if defined(_WIN32)
     {
-        std::ofstream f(tmp, std::ios::binary | std::ios::trunc);
+        FILE* f = _wfopen(tmp.c_str(), L"wbc");  // 'c': fflush commits to disk
         if (!f) throw std::runtime_error("cannot write " + std::string(path) + " (permission denied or read-only location)");
-        f.write(reinterpret_cast<const char*>(data.data()), std::streamsize(data.size()));
-        f.flush();
-        if (!f) {
-            f.close();
+        bool ok = std::fwrite(data.data(), 1, data.size(), f) == data.size();
+        ok = ok && std::fflush(f) == 0 && _commit(_fileno(f)) == 0;
+        std::fclose(f);
+        if (!ok) {
             fs::remove(tmp, ec);
             throw std::runtime_error("write failed for " + std::string(path) + " (disk full?)");
         }
     }
+#else
+    {
+        // keep the old file's permissions when replacing it
+        mode_t mode = 0666;
+        struct stat st{};
+        if (::stat(target.c_str(), &st) == 0) mode = st.st_mode & 07777;
+        int fd = ::open(tmp.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, mode);
+        if (fd < 0) throw std::runtime_error("cannot write " + std::string(path) + " (permission denied or read-only location)");
+        if (::stat(target.c_str(), &st) == 0) (void)::fchmod(fd, mode);
+        const std::uint8_t* p = data.data();
+        std::size_t left = data.size();
+        bool ok = true;
+        while (left) {
+            ssize_t w = ::write(fd, p, left);
+            if (w < 0) {
+                if (errno == EINTR) continue;
+                ok = false;
+                break;
+            }
+            p += w;
+            left -= std::size_t(w);
+        }
+        // the data must be on disk before the rename makes it the file
+        if (ok && ::fsync(fd) != 0) ok = false;
+        ::close(fd);
+        if (!ok) {
+            fs::remove(tmp, ec);
+            throw std::runtime_error("write failed for " + std::string(path) + " (disk full?)");
+        }
+    }
+#endif
     // fs::rename replaces an existing file on every platform (MoveFileEx on
     // Windows). Word holds files it has open; retry for a moment, then say so.
     for (int attempt = 0;; attempt++) {
         fs::rename(tmp, target, ec);
-        if (!ec) return;
+        if (!ec) {
+#if !defined(_WIN32)
+            // and the rename itself must survive a crash
+            int dfd = ::open(dir.empty() ? "." : dir.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+            if (dfd >= 0) { (void)::fsync(dfd); ::close(dfd); }
+#endif
+            return;
+        }
         if (attempt >= 10) break;
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }

@@ -1,6 +1,7 @@
 #include "wml/text.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 #include <functional>
 #include <stdexcept>
 
@@ -63,9 +64,10 @@ struct Walker {
                 std::string chs = xml::attr(c, "w:char");
                 char32_t ch = kObj;
                 if (!chs.empty()) {
-                    unsigned v = std::stoul(chs, nullptr, 16);
-                    if (v >= 0xF000) v -= 0xF000;
-                    ch = v ? char32_t(v) : kObj;
+                    unsigned long v = std::strtoul(chs.c_str(), nullptr, 16);
+                    if (v >= 0xF000 && v <= 0xF0FF) v -= 0xF000;
+                    // anything that isn't a scalar value shows as an object
+                    ch = (v && v <= 0x10FFFF && (v < 0xD800 || v > 0xDFFF)) ? char32_t(v) : kObj;
                 }
                 push(ch, 0, false);
             } else if (q == "w:fldChar") {
