@@ -60,11 +60,20 @@ def main():
                         nred += 1
                 except Exception:
                     nred = -1
+                ncom = 0
+                try:
+                    en = doc.getTextFields().createEnumeration()
+                    while en.hasMoreElements():
+                        fld = en.nextElement()
+                        if fld.supportsService("com.sun.star.text.TextField.Annotation"):
+                            ncom += 1
+                except Exception:
+                    ncom = -1
                 text = doc.getText().getString()
                 pdf = os.path.splitext(f)[0] + ".pdf"
                 doc.storeToURL(uno.systemPathToFileUrl(os.path.abspath(pdf)), (prop("FilterName", "writer_pdf_Export"),))
                 doc.close(True)
-                print("ok  ", f, "redlines=%d" % nred, "chars=%d" % len(text))
+                print("ok  ", f, "redlines=%d" % nred, "comments=%d" % ncom, "chars=%d" % len(text))
             except Exception as e:
                 print("FAIL", f, e)
                 bad += 1

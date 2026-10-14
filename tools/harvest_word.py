@@ -49,11 +49,21 @@ def main():
         except Exception:
             continue
         for st in s.findall("w:style", NS):
-            if st.get("{%s}customStyle" % W) in ("1", "true", "on"):
-                continue
             sid = st.get("{%s}styleId" % W)
-            # skip localized ids (Word writes ids in the UI language)
             name = st.find("w:name", NS)
+            link = st.find("w:link", NS)
+            # Word writes the linked character styles of built-ins ("Heading 1
+            # Char") as custom styles; keep those too.
+            linked_char = (st.get("{%s}type" % W) == "character" and sid and sid.endswith("Char")
+                           and link is not None and name is not None
+                           and (name.get("{%s}val" % W) or "").endswith(" Char"))
+            if st.get("{%s}customStyle" % W) in ("1", "true", "on") and not linked_char:
+                continue
+            if linked_char:
+                if re.fullmatch(r"[A-Za-z0-9]+Char", sid):
+                    x = etree.tostring(strip_rsid(st), encoding="unicode")
+                    styles[sid][x] += 1
+                continue
             if name is None or not re.fullmatch(r"[A-Za-z0-9 ]+", name.get("{%s}val" % W) or ""):
                 continue
             if not re.fullmatch(r"[A-Za-z0-9]+", sid or ""):
@@ -73,6 +83,11 @@ def main():
             latent[etree.tostring(ls, encoding="unicode")] += 1
 
     os.makedirs(OUT, exist_ok=True)
+    # a linked Char style only belongs if its paragraph style is a built-in
+    for sid in list(styles):
+        if sid.endswith("Char") and sid[:-4] not in styles:
+            del styles[sid]
+    # prefer a definition whose w:link matches the built-in
     out = ['<w:styles xmlns:w="%s" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml">' % W]
     for sid in sorted(styles):
         best, n = styles[sid].most_common(1)[0]

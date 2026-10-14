@@ -16,7 +16,7 @@ namespace docx::wml {
 
 struct Author {
     std::string name = "docx-mcp";
-    std::string initials = "DM";
+    std::string initials;  // empty = derived from name
     std::string date;  // empty = now
 };
 
