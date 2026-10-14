@@ -158,6 +158,7 @@ Details in [docs/conformance.md](docs/conformance.md).
 - [Guide](docs/guide.md): workflows, addressing paragraphs, Track Changes, comments, formatting
 - [Tool reference](docs/tools.md): every tool and argument
 - [Conformance](docs/conformance.md): how output is verified, and where we differ from Word on purpose
+- [Roadmap](docs/roadmap.md): what's missing and the order it's coming in
 - [Architecture](docs/architecture.md): how the engine is put together
 
 ## Limits
