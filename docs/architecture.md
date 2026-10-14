@@ -18,6 +18,7 @@ src/
     content     pictures, sections, headers and footers, notes, bookmarks, links
     fields      fields, TOC, content controls, lists, equations
     docops      protection, properties, settings, statistics, reading, compare
+    repair      fixes for faults in Word's own files, applied on open
   mcp/      sessions, the tool catalog, the stdio server
 ```
 

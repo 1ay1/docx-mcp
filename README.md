@@ -123,17 +123,22 @@ The server is built for the way models actually call tools:
 Linux, macOS and Windows, x64 and arm64. CI builds and runs the full test
 suite on each (GCC, AppleClang/libc++, MSVC) and publishes the binaries.
 Paths with spaces, non-ASCII names, `~`, `file://` URIs and Windows drive
-letters all work, and saving is atomic on every platform.
+letters all work. Saving is atomic and durable (fsync before the rename) on
+every platform.
 
 ## How we know it's right
 
 Each output is checked by three independent consumers:
 
 1. **Our validator**, generated from the Open XML SDK's schema data: 4,315
-   element types and 397 semantic rules. On 563 Word-written files it reports
+   element types and 397 semantic rules. On the 564 corpus files it reports
    exactly what Microsoft's validator reports (83 of 83, same locations).
 2. **Microsoft's Open XML SDK validator** (`tools/oxval`), targeting Microsoft 365.
 3. **LibreOffice**, which opens each file, counts revisions and comments, and renders it.
+
+Files Word itself wrote with schema faults (named colours, smart tags, Word's
+form of math revisions, ...) are repaired on open, so even those come out
+valid.
 
 And the behaviour is checked against Word's:
 
@@ -142,7 +147,8 @@ And the behaviour is checked against Word's:
 | Accept/reject vs. Word's expected output | 104 / 104 |
 | Compare round-trips (WmlComparer corpus) | 29 / 29 |
 | Password hash vs. a file protected in Word | verified |
-| Edit battery on every corpus file, no new issues | 563 / 563 |
+| Edit battery, accept and reject on every corpus file: SDK errors | 0 in 2,256 outputs |
+| All 85 tools, tracked and untracked, on real documents: SDK errors | 0 |
 
 Details in [docs/conformance.md](docs/conformance.md).
 
@@ -168,9 +174,10 @@ Details in [docs/conformance.md](docs/conformance.md).
 cd build/tests
 ./edit_test && ./comments_test && ./structure_test && ./docops_test
 ./revisions_corpus ../../tests/corpus/oxpt/RP
-./robustness ../../tests/corpus/oxpt
+./robustness ../../tests/corpus
 python3 ../../tests/e2e.py ../docx-mcp /tmp/e2e
 python3 ../../tests/sloppy.py ../docx-mcp /tmp/sloppy
+python3 ../../tests/coverage.py ../docx-mcp /tmp/cov
 ```
 
 The external checks are optional. Build oxval with

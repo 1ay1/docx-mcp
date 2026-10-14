@@ -27,16 +27,45 @@ the same rules Microsoft's validator uses.
 runs both validators on a list of files and prints every location where only
 one of them reports a problem.
 
-On the 563 Word-written files in `tests/corpus/oxpt`, both report the same 83
-problems in the same places. Every one of those is a real defect in the
-source file: Word itself wrote invalid values there, for example
-`w:w w:val="0"`, named colours like `red`, and missing `w:date` attributes.
+On the 564 files in `tests/corpus`, both report the same problems in the
+same places, and on the 2,256 files our test battery writes from them both
+report none. Every problem in the inputs is a real defect in the source file:
+Word itself wrote invalid values there, for example `w:w w:val="0"`, named
+colours like `red`, and missing `w:date` attributes.
 
 ```sh
 (cd tools/oxval && dotnet build -c Release -o /tmp/oxval-bin)
-ls tests/corpus/oxpt/*.docx tests/corpus/oxpt/*/*.docx > /tmp/files.txt
+find tests/corpus -name '*.docx' > /tmp/files.txt
 python3 tools/diff_oracle.py /tmp/files.txt
 # ours=83 oracle=83 only-ours=0 only-oracle=0
+```
+
+### Repairs on open
+
+`src/wml/repair.cpp` fixes the faults Word's own files carry, the way Word
+does when it resaves them, so every file we write is valid even when the
+input wasn't:
+
+- named or `#rgb` colours become `RRGGBB`
+- character scale `w:w="0"` is dropped (Word reads it as 100%)
+- smart tags, which left the schema in Office 2010, are unwrapped
+- move range starts get their required `w:date`
+- math revisions in Word's `m:r > w:ins` form are rewritten as `w:ins > m:r`
+- tables missing `w:tblPr` or `w:tblGrid` get them
+
+A valid document comes out of the repair pass unchanged.
+
+### Every tool, every output
+
+`tests/coverage.py` calls all 85 tools, tracked and untracked, on seven real
+documents and a blank one, then saves edited, accepted and rejected copies.
+With oxval built it fails on any Open XML SDK error an output has that its
+source didn't (`tools/oracle_regress.py`). `ROBUST_OUT=dir ./robustness
+tests/corpus` does the same for an edit battery over the whole corpus.
+
+```sh
+python3 tests/coverage.py build/docx-mcp /tmp/cov
+# 2399 calls, 85 tools / 49 outputs, 0 with new oracle errors
 ```
 
 ## Behaviour against Word
@@ -46,7 +75,8 @@ python3 tools/diff_oracle.py /tmp/files.txt
 | Accept / reject all revisions | Expected Word output, `tests/corpus/oxpt/RP` | 104/104 |
 | Compare (accept gives revised, reject gives original) | WmlComparer pairs, `tests/corpus/oxpt/WC` | 29/29 |
 | Password hash | A file protected by Word (`tests/corpus/poi/bug56076.docx`) | verified |
-| Heavy edit battery on every corpus file | Our validator and the SDK | 563/563, no new issues |
+| Heavy edit battery, accept and reject on every corpus file | Our validator and the SDK | 564/564, 2,256 outputs with 0 errors |
+| Every tool, tracked and untracked, on real documents | The SDK, LibreOffice | 85/85 tools, 0 errors |
 | Full MCP workflow over stdio | SDK + LibreOffice | all outputs clean |
 
 Two of the 104 accept/reject expected files are PowerTools output, not Word
@@ -60,7 +90,7 @@ spec instead.
 Word writes tracked changes inside an equation by putting `w:ins`/`w:del`
 inside `m:r`. The schema doesn't allow that there, and Microsoft's validator
 flags Word's own files for it. We write the schema-valid form instead (the
-revision wraps the `m:r`). We read both forms.
+revision wraps the `m:r`), and rewrite Word's form to it on open.
 
 ## Second consumer
 

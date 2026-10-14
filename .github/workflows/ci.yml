@@ -74,12 +74,25 @@ jobs:
         working-directory: build/tests
         run: |
           ./revisions_corpus ../../tests/corpus/oxpt/RP
-          ./robustness ../../tests/corpus/oxpt
+          ./robustness ../../tests/corpus
       - name: MCP end-to-end
         shell: bash
         run: |
           python3 tests/e2e.py ${{ matrix.exe }} "$RUNNER_TEMP/e2e"
           python3 tests/sloppy.py ${{ matrix.exe }} "$RUNNER_TEMP/sloppy"
+          python3 tests/coverage.py ${{ matrix.exe }} "$RUNNER_TEMP/coverage"
+      - name: Open XML SDK oracle
+        if: matrix.name == 'linux-x86_64'
+        shell: bash
+        run: |
+          (cd tools/oxval && dotnet build -c Release -o /tmp/oxval-bin)
+          # every tool on real documents, and an edit battery plus accept/reject on the whole corpus
+          python3 tests/coverage.py ${{ matrix.exe }} "$RUNNER_TEMP/coverage-oracle"
+          (cd build/tests && ROBUST_OUT="$RUNNER_TEMP/rob" ./robustness ../../tests/corpus)
+          find "$RUNNER_TEMP/rob" -name '*.docx' > "$RUNNER_TEMP/rob.txt"
+          out=$(xargs /tmp/oxval-bin/oxval < "$RUNNER_TEMP/rob.txt")
+          echo "$out" | grep -E ': [1-9][0-9]* error' -A3 && exit 1
+          echo "$(echo "$out" | grep -c ': 0 error') outputs, 0 Open XML SDK errors"
       - name: Crash details
         if: failure() && runner.os == 'Linux'
         shell: bash
