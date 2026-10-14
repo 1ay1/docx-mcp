@@ -21,6 +21,17 @@ const pugi::xml_document& builtins() {
         auto* doc = new pugi::xml_document;
         auto s = assets::get("word/builtin_styles.xml");
         doc->load_buffer(s.data(), s.size());
+        // curated Word 2013+ definitions replace the harvested ones
+        pugi::xml_document ov;
+        auto o = assets::get("word/builtin_overrides.xml");
+        ov.load_buffer(o.data(), o.size());
+        auto root = doc->document_element();
+        for (auto st : ov.document_element().children("w:style")) {
+            std::string id = st.attribute("w:styleId").value();
+            for (auto old : root.children("w:style"))
+                if (id == old.attribute("w:styleId").value()) { root.remove_child(old); break; }
+            root.append_copy(st);
+        }
         return doc;
     }();
     return *d;

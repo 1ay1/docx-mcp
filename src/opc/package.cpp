@@ -320,6 +320,7 @@ Part& Package::add_part(std::string name, std::string content_type, util::Bytes 
 Part& Package::add_xml_part(std::string name, std::string content_type, std::string_view text) {
     Part& p = add_part(std::move(name), std::move(content_type), util::Bytes(text.begin(), text.end()));
     xml(p.name);
+    if (normalizer) normalizer(*p.xml);
     return p;
 }
 

@@ -272,7 +272,7 @@ void set_custom_property(Document& d, const std::string& name, const Json& value
         if (xml::attr(p, "name") == name) existing = p;
     }
     if (value.is_null()) { if (existing) cp.remove_child(existing); return; }
-    auto p = existing ? existing : cp.append_child("property");
+    auto p = existing ? existing : cp.append_child("op:property");
     if (!existing) {
         p.append_attribute("fmtid") = "{D5CDD505-2E9C-101B-9397-08002B2CF9AE}";
         p.append_attribute("pid") = maxpid + 1;
@@ -290,7 +290,11 @@ Json app_properties(Document& d) {
     auto ap = d.app_props(false);
     if (!ap) return j;
     for (auto c : ap.children())
-        if (c.type() == pugi::node_element && !c.first_child().first_child()) j[c.name()] = c.text().get();
+        if (c.type() == pugi::node_element && !c.first_child().first_child()) {
+            std::string n = c.name();
+            if (auto k = n.find(':'); k != std::string::npos) n = n.substr(k + 1);
+            j[n] = c.text().get();
+        }
     return j;
 }
 

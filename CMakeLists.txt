@@ -35,7 +35,7 @@ add_library(docx_schema_data STATIC src/schema/schema_data.cpp)
 target_compile_options(docx_schema_data PRIVATE -O1 -w)
 
 file(GLOB_RECURSE DOCX_CORE_SOURCES CONFIGURE_DEPENDS
-    src/util/*.cpp src/opc/*.cpp src/xml/*.cpp src/schema/*.cpp src/wml/*.cpp)
+    src/util/*.cpp src/opc/*.cpp src/xml/*.cpp src/schema/*.cpp src/wml/*.cpp src/mcp/session.cpp src/mcp/tools*.cpp)
 list(REMOVE_ITEM DOCX_CORE_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/schema/schema_data.cpp)
 
 # Word's template parts (blank document, built-in styles) compiled in.
@@ -55,10 +55,10 @@ target_include_directories(docx_core PUBLIC src)
 target_link_libraries(docx_core PUBLIC docx_thirdparty docx_schema_data nlohmann_json::nlohmann_json)
 target_compile_options(docx_core PRIVATE -Wall -Wextra -Wno-unused-parameter)
 
-file(GLOB_RECURSE DOCX_MCP_SOURCES CONFIGURE_DEPENDS src/mcp/*.cpp)
-add_executable(docx-mcp ${DOCX_MCP_SOURCES})
+add_executable(docx-mcp src/mcp/main.cpp)
 target_link_libraries(docx-mcp PRIVATE docx_core mcp::mcp)
 target_compile_options(docx-mcp PRIVATE -Wall -Wextra -Wno-unused-parameter)
+target_link_libraries(docx_core PUBLIC mcp::mcp)
 
 if(DOCX_BUILD_TESTS)
     enable_testing()

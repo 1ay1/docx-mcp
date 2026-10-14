@@ -1,5 +1,6 @@
 // OPC package (ECMA-376 Part 2): parts, content types, relationships.
 #pragma once
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
@@ -140,6 +141,8 @@ public:
     void set_override(std::string name, std::string content_type);
 
     std::map<std::string, std::string> defaults;  // extension (lower) -> content type
+    // Applied to XML parts added through add_xml_part (namespace normalization).
+    std::function<void(pugi::xml_document&)> normalizer;
 
 private:
     std::map<std::string, Part> parts_;  // key: lower-case part name

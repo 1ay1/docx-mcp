@@ -50,13 +50,14 @@ std::string wml_root_open(const char* qname) {
 Document Document::create() {
     Document d;
     auto& p = d.pkg_;
+    p.normalizer = [](pugi::xml_document& x) { xml::normalize(x); };
     p.defaults["rels"] = opc::ct::rels;
     p.defaults["xml"] = opc::ct::xml;
     d.main_ = "/word/document.xml";
     p.add_xml_part(d.main_, opc::ct::document, blank_document_xml());
     p.rels("/").add(opc::rt::officeDocument, "word/document.xml");
     auto add = [&](const char* name, const char* ctype, const char* rtype, const char* asset) {
-        p.add_part(name, ctype, util::Bytes(assets::get(asset).begin(), assets::get(asset).end()));
+        p.add_xml_part(name, ctype, assets::get(asset));
         p.rels(d.main_).add(rtype, opc::Package::relative(d.main_, name));
     };
     add("/word/styles.xml", opc::ct::styles, opc::rt::styles, "word/blank/styles.xml");
@@ -78,6 +79,7 @@ Document Document::create() {
 Document Document::from_bytes(const util::Bytes& b) {
     Document d;
     d.pkg_ = opc::Package::from_bytes(b);
+    d.pkg_.normalizer = [](pugi::xml_document& x) { xml::normalize(x); };
     d.main_ = d.pkg_.main_part();
     if (d.main_.empty() || !d.pkg_.has(d.main_)) throw std::runtime_error("package has no main document part");
     std::string ct = d.pkg_.content_type_of(d.main_);

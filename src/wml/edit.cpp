@@ -423,6 +423,22 @@ pugi::xml_node insert_paragraph(Document& d, pugi::xml_node ref, bool after, con
             }
             if (!c.first_child()) np.remove_child(c);
         }
+        // Like pressing Enter at the end: the new paragraph gets the style's
+        // "Style for following paragraph" (Heading 1 -> Normal), not a copy.
+        std::string sty = xml::attr(ref.child("w:pPr").child("w:pStyle"), "w:val");
+        if (after && style.empty() && !sty.empty()) {
+            if (auto s = find_style(d, sty)) {
+                std::string next = xml::attr(s.child("w:next"), "w:val");
+                if (!next.empty() && next != sty) {
+                    auto ppr = schema::ensure_child(np, "w:pPr");
+                    if (next == "Normal") ppr.remove_child("w:pStyle");
+                    else xml::set_attr(schema::ensure_child(ppr, "w:pStyle"), "w:val", next);
+                    // direct formatting belonged to the heading, not the next paragraph
+                    for (auto q : {"w:numPr", "w:keepNext", "w:outlineLvl", "w:jc", "w:spacing", "w:ind"}) ppr.remove_child(q);
+                    if (!ppr.first_child()) np.remove_child(ppr);
+                }
+            }
+        }
     }
     if (!style.empty()) {
         auto ppr = schema::ensure_child(np, "w:pPr");
