@@ -1,5 +1,7 @@
 #include "wml/document.hpp"
 
+#include <set>
+#include <map>
 #include <algorithm>
 #include <cstdio>
 #include <stdexcept>

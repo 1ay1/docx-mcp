@@ -1,5 +1,6 @@
 #include "schema/schema.hpp"
 
+#include <cctype>
 #include <charconv>
 #include <cmath>
 #include <map>

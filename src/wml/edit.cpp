@@ -1,3 +1,4 @@
+#include <map>
 #include <algorithm>
 #include <functional>
 #include <regex>
@@ -42,13 +43,6 @@ void to_deleted(pugi::xml_node run) {
         else if (name_is(c, "w:instrText")) c.set_name("w:delInstrText");
     }
 }
-void to_live(pugi::xml_node run) {
-    for (auto c : run.children()) {
-        if (name_is(c, "w:delText")) c.set_name("w:t");
-        else if (name_is(c, "w:delInstrText")) c.set_name("w:instrText");
-    }
-}
-
 // Visible length of paragraph.
 int vlen(pugi::xml_node p) { return (int)analyze(p).vis.size(); }
 

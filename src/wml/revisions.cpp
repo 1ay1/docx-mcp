@@ -223,8 +223,6 @@ void resolve_numpr_ins(Ctx& c, pugi::xml_node ins) {
 
 // ── tables ───────────────────────────────────────────────────────────────
 
-void fix_grid_after_cell_removal(pugi::xml_node) {}
-
 void resolve_row(Ctx& c, pugi::xml_node tr, pugi::xml_node rev, bool row_survives) {
     c.hit(rev);
     if (row_survives) {
@@ -480,13 +478,13 @@ void run_pass(Ctx& c, pugi::xml_node root) {
 }  // namespace
 
 int accept_all_in(Document& d, pugi::xml_node root, const RevFilter& f) {
-    Ctx c{d, f, true};
+    Ctx c{d, f, true, 0, {}};
     run_pass(c, root);
     return c.count;
 }
 
 int reject_all_in(Document& d, pugi::xml_node root, const RevFilter& f) {
-    Ctx c{d, f, false};
+    Ctx c{d, f, false, 0, {}};
     run_pass(c, root);
     return c.count;
 }

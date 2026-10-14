@@ -109,11 +109,11 @@ int main(int argc, char** argv) {
             if (after > base || ai > base || ri > base) {
                 bad++;
                 std::printf("NEW ISSUES %s (base %d, edited %d, accepted %d, rejected %d)\n  %s\n  %s\n  %s\n",
-                            f.filename().c_str(), base, after, ai, ri, why.c_str(), wa.c_str(), wr.c_str());
+                            f.filename().string().c_str(), base, after, ai, ri, why.c_str(), wa.c_str(), wr.c_str());
             }
         } catch (std::exception& e) {
             bad++;
-            std::printf("ERROR %s at %s: %s\n", f.filename().c_str(), stage.c_str(), e.what());
+            std::printf("ERROR %s at %s: %s\n", f.filename().string().c_str(), stage.c_str(), e.what());
         }
     }
     std::printf("%d/%d documents clean\n", total - bad, total);

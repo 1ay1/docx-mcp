@@ -2,6 +2,9 @@
 // object model (Font.Bold, ParagraphFormat.SpaceAfter ...) in snake_case.
 // Measurements: font sizes in points, spacing/indents in points unless a
 // unit suffix is given ("0.5in", "1cm", "12pt", "240tw").
+#include <set>
+#include <map>
+#include <cctype>
 #include <cmath>
 #include <stdexcept>
 
@@ -64,9 +67,22 @@ void onoff(pugi::xml_node pr, const char* q, const Json& v) {
     else xml::set_attr(e, "w:val", "0");
 }
 
+std::string check_enum_impl(pugi::xml_node e, const char* attr, const std::string& v);
+
 void val(pugi::xml_node pr, const char* q, const Json& v, const std::string& s) {
     if (v.is_null()) { pr.remove_child(q); return; }
-    xml::set_attr(schema::ensure_child(pr, q), "w:val", s);
+    auto e = schema::ensure_child(pr, q);
+    // enum-typed w:val: canonical spelling or a clear error (never write an invalid value)
+    bool is_enum = false;
+    for (auto& a : schema::attributes_of(schema::type_of(e)))
+        if (a.qname == "w:val" && !a.enum_values.empty()) is_enum = true;
+    if (is_enum) {
+        std::string c;
+        try { c = check_enum_impl(e, "w:val", s); } catch (...) { pr.remove_child(e); throw; }
+        xml::set_attr(e, "w:val", c);
+        return;
+    }
+    xml::set_attr(e, "w:val", s);
 }
 
 std::string str(const Json& v) {
@@ -81,11 +97,26 @@ std::string str(const Json& v) {
     return v.dump();
 }
 
-void check_enum(pugi::xml_node e, const char* attr, const std::string& v) {
+// Validate an enum value and return Word's exact spelling. Accepts any case
+// and ignores spaces, dashes and underscores ("Center", "at-least", "dark_blue").
+std::string check_enum_impl(pugi::xml_node e, const char* attr, const std::string& v) {
     std::string why;
-    if (!schema::value_valid(schema::type_of(e), attr, v, &why))
-        throw std::runtime_error(std::string(e.name()) + "/@" + attr + ": " + why);
+    schema::TypeId t = schema::type_of(e);
+    if (schema::value_valid(t, attr, v, &why)) return v;
+    auto key = [](const std::string& x) {
+        std::string o;
+        for (char c : x) if (std::isalnum((unsigned char)c)) o += char(std::tolower((unsigned char)c));
+        return o;
+    };
+    for (auto& a : schema::attributes_of(t)) {
+        if (a.qname != attr) continue;
+        for (auto& ev : a.enum_values)
+            if (key(ev) == key(v)) return ev;
+    }
+    throw std::runtime_error(std::string(e.name()) + "/@" + attr + ": " + why);
 }
+
+std::string check_enum(pugi::xml_node e, const char* attr, const std::string& v) { return check_enum_impl(e, attr, v); }
 
 void border(pugi::xml_node b, const Json& v) {
     // "single" | {"style":"single","size":4,"color":"auto","space":0}
@@ -94,7 +125,7 @@ void border(pugi::xml_node b, const Json& v) {
     if (v.is_string()) style = v.get<std::string>();
     if (v.is_boolean()) style = v.get<bool>() ? "single" : "none";
     if (o.contains("style")) style = o["style"].get<std::string>();
-    check_enum(b, "w:val", style);
+    style = check_enum(b, "w:val", style);
     xml::set_attr(b, "w:val", style);
     if (style != "none" && style != "nil") {
         // size in points -> eighths
@@ -106,6 +137,12 @@ void border(pugi::xml_node b, const Json& v) {
 }
 
 }  // namespace
+
+std::string enum_attr(pugi::xml_node e, const char* attr, const std::string& v) {
+    std::string c = check_enum_impl(e, attr, v);
+    xml::set_attr(e, attr, c);
+    return c;
+}
 
 void apply_rpr_json(Document& d, pugi::xml_node rpr, const Json& props) {
     if (!props.is_object()) throw std::runtime_error("run properties must be an object");
@@ -179,13 +216,12 @@ void apply_rpr_json(Document& d, pugi::xml_node rpr, const Json& props) {
         } else if (k == "highlight") {
             if (v.is_null() || (v.is_string() && v.get<std::string>() == "none")) { rpr.remove_child("w:highlight"); continue; }
             auto h = schema::ensure_child(rpr, "w:highlight");
-            check_enum(h, "w:val", v.get<std::string>());
-            xml::set_attr(h, "w:val", v.get<std::string>());
+            xml::set_attr(h, "w:val", check_enum(h, "w:val", v.get<std::string>()));
         } else if (k == "underline") {
             if (v.is_null()) { rpr.remove_child("w:u"); continue; }
             std::string u = v.is_boolean() ? (v.get<bool>() ? "single" : "none") : v.is_object() ? v.value("style", "single") : v.get<std::string>();
             auto e = schema::ensure_child(rpr, "w:u");
-            check_enum(e, "w:val", u);
+            u = check_enum(e, "w:val", u);
             xml::set_attr(e, "w:val", u);
             if (v.is_object() && v.contains("color")) xml::set_attr(e, "w:color", hexcolor(v["color"]));
         } else if (k == "vertical_align" || k == "superscript" || k == "subscript") {
@@ -194,7 +230,7 @@ void apply_rpr_json(Document& d, pugi::xml_node rpr, const Json& props) {
                           : v.is_null() ? "" : v.get<std::string>();
             if (a.empty() || a == "baseline") { rpr.remove_child("w:vertAlign"); continue; }
             auto e = schema::ensure_child(rpr, "w:vertAlign");
-            check_enum(e, "w:val", a);
+            a = check_enum(e, "w:val", a);
             xml::set_attr(e, "w:val", a);
         } else if (k == "spacing" || k == "character_spacing") {
             if (v.is_null()) { rpr.remove_child("w:spacing"); continue; }
@@ -261,7 +297,7 @@ void apply_ppr_json(Document& d, pugi::xml_node ppr, const Json& props) {
             std::string a = v.get<std::string>();
             if (a == "justify" || a == "justified") a = "both";
             auto e = schema::ensure_child(ppr, "w:jc");
-            check_enum(e, "w:val", a);
+            a = check_enum(e, "w:val", a);
             xml::set_attr(e, "w:val", a);
         } else if (k == "keep_with_next") onoff(ppr, "w:keepNext", v);
         else if (k == "keep_together" || k == "keep_lines") onoff(ppr, "w:keepLines", v);
@@ -297,7 +333,7 @@ void apply_ppr_json(Document& d, pugi::xml_node ppr, const Json& props) {
             if (k == "line_rule") {
                 std::string r = v.get<std::string>();
                 if (r == "at_least") r = "atLeast";
-                check_enum(s, "w:lineRule", r);
+                r = check_enum(s, "w:lineRule", r);
                 xml::set_attr(s, "w:lineRule", r);
             }
             if (!s.first_attribute()) ppr.remove_child(s);
@@ -344,7 +380,7 @@ void apply_ppr_json(Document& d, pugi::xml_node ppr, const Json& props) {
             for (auto& t : v) {
                 auto e = tabs.append_child("w:tab");
                 std::string align = t.value("align", "left");
-                check_enum(e, "w:val", align);
+                align = check_enum(e, "w:val", align);
                 xml::set_attr(e, "w:val", align);
                 if (t.contains("leader")) xml::set_attr(e, "w:leader", t["leader"].get<std::string>());
                 xml::set_attr(e, "w:pos", std::to_string(twips(t["pos"])));

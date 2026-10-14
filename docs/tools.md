@@ -49,7 +49,7 @@ Write the document to disk (atomic replace). `path` saves a copy elsewhere (Save
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `path` | string |  | Save As path (optional). |
 | `validate` | boolean |  | Refuse to save if the result is not schema-valid (default true). |
 
@@ -59,7 +59,7 @@ Close a document without saving.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 
 ### `list_open_documents`
 
@@ -71,7 +71,7 @@ Undo the last change (repeatable, up to 30 steps).
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `steps` | integer |  | How many (default 1). |
 
 ## Reading
@@ -82,7 +82,7 @@ Read paragraphs with their ids, styles, list labels, table positions and revisio
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `limit` | integer |  | Max paragraphs (default 200). |
 | `offset` | integer |  | 1-based first paragraph (negative = from the end). |
 | `runs` | boolean |  | Include formatted runs with offsets. |
@@ -94,7 +94,7 @@ The whole document as plain text or Markdown (headings, lists, tables).
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `format` | `text` \\| `markdown` |  | Default markdown. |
 | `view` | `current` \\| `original` |  |  |
 
@@ -104,7 +104,7 @@ Heading structure (Navigation Pane).
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 
 ### `get_paragraph`
 
@@ -112,8 +112,8 @@ One paragraph: text, runs with formatting and offsets, direct and effective (sty
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
-| `paragraph` | string | yes | Paragraph id (the 8-hex `id` from read_document, e.g. "1A2B3C4D") or 1-based paragraph number "12". Other stories: "/word/footnotes.xml#<id>". |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `paragraph` | string | yes | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
 
 ### `find_text`
 
@@ -121,7 +121,7 @@ Find text across the document (body, headers, footers, notes, comments). Returns
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `limit` | integer |  | Max hits (default 100). |
 | `match_case` | boolean |  | Default true. |
 | `regex` | boolean |  | ECMAScript regex. |
@@ -134,7 +134,7 @@ Word's Word Count: words, characters (with/without spaces), paragraphs, plus tab
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 
 ## Editing text
 
@@ -145,15 +145,15 @@ Type text into a paragraph at a position (default: end), or before/after given t
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `after` | string |  | Insert after this text. |
-| `author` | string |  | Override author for this change. |
+| `author` | string |  | Author of this change. |
 | `before` | string |  | Insert before this text. |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
-| `format` | object |  | Character formatting, Word names: bold, italic, underline (single\|double\|thick\|dotted\|dash\|wave\|words\|none), strike, double_strike, caps, small_caps, hidden, superscript, subscript, font (name), size (pt), color (RRGGBB\|auto\|{theme}), highlight (yellow\|green\|cyan\|magenta\|blue\|red\|darkBlue\|darkCyan\|darkGreen\|darkMagenta\|darkRed\|darkYellow\|darkGray\|lightGray\|black\|none), shading (RRGGBB), spacing (pt), position (pt), scale (%), kerning (pt), language (e.g. en-US), style (character style), border, emboss, engrave, outline, shadow, no_proof, rtl. null removes a property. |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `format` | object |  | Character formatting (Word names). null removes a property. More keys: caps, small_caps, double_strike, hidden, spacing, position, scale, kerning, language, border, shading, emboss, outline, shadow. |
 | `occurrence` | integer |  | Which occurrence of after/before (default 1). |
-| `paragraph` | string | yes | Paragraph id (the 8-hex `id` from read_document, e.g. "1A2B3C4D") or 1-based paragraph number "12". Other stories: "/word/footnotes.xml#<id>". |
+| `paragraph` | string | yes | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
 | `position` | integer |  | Character offset (negative counts from end). |
 | `text` | string | yes | Text to insert. |
-| `track` | boolean |  | Track this change (default: the document's Track Changes setting). |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 
 ### `replace_text`
 
@@ -161,16 +161,16 @@ Replace text inside one paragraph (by match/occurrence or start/end). Tracked as
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `author` | string |  |  |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
-| `end` | integer |  |  |
-| `format` | object |  | Character formatting, Word names: bold, italic, underline (single\|double\|thick\|dotted\|dash\|wave\|words\|none), strike, double_strike, caps, small_caps, hidden, superscript, subscript, font (name), size (pt), color (RRGGBB\|auto\|{theme}), highlight (yellow\|green\|cyan\|magenta\|blue\|red\|darkBlue\|darkCyan\|darkGreen\|darkMagenta\|darkRed\|darkYellow\|darkGray\|lightGray\|black\|none), shading (RRGGBB), spacing (pt), position (pt), scale (%), kerning (pt), language (e.g. en-US), style (character style), border, emboss, engrave, outline, shadow, no_proof, rtl. null removes a property. |
+| `author` | string |  | Author of this change. |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `end` | integer |  | End character offset. |
+| `format` | object |  | Character formatting (Word names). null removes a property. More keys: caps, small_caps, double_strike, hidden, spacing, position, scale, kerning, language, border, shading, emboss, outline, shadow. |
 | `match` | string |  | Text to replace. |
 | `occurrence` | integer |  | Default 1. |
-| `paragraph` | string | yes | Paragraph id (the 8-hex `id` from read_document, e.g. "1A2B3C4D") or 1-based paragraph number "12". Other stories: "/word/footnotes.xml#<id>". |
-| `start` | integer |  |  |
+| `paragraph` | string | yes | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
+| `start` | integer |  | Start character offset. |
 | `text` | string | yes | Replacement text (empty deletes). |
-| `track` | boolean |  | Track this change (default: the document's Track Changes setting). |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 
 ### `delete_text`
 
@@ -178,14 +178,14 @@ Delete text inside a paragraph (match/occurrence or start/end).
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `author` | string |  |  |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
-| `end` | integer |  |  |
-| `match` | string |  |  |
-| `occurrence` | integer |  |  |
-| `paragraph` | string | yes | Paragraph id (the 8-hex `id` from read_document, e.g. "1A2B3C4D") or 1-based paragraph number "12". Other stories: "/word/footnotes.xml#<id>". |
-| `start` | integer |  |  |
-| `track` | boolean |  | Track this change (default: the document's Track Changes setting). |
+| `author` | string |  | Author of this change. |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `end` | integer |  | End character offset. |
+| `match` | string |  | Exact text to act on. |
+| `occurrence` | integer |  | Which occurrence of match (default 1). |
+| `paragraph` | string | yes | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
+| `start` | integer |  | Start character offset. |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 
 ### `find_replace`
 
@@ -193,15 +193,15 @@ Replace All across the document (body, headers, footers, notes). Keeps the forma
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `author` | string |  |  |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `author` | string |  | Author of this change. |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `find` | string | yes | Text or regex. |
-| `format` | object |  | Character formatting, Word names: bold, italic, underline (single\|double\|thick\|dotted\|dash\|wave\|words\|none), strike, double_strike, caps, small_caps, hidden, superscript, subscript, font (name), size (pt), color (RRGGBB\|auto\|{theme}), highlight (yellow\|green\|cyan\|magenta\|blue\|red\|darkBlue\|darkCyan\|darkGreen\|darkMagenta\|darkRed\|darkYellow\|darkGray\|lightGray\|black\|none), shading (RRGGBB), spacing (pt), position (pt), scale (%), kerning (pt), language (e.g. en-US), style (character style), border, emboss, engrave, outline, shadow, no_proof, rtl. null removes a property. |
+| `format` | object |  | Character formatting (Word names). null removes a property. More keys: caps, small_caps, double_strike, hidden, spacing, position, scale, kerning, language, border, shading, emboss, outline, shadow. |
 | `limit` | integer |  | Max replacements. |
 | `match_case` | boolean |  | Default true. |
 | `regex` | boolean |  |  |
 | `replace` | string | yes | Replacement. |
-| `track` | boolean |  | Track this change (default: the document's Track Changes setting). |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 | `whole_word` | boolean |  |  |
 
 ### `insert_paragraph`
@@ -210,15 +210,15 @@ Insert new paragraph(s) before or after a paragraph (or a table: pass table). Li
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `author` | string |  |  |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
-| `format` | object |  | Character formatting, Word names: bold, italic, underline (single\|double\|thick\|dotted\|dash\|wave\|words\|none), strike, double_strike, caps, small_caps, hidden, superscript, subscript, font (name), size (pt), color (RRGGBB\|auto\|{theme}), highlight (yellow\|green\|cyan\|magenta\|blue\|red\|darkBlue\|darkCyan\|darkGreen\|darkMagenta\|darkRed\|darkYellow\|darkGray\|lightGray\|black\|none), shading (RRGGBB), spacing (pt), position (pt), scale (%), kerning (pt), language (e.g. en-US), style (character style), border, emboss, engrave, outline, shadow, no_proof, rtl. null removes a property. |
-| `paragraph` | string |  | Paragraph id (the 8-hex `id` from read_document, e.g. "1A2B3C4D") or 1-based paragraph number "12". Other stories: "/word/footnotes.xml#<id>". |
-| `paragraph_format` | object |  | Paragraph formatting: style, alignment (left\|center\|right\|both\|distribute\|start\|end), space_before/space_after (pt or "12pt"), line_spacing (multiple like 1.15 or "14pt") + line_rule (auto\|exact\|atLeast), indent_left/indent_right/first_line_indent/hanging_indent (pt or "0.5in"/"1cm"), keep_with_next, keep_together, page_break_before, widow_control, contextual_spacing, outline_level (1-9), shading, borders {top,bottom,left,right,between: "single"\|{style,size,color,space}}, tabs [{pos, align, leader}], bidi. null removes. |
+| `author` | string |  | Author of this change. |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `format` | object |  | Character formatting (Word names). null removes a property. More keys: caps, small_caps, double_strike, hidden, spacing, position, scale, kerning, language, border, shading, emboss, outline, shadow. |
+| `paragraph` | string |  | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
+| `paragraph_format` | object |  | Paragraph formatting (Word names). Lengths in points or with a unit ("0.5in", "1cm"). null removes. More keys: line_rule, first_line_indent, hanging_indent, keep_together, page_break_before, widow_control, outline_level, shading, borders, tabs, bidi. |
 | `style` | string |  | Paragraph style id or name, e.g. Heading1 / "Heading 1" / Quote. |
 | `table` | integer |  | Anchor on this table (1-based) instead of a paragraph. |
 | `text` | string |  | Text; \n separates paragraphs. |
-| `track` | boolean |  | Track this change (default: the document's Track Changes setting). |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 | `where` | `after` \\| `before` |  | Default after. |
 
 ### `delete_paragraph`
@@ -227,10 +227,10 @@ Delete whole paragraphs (text and paragraph mark).
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `author` | string |  |  |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `author` | string |  | Author of this change. |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `paragraphs` | array of string | yes | Paragraph ids/numbers. |
-| `track` | boolean |  | Track this change (default: the document's Track Changes setting). |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 
 ### `split_paragraph`
 
@@ -239,12 +239,12 @@ Press Enter at a position: splits the paragraph in two.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `after` | string |  | Split after this text. |
-| `author` | string |  |  |
+| `author` | string |  | Author of this change. |
 | `before` | string |  | Split before this text. |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
-| `paragraph` | string | yes | Paragraph id (the 8-hex `id` from read_document, e.g. "1A2B3C4D") or 1-based paragraph number "12". Other stories: "/word/footnotes.xml#<id>". |
-| `position` | integer |  |  |
-| `track` | boolean |  | Track this change (default: the document's Track Changes setting). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `paragraph` | string | yes | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
+| `position` | integer |  | Character offset to insert at (default end). |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 
 ### `merge_paragraphs`
 
@@ -252,10 +252,10 @@ Delete the paragraph mark, joining the paragraph with the next one.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `author` | string |  |  |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
-| `paragraph` | string | yes | Paragraph id (the 8-hex `id` from read_document, e.g. "1A2B3C4D") or 1-based paragraph number "12". Other stories: "/word/footnotes.xml#<id>". |
-| `track` | boolean |  | Track this change (default: the document's Track Changes setting). |
+| `author` | string |  | Author of this change. |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `paragraph` | string | yes | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 
 ### `move_paragraphs`
 
@@ -263,12 +263,12 @@ Cut paragraphs and paste them elsewhere (before/after a target). Untracked moves
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `author` | string |  |  |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `author` | string |  | Author of this change. |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `paragraphs` | array of string | yes | Paragraph ids in order. |
-| `target` | string | yes | Paragraph id (the 8-hex `id` from read_document, e.g. "1A2B3C4D") or 1-based paragraph number "12". Other stories: "/word/footnotes.xml#<id>". |
-| `track` | boolean |  | Track this change (default: the document's Track Changes setting). |
-| `where` | `after` \\| `before` |  |  |
+| `target` | string | yes | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
+| `where` | `after` \\| `before` |  | after or before. |
 
 ## Formatting
 
@@ -279,15 +279,15 @@ Apply character formatting to text in a paragraph (match or start/end; default t
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `all_occurrences` | boolean |  | Format every occurrence of match in the paragraph. |
-| `author` | string |  |  |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
-| `end` | integer |  |  |
-| `format` | object | yes | Character formatting, Word names: bold, italic, underline (single\|double\|thick\|dotted\|dash\|wave\|words\|none), strike, double_strike, caps, small_caps, hidden, superscript, subscript, font (name), size (pt), color (RRGGBB\|auto\|{theme}), highlight (yellow\|green\|cyan\|magenta\|blue\|red\|darkBlue\|darkCyan\|darkGreen\|darkMagenta\|darkRed\|darkYellow\|darkGray\|lightGray\|black\|none), shading (RRGGBB), spacing (pt), position (pt), scale (%), kerning (pt), language (e.g. en-US), style (character style), border, emboss, engrave, outline, shadow, no_proof, rtl. null removes a property. |
-| `match` | string |  |  |
-| `occurrence` | integer |  |  |
-| `paragraph` | string | yes | Paragraph id (the 8-hex `id` from read_document, e.g. "1A2B3C4D") or 1-based paragraph number "12". Other stories: "/word/footnotes.xml#<id>". |
-| `start` | integer |  |  |
-| `track` | boolean |  | Track this change (default: the document's Track Changes setting). |
+| `author` | string |  | Author of this change. |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `end` | integer |  | End character offset. |
+| `format` | object | yes | Character formatting (Word names). null removes a property. More keys: caps, small_caps, double_strike, hidden, spacing, position, scale, kerning, language, border, shading, emboss, outline, shadow. |
+| `match` | string |  | Exact text to act on. |
+| `occurrence` | integer |  | Which occurrence of match (default 1). |
+| `paragraph` | string | yes | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
+| `start` | integer |  | Start character offset. |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 
 ### `format_paragraph`
 
@@ -295,11 +295,11 @@ Apply paragraph formatting / style to one or more paragraphs.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `author` | string |  |  |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
-| `format` | object | yes | Paragraph formatting: style, alignment (left\|center\|right\|both\|distribute\|start\|end), space_before/space_after (pt or "12pt"), line_spacing (multiple like 1.15 or "14pt") + line_rule (auto\|exact\|atLeast), indent_left/indent_right/first_line_indent/hanging_indent (pt or "0.5in"/"1cm"), keep_with_next, keep_together, page_break_before, widow_control, contextual_spacing, outline_level (1-9), shading, borders {top,bottom,left,right,between: "single"\|{style,size,color,space}}, tabs [{pos, align, leader}], bidi. null removes. |
+| `author` | string |  | Author of this change. |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `format` | object | yes | Paragraph formatting (Word names). Lengths in points or with a unit ("0.5in", "1cm"). null removes. More keys: line_rule, first_line_indent, hanging_indent, keep_together, page_break_before, widow_control, outline_level, shading, borders, tabs, bidi. |
 | `paragraphs` | array of string | yes | Paragraph ids/numbers. |
-| `track` | boolean |  | Track this change (default: the document's Track Changes setting). |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 
 ### `apply_style`
 
@@ -307,12 +307,12 @@ Apply a paragraph or character style by id or name ("Heading 1", "Title", "Quote
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `author` | string |  |  |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `author` | string |  | Author of this change. |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `match` | string |  | For a character style: text to style. |
-| `paragraphs` | array of string | yes |  |
-| `style` | string | yes |  |
-| `track` | boolean |  | Track this change (default: the document's Track Changes setting). |
+| `paragraphs` | array of string | yes | Paragraph ids or numbers. |
+| `style` | string | yes | Style name or id. |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 
 ### `clear_formatting`
 
@@ -320,11 +320,11 @@ Remove direct character formatting (and optionally paragraph formatting), like C
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `author` | string |  |  |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `author` | string |  | Author of this change. |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `paragraph_too` | boolean |  | Also reset paragraph formatting to the style. |
-| `paragraphs` | array of string | yes |  |
-| `track` | boolean |  | Track this change (default: the document's Track Changes setting). |
+| `paragraphs` | array of string | yes | Paragraph ids or numbers. |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 
 ## Styles
 
@@ -334,7 +334,7 @@ Styles in the document; include_builtin adds Word's built-ins not yet used (adde
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `include_builtin` | boolean |  |  |
 | `type` | `paragraph` \\| `character` \\| `table` \\| `numbering` |  | Filter. |
 
@@ -344,8 +344,8 @@ A style's settings: based on, next, formatting.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
-| `style` | string | yes |  |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `style` | string | yes | Style name or id. |
 
 ### `modify_style`
 
@@ -354,13 +354,13 @@ Create a new style or modify one (Modify Style dialog). Changes apply everywhere
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `based_on` | string |  |  |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `hidden` | boolean |  |  |
-| `name` | string |  |  |
+| `name` | string |  | Name. |
 | `next` | string |  | Style for the next paragraph. |
-| `paragraph` | object |  | Paragraph formatting: style, alignment (left\|center\|right\|both\|distribute\|start\|end), space_before/space_after (pt or "12pt"), line_spacing (multiple like 1.15 or "14pt") + line_rule (auto\|exact\|atLeast), indent_left/indent_right/first_line_indent/hanging_indent (pt or "0.5in"/"1cm"), keep_with_next, keep_together, page_break_before, widow_control, contextual_spacing, outline_level (1-9), shading, borders {top,bottom,left,right,between: "single"\|{style,size,color,space}}, tabs [{pos, align, leader}], bidi. null removes. |
+| `paragraph` | object |  | Paragraph formatting (Word names). Lengths in points or with a unit ("0.5in", "1cm"). null removes. More keys: line_rule, first_line_indent, hanging_indent, keep_together, page_break_before, widow_control, outline_level, shading, borders, tabs, bidi. |
 | `quick_style` | boolean |  | Show in the Styles gallery. |
-| `run` | object |  | Character formatting, Word names: bold, italic, underline (single\|double\|thick\|dotted\|dash\|wave\|words\|none), strike, double_strike, caps, small_caps, hidden, superscript, subscript, font (name), size (pt), color (RRGGBB\|auto\|{theme}), highlight (yellow\|green\|cyan\|magenta\|blue\|red\|darkBlue\|darkCyan\|darkGreen\|darkMagenta\|darkRed\|darkYellow\|darkGray\|lightGray\|black\|none), shading (RRGGBB), spacing (pt), position (pt), scale (%), kerning (pt), language (e.g. en-US), style (character style), border, emboss, engrave, outline, shadow, no_proof, rtl. null removes a property. |
+| `run` | object |  | Character formatting (Word names). null removes a property. More keys: caps, small_caps, double_strike, hidden, spacing, position, scale, kerning, language, border, shading, emboss, outline, shadow. |
 | `style` | string |  | Style id or name; a new id is derived from name when creating. |
 | `type` | `paragraph` \\| `character` \\| `table` \\| `numbering` |  | For new styles. |
 
@@ -370,8 +370,8 @@ Delete a style; text using it reverts to Normal / Default Paragraph Font.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
-| `style` | string | yes |  |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `style` | string | yes | Style name or id. |
 
 ## Lists
 
@@ -381,16 +381,16 @@ Make paragraphs a bulleted or numbered list (Word's default list definitions). C
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `author` | string |  |  |
+| `author` | string |  | Author of this change. |
 | `bullet` | string |  | Bullet character. |
 | `continue_previous` | boolean |  | Default true. |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
-| `kind` | `bullet` \\| `number` \\| `lowerLetter` \\| `upperLetter` \\| `lowerRoman` \\| `upperRoman` | yes |  |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `kind` | `bullet` \\| `number` \\| `lowerLetter` \\| `upperLetter` \\| `lowerRoman` \\| `upperRoman` | yes | Kind. |
 | `level` | integer |  | 0-8 (indent level). |
-| `paragraphs` | array of string | yes |  |
+| `paragraphs` | array of string | yes | Paragraph ids or numbers. |
 | `start` | integer |  | First number. |
 | `text` | string |  | Number format like "%1)" or "(%1)". |
-| `track` | boolean |  | Track this change (default: the document's Track Changes setting). |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 
 ### `set_list_level`
 
@@ -398,18 +398,18 @@ Change list level (Tab / Shift+Tab in a list).
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `level` | integer | yes | 0-8 |
-| `paragraphs` | array of string | yes |  |
-| `track` | boolean |  | Track this change (default: the document's Track Changes setting). |
+| `paragraphs` | array of string | yes | Paragraph ids or numbers. |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 
 ### `remove_list`
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
-| `paragraphs` | array of string | yes |  |
-| `track` | boolean |  | Track this change (default: the document's Track Changes setting). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `paragraphs` | array of string | yes | Paragraph ids or numbers. |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 
 ### `restart_numbering`
 
@@ -417,8 +417,8 @@ Restart (Set Numbering Value) at a paragraph.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
-| `paragraph` | string | yes | Paragraph id (the 8-hex `id` from read_document, e.g. "1A2B3C4D") or 1-based paragraph number "12". Other stories: "/word/footnotes.xml#<id>". |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `paragraph` | string | yes | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
 | `start` | integer |  | Default 1. |
 
 ## Track changes
@@ -430,7 +430,7 @@ Turn Track Changes on or off for the document (Review > Track Changes).
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `author` | string |  | Author name for subsequent changes. |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `on` | boolean | yes |  |
 
 ### `list_revisions`
@@ -440,7 +440,7 @@ Every tracked change: id, type, author, date, text, paragraph.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `author` | string |  | Filter by author. |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `type` | string |  | Filter by type (insertion, deletion, run_format, ...). |
 
 ### `accept_revisions`
@@ -450,7 +450,7 @@ Accept tracked changes: all, by ids, or by author.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `by_author` | string |  | Only this author's changes. |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `ids` | array of string |  | Revision ids (from list_revisions). Omit for all. |
 
 ### `reject_revisions`
@@ -459,9 +459,9 @@ Reject tracked changes: all, by ids, or by author.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `by_author` | string |  |  |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
-| `ids` | array of string |  |  |
+| `by_author` | string |  | Only this author's changes. |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `ids` | array of string |  | Ids. |
 
 ### `compare_documents`
 
@@ -482,15 +482,15 @@ Comment on text in a paragraph (match or start/end; default the whole paragraph)
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `author` | string |  |  |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
-| `end` | integer |  |  |
+| `author` | string |  | Author of this change. |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `end` | integer |  | End character offset. |
 | `end_paragraph` | string |  | For a range spanning paragraphs: the paragraph where it ends (end = offset there). |
 | `initials` | string |  |  |
-| `match` | string |  |  |
-| `occurrence` | integer |  |  |
-| `paragraph` | string | yes | Paragraph id (the 8-hex `id` from read_document, e.g. "1A2B3C4D") or 1-based paragraph number "12". Other stories: "/word/footnotes.xml#<id>". |
-| `start` | integer |  |  |
+| `match` | string |  | Exact text to act on. |
+| `occurrence` | integer |  | Which occurrence of match (default 1). |
+| `paragraph` | string | yes | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
+| `start` | integer |  | Start character offset. |
 | `text` | string | yes | Comment text (\n for new paragraphs). |
 
 ### `list_comments`
@@ -499,7 +499,7 @@ All comments with author, date, text, the commented text, thread parent and reso
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `include_resolved` | boolean |  | Default true. |
 
 ### `reply_comment`
@@ -508,10 +508,10 @@ Reply to a comment (threaded like Word's Reply).
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `author` | string |  |  |
-| `comment_id` | string | yes |  |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
-| `text` | string | yes |  |
+| `author` | string |  | Author of this change. |
+| `comment_id` | string | yes | Comment id from list_comments. |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `text` | string | yes | The text. |
 
 ### `resolve_comment`
 
@@ -519,8 +519,8 @@ Mark a comment thread resolved (or reopen it).
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `comment_id` | string | yes |  |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `comment_id` | string | yes | Comment id from list_comments. |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `resolved` | boolean |  | Default true. |
 
 ### `edit_comment`
@@ -529,9 +529,9 @@ Replace a comment's text.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `comment_id` | string | yes |  |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
-| `text` | string | yes |  |
+| `comment_id` | string | yes | Comment id from list_comments. |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `text` | string | yes | The text. |
 
 ### `delete_comment`
 
@@ -540,9 +540,9 @@ Delete a comment and its replies; or all comments (optionally by author).
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `all` | boolean |  |  |
-| `by_author` | string |  |  |
+| `by_author` | string |  | Only this author's changes. |
 | `comment_id` | string |  | Omit with all=true to delete every comment. |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 
 ## Tables
 
@@ -553,15 +553,15 @@ Insert a table after/before a paragraph. rows = array of arrays of cell text. De
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `alignment` | `left` \\| `center` \\| `right` |  |  |
-| `author` | string |  |  |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `author` | string |  | Author of this change. |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `header_row` | boolean |  | Default true. |
-| `paragraph` | string |  | Paragraph id (the 8-hex `id` from read_document, e.g. "1A2B3C4D") or 1-based paragraph number "12". Other stories: "/word/footnotes.xml#<id>". |
+| `paragraph` | string |  | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
 | `repeat_header` | boolean |  | Repeat header row on each page. |
-| `rows` | array of array of string | yes | Cell texts, row by row. |
+| `rows` | array of any | yes | Rows: [["Item","Price"],["Setup","500"]], or objects [{"Item":"Setup","Price":500}] (keys become the header row). |
 | `style` | string |  | Table style, e.g. TableGrid, "Grid Table 4 Accent 1". |
-| `track` | boolean |  | Track this change (default: the document's Track Changes setting). |
-| `where` | `after` \\| `before` |  |  |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
+| `where` | `after` \\| `before` |  | after or before. |
 | `widths` | array of number |  | Column widths (pt or "1.5in"). |
 
 ### `read_table`
@@ -570,7 +570,7 @@ A table's cells (text), spans and style. Tables are numbered 1.. in document ord
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `table` | integer | yes | 1-based |
 
 ### `set_cell`
@@ -579,14 +579,14 @@ Replace a cell's text and/or format it. row/col are 1-based.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `author` | string |  |  |
-| `col` | integer | yes |  |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `author` | string |  | Author of this change. |
+| `col` | integer | yes | Column number (1-based). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `format` | object |  | Cell: shading, vertical_align (top\|center\|bottom), width, borders, text_direction, no_wrap, paragraph{..}, run{..} |
-| `row` | integer | yes |  |
-| `table` | integer | yes |  |
-| `text` | string |  |  |
-| `track` | boolean |  | Track this change (default: the document's Track Changes setting). |
+| `row` | integer | yes | Row number (1-based). |
+| `table` | integer | yes | Table number (1 = first table). |
+| `text` | string |  | The text. |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 
 ### `table_rows`
 
@@ -595,23 +595,23 @@ Insert a row above/below, or delete rows. row is 1-based.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `action` | `insert_above` \\| `insert_below` \\| `delete` | yes |  |
-| `author` | string |  |  |
+| `author` | string |  | Author of this change. |
 | `cells` | array of string |  | Texts for the new row. |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
-| `row` | integer | yes |  |
-| `table` | integer | yes |  |
-| `track` | boolean |  | Track this change (default: the document's Track Changes setting). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `row` | integer | yes | Row number (1-based). |
+| `table` | integer | yes | Table number (1 = first table). |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 
 ### `table_columns`
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `action` | `insert_left` \\| `insert_right` \\| `delete` | yes |  |
-| `author` | string |  |  |
-| `col` | integer | yes |  |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
-| `table` | integer | yes |  |
-| `track` | boolean |  | Track this change (default: the document's Track Changes setting). |
+| `author` | string |  | Author of this change. |
+| `col` | integer | yes | Column number (1-based). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `table` | integer | yes | Table number (1 = first table). |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 
 ### `merge_cells`
 
@@ -619,10 +619,10 @@ Merge a rectangle of cells (1-based, inclusive).
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `from_col` | integer | yes |  |
 | `from_row` | integer | yes |  |
-| `table` | integer | yes |  |
+| `table` | integer | yes | Table number (1 = first table). |
 | `to_col` | integer | yes |  |
 | `to_row` | integer | yes |  |
 
@@ -632,19 +632,19 @@ style, alignment, width (pt|"50%"|auto), borders ("all"|"none"|{top,insideH,..})
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `format` | object | yes |  |
-| `table` | integer | yes |  |
-| `track` | boolean |  | Track this change (default: the document's Track Changes setting). |
+| `table` | integer | yes | Table number (1 = first table). |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 
 ### `delete_table`
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `author` | string |  |  |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
-| `table` | integer | yes |  |
-| `track` | boolean |  | Track this change (default: the document's Track Changes setting). |
+| `author` | string |  | Author of this change. |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `table` | integer | yes | Table number (1 = first table). |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 
 ## Insert
 
@@ -654,16 +654,16 @@ Insert an inline picture from a file (PNG, JPEG, GIF, BMP, TIFF, SVG, EMF, WMF) 
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `after` | string |  |  |
+| `after` | string |  | Insert after this text. |
 | `alt_text` | string |  | Alt text for accessibility. |
-| `author` | string |  |  |
+| `author` | string |  | Author of this change. |
 | `data_base64` | string |  | Image bytes (alternative to file). |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `file` | string |  | Image file path. |
 | `height` | number |  | pt |
-| `paragraph` | string | yes | Paragraph id (the 8-hex `id` from read_document, e.g. "1A2B3C4D") or 1-based paragraph number "12". Other stories: "/word/footnotes.xml#<id>". |
-| `position` | integer |  |  |
-| `track` | boolean |  | Track this change (default: the document's Track Changes setting). |
+| `paragraph` | string | yes | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
+| `position` | integer |  | Character offset to insert at (default end). |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 | `width` | number |  | pt |
 
 ### `insert_break`
@@ -672,12 +672,12 @@ Page break, column break, line break, or a section break after a paragraph.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `after` | string |  |  |
-| `author` | string |  |  |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
-| `paragraph` | string | yes | Paragraph id (the 8-hex `id` from read_document, e.g. "1A2B3C4D") or 1-based paragraph number "12". Other stories: "/word/footnotes.xml#<id>". |
+| `after` | string |  | Insert after this text. |
+| `author` | string |  | Author of this change. |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `paragraph` | string | yes | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
 | `position` | integer |  | For page/column/line breaks. |
-| `track` | boolean |  | Track this change (default: the document's Track Changes setting). |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 | `type` | `page` \\| `column` \\| `line` \\| `section_next_page` \\| `section_continuous` \\| `section_even_page` \\| `section_odd_page` | yes |  |
 
 ### `insert_hyperlink`
@@ -686,22 +686,22 @@ Link text to a URL or to a bookmark ("#name"). Wrap existing text (match) or ins
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `author` | string |  |  |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `author` | string |  | Author of this change. |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `match` | string |  | Existing text to link. |
-| `occurrence` | integer |  |  |
-| `paragraph` | string | yes | Paragraph id (the 8-hex `id` from read_document, e.g. "1A2B3C4D") or 1-based paragraph number "12". Other stories: "/word/footnotes.xml#<id>". |
+| `occurrence` | integer |  | Which occurrence of match (default 1). |
+| `paragraph` | string | yes | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
 | `position` | integer |  | Where to insert new text. |
 | `text` | string |  | New link text to insert. |
 | `tooltip` | string |  |  |
-| `track` | boolean |  | Track this change (default: the document's Track Changes setting). |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 | `url` | string | yes | https://..., mailto:..., or #bookmark |
 
 ### `list_hyperlinks`
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 
 ### `remove_hyperlinks`
 
@@ -709,7 +709,7 @@ Remove hyperlinks (keeping the text). Filter by target substring.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `target_contains` | string |  |  |
 
 ### `add_bookmark`
@@ -718,26 +718,26 @@ Bookmark text (match/start/end) or a point.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
-| `end` | integer |  |  |
-| `match` | string |  |  |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `end` | integer |  | End character offset. |
+| `match` | string |  | Exact text to act on. |
 | `name` | string | yes | Letters, digits, _; starts with a letter; max 40. |
-| `paragraph` | string | yes | Paragraph id (the 8-hex `id` from read_document, e.g. "1A2B3C4D") or 1-based paragraph number "12". Other stories: "/word/footnotes.xml#<id>". |
-| `start` | integer |  |  |
+| `paragraph` | string | yes | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
+| `start` | integer |  | Start character offset. |
 
 ### `list_bookmarks`
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `include_hidden` | boolean |  | Include _Toc/_Ref/_GoBack bookmarks. |
 
 ### `delete_bookmark`
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
-| `name` | string | yes |  |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `name` | string | yes | Name. |
 
 ### `insert_note`
 
@@ -746,28 +746,28 @@ Insert a footnote or endnote reference at a position with the note text.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `after` | string |  | Place the reference mark after this text. |
-| `author` | string |  |  |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
-| `kind` | `footnote` \\| `endnote` |  |  |
-| `paragraph` | string | yes | Paragraph id (the 8-hex `id` from read_document, e.g. "1A2B3C4D") or 1-based paragraph number "12". Other stories: "/word/footnotes.xml#<id>". |
-| `position` | integer |  |  |
-| `text` | string | yes |  |
-| `track` | boolean |  | Track this change (default: the document's Track Changes setting). |
+| `author` | string |  | Author of this change. |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `kind` | `footnote` \\| `endnote` |  | Kind. |
+| `paragraph` | string | yes | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
+| `position` | integer |  | Character offset to insert at (default end). |
+| `text` | string | yes | The text. |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 
 ### `list_notes`
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 
 ### `delete_note`
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
-| `id` | string | yes |  |
-| `kind` | `footnote` \\| `endnote` | yes |  |
-| `track` | boolean |  | Track this change (default: the document's Track Changes setting). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `id` | string | yes | Id. |
+| `kind` | `footnote` \\| `endnote` | yes | Kind. |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 
 ### `insert_field`
 
@@ -775,21 +775,21 @@ Insert a Word field: PAGE, NUMPAGES, DATE \@ "MMMM d, yyyy", TIME, AUTHOR, TITLE
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `after` | string |  |  |
-| `author` | string |  |  |
+| `after` | string |  | Insert after this text. |
+| `author` | string |  | Author of this change. |
 | `code` | string | yes | Field instruction. |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
-| `format` | object |  | Character formatting, Word names: bold, italic, underline (single\|double\|thick\|dotted\|dash\|wave\|words\|none), strike, double_strike, caps, small_caps, hidden, superscript, subscript, font (name), size (pt), color (RRGGBB\|auto\|{theme}), highlight (yellow\|green\|cyan\|magenta\|blue\|red\|darkBlue\|darkCyan\|darkGreen\|darkMagenta\|darkRed\|darkYellow\|darkGray\|lightGray\|black\|none), shading (RRGGBB), spacing (pt), position (pt), scale (%), kerning (pt), language (e.g. en-US), style (character style), border, emboss, engrave, outline, shadow, no_proof, rtl. null removes a property. |
-| `paragraph` | string | yes | Paragraph id (the 8-hex `id` from read_document, e.g. "1A2B3C4D") or 1-based paragraph number "12". Other stories: "/word/footnotes.xml#<id>". |
-| `position` | integer |  |  |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `format` | object |  | Character formatting (Word names). null removes a property. More keys: caps, small_caps, double_strike, hidden, spacing, position, scale, kerning, language, border, shading, emboss, outline, shadow. |
+| `paragraph` | string | yes | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
+| `position` | integer |  | Character offset to insert at (default end). |
 | `result` | string |  | Cached display text (Word updates it). |
-| `track` | boolean |  | Track this change (default: the document's Track Changes setting). |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 
 ### `list_fields`
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 
 ### `update_fields`
 
@@ -797,7 +797,7 @@ Update TOC entries, SEQ numbering and REF results now; page numbers are refreshe
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 
 ### `insert_toc`
 
@@ -805,13 +805,13 @@ Insert a table of contents (References > Table of Contents) before a paragraph, 
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `from_level` | integer |  | Default 1. |
 | `hyperlinks` | boolean |  | Default true. |
-| `paragraph` | string | yes | Paragraph id (the 8-hex `id` from read_document, e.g. "1A2B3C4D") or 1-based paragraph number "12". Other stories: "/word/footnotes.xml#<id>". |
+| `paragraph` | string | yes | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
 | `title` | string |  | Heading above the TOC (default "Contents"; empty for none). |
 | `to_level` | integer |  | Default 3. |
-| `track` | boolean |  | Track this change (default: the document's Track Changes setting). |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 
 ### `insert_equation`
 
@@ -820,11 +820,11 @@ Insert an equation from LaTeX-like input: x^2, a_i, \frac{a}{b}, \sqrt{x}, \sum_
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `display` | boolean |  | Own line (display) vs inline. |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `equation` | string | yes |  |
-| `paragraph` | string | yes | Paragraph id (the 8-hex `id` from read_document, e.g. "1A2B3C4D") or 1-based paragraph number "12". Other stories: "/word/footnotes.xml#<id>". |
-| `position` | integer |  |  |
-| `track` | boolean |  | Track this change (default: the document's Track Changes setting). |
+| `paragraph` | string | yes | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
+| `position` | integer |  | Character offset to insert at (default end). |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 
 ### `add_content_control`
 
@@ -834,14 +834,14 @@ Wrap text in (or insert) a content control: richText, text, checkbox, dropDown, 
 |---|---|---|---|
 | `checked` | boolean |  |  |
 | `date_format` | string |  | e.g. M/d/yyyy |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `items` | array of string |  | Choices for dropDown/comboBox. |
 | `lock_content` | boolean |  |  |
 | `lock_delete` | boolean |  |  |
 | `match` | string |  | Text to wrap (omit to insert an empty control at position). |
-| `paragraph` | string | yes | Paragraph id (the 8-hex `id` from read_document, e.g. "1A2B3C4D") or 1-based paragraph number "12". Other stories: "/word/footnotes.xml#<id>". |
+| `paragraph` | string | yes | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
 | `placeholder` | string |  |  |
-| `position` | integer |  |  |
+| `position` | integer |  | Character offset to insert at (default end). |
 | `tag` | string |  |  |
 | `title` | string |  |  |
 | `type` | `richText` \\| `text` \\| `checkbox` \\| `dropDown` \\| `comboBox` \\| `date` \\| `picture` |  |  |
@@ -850,7 +850,7 @@ Wrap text in (or insert) a content control: richText, text, checkbox, dropDown, 
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 
 ### `set_content_control`
 
@@ -859,7 +859,7 @@ Set a content control's value (text, checkbox true/false, drop-down choice, date
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `control` | string | yes | id, tag or title |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `value` | any | yes | string or boolean |
 
 ## Page layout
@@ -870,7 +870,7 @@ Sections with page size, orientation, margins, columns, header/footer parts.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 
 ### `set_page_setup`
 
@@ -878,11 +878,11 @@ Set page layout of a section (1-based, default all): orientation, paper (letter|
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `even_odd_headers` | boolean |  |  |
 | `section` | integer |  | Omit for all sections. |
 | `setup` | object | yes |  |
-| `track` | boolean |  | Track this change (default: the document's Track Changes setting). |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 
 ### `set_header_footer`
 
@@ -891,8 +891,8 @@ Set a header or footer's text for a section. Use {PAGE}, {NUMPAGES}, {DATE}, {SE
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `alignment` | `left` \\| `center` \\| `right` |  |  |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
-| `kind` | `header` \\| `footer` | yes |  |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `kind` | `header` \\| `footer` | yes | Kind. |
 | `section` | integer |  | Default 1. |
 | `text` | string | yes | Lines separated by \n. |
 | `which` | `default` \\| `first` \\| `even` |  |  |
@@ -901,8 +901,8 @@ Set a header or footer's text for a section. Use {PAGE}, {NUMPAGES}, {DATE}, {SE
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
-| `kind` | `header` \\| `footer` | yes |  |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `kind` | `header` \\| `footer` | yes | Kind. |
 | `section` | integer |  |  |
 | `which` | `default` \\| `first` \\| `even` |  |  |
 
@@ -910,8 +910,8 @@ Set a header or footer's text for a section. Use {PAGE}, {NUMPAGES}, {DATE}, {SE
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
-| `kind` | `header` \\| `footer` | yes |  |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `kind` | `header` \\| `footer` | yes | Kind. |
 | `section` | integer |  |  |
 | `which` | `default` \\| `first` \\| `even` |  |  |
 
@@ -923,7 +923,7 @@ Core (title, author, ...), custom, and application properties.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 
 ### `set_properties`
 
@@ -933,7 +933,7 @@ Set core properties (title, subject, creator, keywords, description, category, c
 |---|---|---|---|
 | `core` | object |  |  |
 | `custom` | object |  |  |
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 
 ### `get_settings`
 
@@ -941,7 +941,7 @@ Document settings: track changes, protection, compatibility mode, tab stops, zoo
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 
 ### `set_settings`
 
@@ -949,7 +949,7 @@ track_changes, update_fields_on_open, even_odd_headers, mirror_margins, gutter_a
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `settings` | object | yes |  |
 
 ### `protect_document`
@@ -958,9 +958,9 @@ Restrict editing (Review > Restrict Editing): readOnly, comments, trackedChanges
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `mode` | `readOnly` \\| `comments` \\| `trackedChanges` \\| `forms` | yes |  |
-| `password` | string |  |  |
+| `password` | string |  | Password. |
 
 ### `unprotect_document`
 
@@ -968,8 +968,8 @@ Remove editing restrictions (password required if one was set).
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
-| `password` | string |  |  |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `password` | string |  | Password. |
 
 ## Expert
 
@@ -979,7 +979,7 @@ Check every part against the full OOXML schema (Office 2007-365 extensions) and 
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 
 ### `get_xml`
 
@@ -987,9 +987,9 @@ Inspect the raw XML of a part or one paragraph (for diagnosing unusual content).
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `max_chars` | integer |  | Default 20000. |
-| `paragraph` | string |  | Paragraph id (the 8-hex `id` from read_document, e.g. "1A2B3C4D") or 1-based paragraph number "12". Other stories: "/word/footnotes.xml#<id>". |
+| `paragraph` | string |  | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
 | `part` | string |  | Part name, e.g. /word/styles.xml (default main document). |
 
 ### `set_paragraph_xml`
@@ -998,7 +998,7 @@ Expert escape hatch: replace a paragraph with raw WordprocessingML (one or more 
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `doc` | string | yes | Document handle from open_document/create_document, or a .docx path (opened on demand). |
-| `paragraph` | string | yes | Paragraph id (the 8-hex `id` from read_document, e.g. "1A2B3C4D") or 1-based paragraph number "12". Other stories: "/word/footnotes.xml#<id>". |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `paragraph` | string | yes | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
 | `xml` | string | yes |  |
 

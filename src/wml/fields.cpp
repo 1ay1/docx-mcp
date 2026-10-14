@@ -1,4 +1,7 @@
 // Fields, table of contents, content controls, lists, equations.
+#include <map>
+#include <cctype>
+#include <cstdio>
 #include <algorithm>
 #include <cmath>
 #include <functional>

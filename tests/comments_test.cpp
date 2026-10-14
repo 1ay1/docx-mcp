@@ -112,7 +112,7 @@ TEST(comment_multiline_edit) {
 
 TEST(comment_on_corpus_document) {
     // existing Word comments survive and new ones thread correctly
-    auto d = Document::open("../../tests/corpus/oxpt/HC031-Complicated-Document.docx");
+    auto d = Document::open(DOCX_CORPUS "/oxpt/HC031-Complicated-Document.docx");
     auto before = list_comments(d);
     CHECK(!before.empty());
     auto r = reply_comment(d, before[0].id, "Agreed.");

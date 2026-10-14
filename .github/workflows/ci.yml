@@ -3,24 +3,66 @@ name: ci
 on:
   push:
     branches: [master]
+    tags: ["v*"]
   pull_request:
 
 jobs:
   build-test:
-    runs-on: ubuntu-24.04
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x86_64
+            os: ubuntu-24.04
+            cmake: -DCMAKE_C_COMPILER=gcc-14 -DCMAKE_CXX_COMPILER=g++-14 -DDOCX_STATIC=ON
+            exe: build/docx-mcp
+            asset: docx-mcp-linux-x86_64
+          - name: linux-arm64
+            os: ubuntu-24.04-arm
+            cmake: -DCMAKE_C_COMPILER=gcc-14 -DCMAKE_CXX_COMPILER=g++-14 -DDOCX_STATIC=ON
+            exe: build/docx-mcp
+            asset: docx-mcp-linux-arm64
+          - name: macos-arm64
+            os: macos-15
+            cmake: -DCMAKE_OSX_DEPLOYMENT_TARGET=13.3
+            exe: build/docx-mcp
+            asset: docx-mcp-macos-arm64
+          - name: macos-x86_64
+            os: macos-15-intel
+            cmake: -DCMAKE_OSX_DEPLOYMENT_TARGET=13.3
+            exe: build/docx-mcp
+            asset: docx-mcp-macos-x86_64
+          - name: windows-x86_64
+            os: windows-2025
+            cmake: -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl
+            exe: build/docx-mcp.exe
+            asset: docx-mcp-windows-x86_64.exe
     steps:
       - uses: actions/checkout@v5
         with:
           submodules: recursive
-      - name: Install toolchain
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ninja-build g++-14
+
+      - name: Toolchain (linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ninja-build g++-14
+      - name: Toolchain (macos)
+        if: runner.os == 'macOS'
+        run: brew install ninja
+      - name: Toolchain (windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Configure
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=g++-14 -DCMAKE_C_COMPILER=gcc-14
+        shell: bash
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release ${{ matrix.cmake }}
       - name: Build
+        shell: bash
         run: cmake --build build
+
       - name: Unit tests
+        shell: bash
         working-directory: build/tests
         run: |
           ./edit_test
@@ -28,9 +70,42 @@ jobs:
           ./structure_test
           ./docops_test
       - name: Corpus tests
+        shell: bash
         working-directory: build/tests
         run: |
           ./revisions_corpus ../../tests/corpus/oxpt/RP
           ./robustness ../../tests/corpus/oxpt
-      - name: End-to-end over MCP stdio
-        run: python3 tests/e2e.py build/docx-mcp /tmp/e2e
+      - name: MCP end-to-end
+        shell: bash
+        run: |
+          python3 tests/e2e.py ${{ matrix.exe }} "$RUNNER_TEMP/e2e"
+          python3 tests/sloppy.py ${{ matrix.exe }} "$RUNNER_TEMP/sloppy"
+
+      - name: Package
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp ${{ matrix.exe }} dist/${{ matrix.asset }}
+          ./${{ matrix.exe }} --version
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: dist/${{ matrix.asset }}
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build-test
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && sha256sum * > SHA256SUMS
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${GITHUB_REF_NAME}" dist/* --clobber -R "${GITHUB_REPOSITORY}"

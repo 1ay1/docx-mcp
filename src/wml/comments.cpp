@@ -1,5 +1,7 @@
 #include "wml/comments.hpp"
 
+#include <set>
+#include <cctype>
 #include <algorithm>
 #include <functional>
 #include <map>

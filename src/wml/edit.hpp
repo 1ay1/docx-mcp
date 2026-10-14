@@ -88,6 +88,10 @@ int reject_revisions(Document& d, const RevFilter& f);
 int accept_all_in(Document& d, pugi::xml_node root, const RevFilter& f);
 int reject_all_in(Document& d, pugi::xml_node root, const RevFilter& f);
 
+// Set an enum attribute to its canonical spelling (case/space-insensitive
+// input); throws listing the allowed values when it doesn't match.
+std::string enum_attr(pugi::xml_node e, const char* attr, const std::string& value);
+
 // Stamp a revision element with id/author/date.
 void stamp(Document& d, pugi::xml_node rev);
 // Track a math run as inserted/deleted: wraps the m:r in w:ins/w:del

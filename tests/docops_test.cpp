@@ -55,7 +55,7 @@ Document make(const std::vector<std::u32string>& lines) {
 
 TEST(protection_word_file) {
     // Word-protected by Word with password "Example" (Apache POI bug56076)
-    auto d = Document::open("../../tests/corpus/poi/bug56076.docx");
+    auto d = Document::open(DOCX_CORPUS "/poi/bug56076.docx");
     CHECK(check_password(d, "Example"));
     CHECK(!check_password(d, "example"));
     CHECK(!check_password(d, "Wrong"));
@@ -152,7 +152,7 @@ TEST(compare_corpus_pairs) {
     // the WmlComparer corpus: compare(X, X-Mod) must accept to X-Mod and reject to X
     namespace fs = std::filesystem;
     int n = 0, ok = 0;
-    for (auto& e : fs::directory_iterator("../../tests/corpus/oxpt/WC")) {
+    for (auto& e : fs::directory_iterator(DOCX_CORPUS "/oxpt/WC")) {
         auto name = e.path().string();
         if (!name.ends_with("-Mod.docx")) continue;
         std::string base = name.substr(0, name.size() - 9) + ".docx";
@@ -175,7 +175,7 @@ TEST(compare_corpus_pairs) {
             bool good = text_ok && got <= pre && schema_issues(acc) <= pre && schema_issues(rej) <= pre;
             if (good) ok++;
             else {
-                std::printf("    compare mismatch: %s %s\n", e.path().filename().c_str(), w.c_str());
+                std::printf("    compare mismatch: %s %s\n", e.path().filename().string().c_str(), w.c_str());
                 if (!text_ok) {
                     auto first_diff = [](const std::string& x, const std::string& y) {
                         auto lx = util::split(x, '\n'), ly = util::split(y, '\n');
@@ -189,7 +189,7 @@ TEST(compare_corpus_pairs) {
                 }
             }
         } catch (std::exception& ex) {
-            std::printf("    compare error: %s: %s\n", e.path().filename().c_str(), ex.what());
+            std::printf("    compare error: %s: %s\n", e.path().filename().string().c_str(), ex.what());
         }
     }
     std::printf("    compare corpus: %d/%d\n", ok, n);

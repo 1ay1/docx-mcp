@@ -1,5 +1,7 @@
 #include "opc/package.hpp"
 
+#include <map>
+#include <cctype>
 #include <algorithm>
 #include <cstring>
 #include <fstream>
@@ -7,6 +9,8 @@
 #include <stdexcept>
 
 #include <miniz.h>
+
+#include "util/fsio.hpp"
 
 namespace docx::opc {
 
@@ -145,10 +149,7 @@ bool Rels::remove(std::string_view id) {
 
 // ── Package ──────────────────────────────────────────────────────────────
 Package Package::open(const std::string& path) {
-    std::ifstream f(path, std::ios::binary);
-    if (!f) throw std::runtime_error("cannot open " + path);
-    util::Bytes b((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-    return from_bytes(b);
+    return from_bytes(util::read_file(path));
 }
 
 Package Package::from_bytes(const util::Bytes& zip) {
@@ -267,20 +268,7 @@ util::Bytes Package::to_bytes() const {
     return out;
 }
 
-void Package::save(const std::string& path) const {
-    util::Bytes b = to_bytes();
-    std::string tmp = path + ".tmp~";
-    {
-        std::ofstream f(tmp, std::ios::binary | std::ios::trunc);
-        if (!f) throw std::runtime_error("cannot write " + path);
-        f.write((const char*)b.data(), b.size());
-        if (!f) throw std::runtime_error("write failed: " + path);
-    }
-    if (std::rename(tmp.c_str(), path.c_str()) != 0) {
-        std::remove(tmp.c_str());
-        throw std::runtime_error("cannot replace " + path);
-    }
-}
+void Package::save(const std::string& path) const { util::write_file_atomic(path, to_bytes()); }
 
 bool Package::has(std::string_view name) const { return parts_.count(key_of(name)) > 0; }
 Part* Package::part(std::string_view name) {

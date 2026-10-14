@@ -37,8 +37,10 @@ does in Word without leaving the file subtly broken:
 
 ## Quick start
 
-Download the static Linux binary from the
-[latest release](https://github.com/1ay1/docx-mcp/releases/latest), or build it:
+Download the binary for your system from the
+[latest release](https://github.com/1ay1/docx-mcp/releases/latest): Windows,
+macOS (Apple silicon and Intel), or Linux (x64 and arm64). It's one file with
+nothing to install. Or build it:
 
 ```sh
 git clone --recursive https://github.com/1ay1/docx-mcp
@@ -47,7 +49,8 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ```
 
-Add it to your MCP client:
+Add it to your MCP client (setup for Claude Desktop, Claude Code, Cursor,
+VS Code, Windsurf, Zed and others is in [docs/clients.md](docs/clients.md)):
 
 ```json
 {
@@ -96,6 +99,32 @@ save_document     {"doc": "doc1"}
 
 Every argument is listed in [docs/tools.md](docs/tools.md).
 
+## Works with any model
+
+The server is built for the way models actually call tools:
+
+- **Forgiving arguments.** Numbers and booleans sent as strings, a single id
+  where a list is expected, objects sent as JSON text, enum values in any
+  case (`"Center"`), camelCase or snake_case names, and common aliases
+  (`old_text`/`new_text`, `document`, `file_path`) are all accepted.
+- **Errors that say how to fix the call.** Unknown arguments list the valid
+  ones. A bad document handle lists the open documents. A missing argument
+  names it and describes it.
+- **Profiles for small contexts.** `--tools core` exposes 32 tools (about 7.5k
+  tokens of schema) instead of 85.
+- **Protocol robustness.** It supports MCP versions 2024-11-05 through the
+  current one, handles JSON-RPC batches, UTF-8 BOMs and CRLF, and survives
+  malformed input. It never writes anything but protocol frames to stdout.
+
+`tests/sloppy.py` checks all of this against the real binary.
+
+## Cross-platform
+
+Linux, macOS and Windows, x64 and arm64. CI builds and runs the full test
+suite on each (GCC, AppleClang/libc++, MSVC) and publishes the binaries.
+Paths with spaces, non-ASCII names, `~`, `file://` URIs and Windows drive
+letters all work, and saving is atomic on every platform.
+
 ## How we know it's right
 
 Each output is checked by three independent consumers:
@@ -119,6 +148,7 @@ Details in [docs/conformance.md](docs/conformance.md).
 
 ## Docs
 
+- [Clients](docs/clients.md): setup for every MCP client on Windows, macOS and Linux
 - [Guide](docs/guide.md): workflows, addressing paragraphs, Track Changes, comments, formatting
 - [Tool reference](docs/tools.md): every tool and argument
 - [Conformance](docs/conformance.md): how output is verified, and where we differ from Word on purpose
@@ -140,6 +170,7 @@ cd build/tests
 ./revisions_corpus ../../tests/corpus/oxpt/RP
 ./robustness ../../tests/corpus/oxpt
 python3 ../../tests/e2e.py ../docx-mcp /tmp/e2e
+python3 ../../tests/sloppy.py ../docx-mcp /tmp/sloppy
 ```
 
 The external checks are optional. Build oxval with

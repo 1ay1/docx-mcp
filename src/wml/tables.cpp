@@ -1,4 +1,6 @@
 // Tables (ECMA 17.4) with Word's insert/delete/merge semantics.
+#include <map>
+#include <cstdio>
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
@@ -128,7 +130,7 @@ pugi::xml_node insert_table(Document& d, pugi::xml_node ref, bool after, const s
     auto tw = tblpr.append_child("w:tblW");
     xml::set_attr(tw, "w:w", "0");
     xml::set_attr(tw, "w:type", "auto");
-    if (opts.contains("alignment")) xml::set_attr(schema::ensure_child(tblpr, "w:jc"), "w:val", opts["alignment"].get<std::string>());
+    if (opts.contains("alignment")) enum_attr(schema::ensure_child(tblpr, "w:jc"), "w:val", opts["alignment"].get<std::string>());
     auto look = schema::ensure_child(tblpr, "w:tblLook");
     bool hdr = opts.value("header_row", true);
     // Word's default look: first row + first column + banded rows
@@ -407,7 +409,7 @@ void format_table(Document& d, pugi::xml_node tbl, const Json& props, const Edit
     }
     for (auto& [k, v] : props.items()) {
         if (k == "style") xml::set_attr(schema::ensure_child(tblpr, "w:tblStyle"), "w:val", ensure_style(d, v.get<std::string>()));
-        else if (k == "alignment") xml::set_attr(schema::ensure_child(tblpr, "w:jc"), "w:val", v.get<std::string>());
+        else if (k == "alignment") enum_attr(schema::ensure_child(tblpr, "w:jc"), "w:val", v.get<std::string>());
         else if (k == "width") {
             auto w = schema::ensure_child(tblpr, "w:tblW");
             if (v.is_string() && v.get<std::string>().ends_with("%")) {
@@ -425,7 +427,7 @@ void format_table(Document& d, pugi::xml_node tbl, const Json& props, const Edit
             auto i = schema::ensure_child(tblpr, "w:tblInd");
             xml::set_attr(i, "w:w", std::to_string(twips_of(v)));
             xml::set_attr(i, "w:type", "dxa");
-        } else if (k == "layout") xml::set_attr(schema::ensure_child(tblpr, "w:tblLayout"), "w:type", v.get<std::string>());
+        } else if (k == "layout") enum_attr(schema::ensure_child(tblpr, "w:tblLayout"), "w:type", v.get<std::string>() == "autofit" ? "autofit" : v.get<std::string>());
         else if (k == "cell_margins") {
             auto m = schema::ensure_child(tblpr, "w:tblCellMar");
             for (auto& [side, sv] : v.items()) {
@@ -506,13 +508,13 @@ void format_cell(Document& d, pugi::xml_node tc, const Json& props, const EditOp
             xml::set_attr(s, "w:val", "clear");
             xml::set_attr(s, "w:color", "auto");
             xml::set_attr(s, "w:fill", f);
-        } else if (k == "vertical_align") xml::set_attr(schema::ensure_child(tcpr, "w:vAlign"), "w:val", v.get<std::string>());
+        } else if (k == "vertical_align") enum_attr(schema::ensure_child(tcpr, "w:vAlign"), "w:val", v.get<std::string>());
         else if (k == "width") {
             auto w = schema::ensure_child(tcpr, "w:tcW");
             xml::set_attr(w, "w:w", std::to_string(twips_of(v)));
             xml::set_attr(w, "w:type", "dxa");
         } else if (k == "borders") apply_borders(schema::ensure_child(tcpr, "w:tcBorders"), v, false);
-        else if (k == "text_direction") xml::set_attr(schema::ensure_child(tcpr, "w:textDirection"), "w:val", v.get<std::string>());
+        else if (k == "text_direction") enum_attr(schema::ensure_child(tcpr, "w:textDirection"), "w:val", v.get<std::string>());
         else if (k == "no_wrap") { if (v.get<bool>()) schema::ensure_child(tcpr, "w:noWrap"); else tcpr.remove_child("w:noWrap"); }
         else if (k == "paragraph") { for (auto p : xml::children(tc, "w:p")) format_paragraph(d, p, v, o); }
         else if (k == "run") {

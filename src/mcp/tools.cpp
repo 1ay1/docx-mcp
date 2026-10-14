@@ -1,5 +1,8 @@
 #include "mcp/tools.hpp"
 
+#include <algorithm>
+#include <map>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
@@ -12,6 +15,7 @@
 #include "wml/structure.hpp"
 #include "wml/styles.hpp"
 #include "wml/text.hpp"
+#include "util/fsio.hpp"
 #include "xml/xml.hpp"
 
 namespace docx::server {
@@ -39,52 +43,125 @@ Json anyobj(const std::string& d) { return {{"type", "object"}, {"description", 
 Json enm(std::vector<std::string> v, const std::string& d) { return {{"type", "string"}, {"enum", v}, {"description", d}}; }
 Json arr(Json items, const std::string& d) { return {{"type", "array"}, {"items", items}, {"description", d}}; }
 
-const Json kDoc = str("Document handle from open_document/create_document, or a .docx path (opened on demand).");
-const Json kPara = str("Paragraph id (the 8-hex `id` from read_document, e.g. \"1A2B3C4D\") or 1-based paragraph number \"12\". "
-                       "Other stories: \"/word/footnotes.xml#<id>\".");
-const Json kTrack = boolean("Track this change (default: the document's Track Changes setting).");
-const Json kRunFmt = anyobj(
-    "Character formatting, Word names: bold, italic, underline (single|double|thick|dotted|dash|wave|words|none), strike, double_strike, "
-    "caps, small_caps, hidden, superscript, subscript, font (name), size (pt), color (RRGGBB|auto|{theme}), highlight "
-    "(yellow|green|cyan|magenta|blue|red|darkBlue|darkCyan|darkGreen|darkMagenta|darkRed|darkYellow|darkGray|lightGray|black|none), "
-    "shading (RRGGBB), spacing (pt), position (pt), scale (%), kerning (pt), language (e.g. en-US), style (character style), "
-    "border, emboss, engrave, outline, shadow, no_proof, rtl. null removes a property.");
-const Json kParaFmt = anyobj(
-    "Paragraph formatting: style, alignment (left|center|right|both|distribute|start|end), space_before/space_after (pt or \"12pt\"), "
-    "line_spacing (multiple like 1.15 or \"14pt\") + line_rule (auto|exact|atLeast), indent_left/indent_right/first_line_indent/"
-    "hanging_indent (pt or \"0.5in\"/\"1cm\"), keep_with_next, keep_together, page_break_before, widow_control, contextual_spacing, "
-    "outline_level (1-9), shading, borders {top,bottom,left,right,between: \"single\"|{style,size,color,space}}, "
-    "tabs [{pos, align, leader}], bidi. null removes.");
+const Json kDoc = str("Handle from open_document (e.g. \"doc1\") or the .docx path.");
+const Json kPara = str("Paragraph `id` from read_document (e.g. \"1A2B3C4D\") or its number (\"3\").");
+const Json kTrack = boolean("Record as a tracked change (default: the document's setting).");
+// Formatting objects: the common keys are typed (so models get them right);
+// rarer ones are allowed too (additionalProperties) and listed in the docs.
+Json fmt_schema(const char* desc, Json props) {
+    return {{"type", "object"}, {"description", desc}, {"properties", props}, {"additionalProperties", true}};
+}
+const Json kRunFmt = fmt_schema(
+    "Character formatting (Word names). null removes a property. More keys: caps, small_caps, double_strike, hidden, "
+    "spacing, position, scale, kerning, language, border, shading, emboss, outline, shadow.",
+    {{"bold", {{"type", "boolean"}}}, {"italic", {{"type", "boolean"}}},
+     {"underline", {{"type", "string"}, {"description", "single, double, thick, dotted, wave, none"}}},
+     {"strike", {{"type", "boolean"}}}, {"font", {{"type", "string"}}},
+     {"size", {{"type", "number"}, {"description", "points"}}},
+     {"color", {{"type", "string"}, {"description", "hex RRGGBB or a name"}}},
+     {"highlight", {{"type", "string"}, {"description", "yellow, green, cyan, red, ... or none"}}},
+     {"superscript", {{"type", "boolean"}}}, {"subscript", {{"type", "boolean"}}},
+     {"style", {{"type", "string"}, {"description", "character style, e.g. Strong"}}}});
+const Json kParaFmt = fmt_schema(
+    "Paragraph formatting (Word names). Lengths in points or with a unit (\"0.5in\", \"1cm\"). null removes. More keys: "
+    "line_rule, first_line_indent, hanging_indent, keep_together, page_break_before, widow_control, outline_level, "
+    "shading, borders, tabs, bidi.",
+    {{"style", {{"type", "string"}, {"description", "e.g. \"Heading 1\", \"Title\", \"Quote\""}}},
+     {"alignment", {{"type", "string"}, {"description", "left, center, right, both (justified)"}}},
+     {"space_before", {{"type", "number"}}}, {"space_after", {{"type", "number"}}},
+     {"line_spacing", {{"description", "multiple like 1.15 or exact like \"14pt\""}}},
+     {"indent_left", {{"description", "points or \"0.5in\""}}}, {"indent_right", {{"description", "points"}}},
+     {"keep_with_next", {{"type", "boolean"}}}});
 
 // ── argument helpers ─────────────────────────────────────────────────────
+// Models differ in how they send arguments: numbers as strings, booleans as
+// "true"/"yes", one id instead of a list, objects as JSON text. Accept all of
+// those; reject only what can't mean anything.
+
+// An object passed as a JSON string ("{\"bold\":true}") is decoded.
+Json as_obj(const Json& v, const char* k) {
+    if (v.is_object()) return v;
+    if (v.is_null()) return Json::object();
+    if (v.is_string()) {
+        std::string s = util::trim(v.get<std::string>());
+        if (s.empty()) return Json::object();
+        try {
+            Json j = Json::parse(s);
+            if (j.is_object()) return j;
+        } catch (...) {}
+    }
+    throw std::runtime_error(std::string("argument '") + k + "' must be an object, e.g. {\"bold\": true}");
+}
+
+Json obj_arg(const Json& a, const char* k) { return a.contains(k) ? as_obj(a[k], k) : Json::object(); }
+
+Json arg(const Json& a, const char* k) {
+    if (!a.contains(k)) return nullptr;
+    return a[k];
+}
 
 std::string sarg(const Json& a, const char* k, const std::string& def = "") {
-    if (!a.contains(k) || a[k].is_null()) return def;
-    if (a[k].is_string()) return a[k].get<std::string>();
-    return a[k].dump();
+    Json v = arg(a, k);
+    if (v.is_null()) return def;
+    if (v.is_string()) return v.get<std::string>();
+    if (v.is_number_integer()) return std::to_string(v.get<long long>());
+    if (v.is_number()) {
+        double d = v.get<double>();
+        if (d == (long long)d) return std::to_string((long long)d);
+    }
+    return v.dump();
 }
 int iarg(const Json& a, const char* k, int def) {
-    if (!a.contains(k) || a[k].is_null()) return def;
-    if (a[k].is_string()) return std::stoi(a[k].get<std::string>());
-    return a[k].get<int>();
+    Json v = arg(a, k);
+    if (v.is_null()) return def;
+    if (v.is_number_integer()) return v.get<int>();
+    if (v.is_number()) return (int)std::lround(v.get<double>());
+    if (v.is_string()) {
+        std::string s = util::trim(v.get<std::string>());
+        if (s.empty()) return def;
+        try {
+            std::size_t used = 0;
+            double d = std::stod(s, &used);
+            if (used == s.size()) return (int)std::lround(d);
+        } catch (...) {}
+    }
+    throw std::runtime_error(std::string("argument '") + k + "' must be a whole number, got " + v.dump());
+}
+double darg(const Json& a, const char* k, double def) {
+    Json v = arg(a, k);
+    if (v.is_null()) return def;
+    if (v.is_number()) return v.get<double>();
+    if (v.is_string()) {
+        try { return std::stod(v.get<std::string>()); } catch (...) {}
+    }
+    throw std::runtime_error(std::string("argument '") + k + "' must be a number, got " + v.dump());
 }
 bool barg(const Json& a, const char* k, bool def) {
-    if (!a.contains(k) || a[k].is_null()) return def;
-    return a[k].get<bool>();
+    Json v = arg(a, k);
+    if (v.is_null()) return def;
+    if (v.is_boolean()) return v.get<bool>();
+    if (v.is_number()) return v.get<double>() != 0;
+    if (v.is_string()) {
+        std::string s = util::lower(util::trim(v.get<std::string>()));
+        if (s == "true" || s == "yes" || s == "on" || s == "1") return true;
+        if (s == "false" || s == "no" || s == "off" || s == "0" || s.empty()) return false;
+    }
+    throw std::runtime_error(std::string("argument '") + k + "' must be true or false, got " + v.dump());
 }
 std::string need(const Json& a, const char* k) {
-    if (!a.contains(k) || a[k].is_null()) throw std::runtime_error(std::string("missing argument '") + k + "'");
+    if (!a.contains(k) || a[k].is_null() || (a[k].is_string() && a[k].get<std::string>().empty()))
+        throw std::runtime_error(std::string("missing required argument '") + k + "'");
     return sarg(a, k);
 }
 EditOpts track(const Json& a) {
     EditOpts o;
-    if (a.contains("track") && !a["track"].is_null()) o.track = a["track"].get<bool>();
+    if (a.contains("track") && !a["track"].is_null()) o.track = barg(a, "track", false);
     return o;
 }
 
 Session& sess(Sessions& S, const Json& a) {
     auto& s = S.get(need(a, "doc"));
-    if (a.contains("author") && a["author"].is_string()) s.doc.author.name = a["author"].get<std::string>();
+    if (a.contains("author") && a["author"].is_string() && !sarg(a, "author").empty()) s.doc.author.name = sarg(a, "author");
     return s;
 }
 
@@ -106,14 +183,14 @@ int vlen(pugi::xml_node p) { return (int)analyze(p).vis.size(); }
 std::pair<int, int> range_in(pugi::xml_node p, const Json& a) {
     int n = vlen(p);
     if (a.contains("match") && !a["match"].is_null()) {
-        std::u32string m = util::to_u32(a["match"].get<std::string>());
+        std::u32string m = util::to_u32(sarg(a, "match"));
         auto t = analyze(p).text;
         int occ = iarg(a, "occurrence", 1);
         std::size_t pos = 0;
         for (int k = 0;; k++) {
             pos = t.find(m, k == 0 ? 0 : pos + 1);
             if (pos == std::u32string::npos)
-                throw std::runtime_error("text \"" + a["match"].get<std::string>() + "\" not found " +
+                throw std::runtime_error("text \"" + sarg(a, "match") + "\" not found " +
                                          (occ > 1 ? "(occurrence " + std::to_string(occ) + ")" : "") + " in that paragraph");
             if (k + 1 == occ) break;
         }
@@ -130,11 +207,11 @@ std::pair<int, int> range_in(pugi::xml_node p, const Json& a) {
 int pos_in(pugi::xml_node p, const Json& a) {
     int n = vlen(p);
     if (a.contains("after") && !a["after"].is_null()) {
-        Json m = {{"match", a["after"]}, {"occurrence", a.value("occurrence", 1)}};
+        Json m = {{"match", a["after"]}, {"occurrence", iarg(a, "occurrence", 1)}};
         return range_in(p, m).second;
     }
     if (a.contains("before") && !a["before"].is_null()) {
-        Json m = {{"match", a["before"]}, {"occurrence", a.value("occurrence", 1)}};
+        Json m = {{"match", a["before"]}, {"occurrence", iarg(a, "occurrence", 1)}};
         return range_in(p, m).first;
     }
     int pos = iarg(a, "position", n);
@@ -153,16 +230,28 @@ Json para_brief(Document& d, pugi::xml_node p) {
 std::vector<std::string> strs(const Json& a, const char* k) {
     std::vector<std::string> v;
     if (!a.contains(k) || a[k].is_null()) return v;
-    if (a[k].is_string()) { v.push_back(a[k].get<std::string>()); return v; }
-    for (auto& x : a[k]) v.push_back(x.is_string() ? x.get<std::string>() : x.dump());
+    const Json& x = a[k];
+    auto one = [](const Json& e) { return e.is_string() ? e.get<std::string>() : e.is_number_integer() ? std::to_string(e.get<long long>()) : e.dump(); };
+    if (x.is_string()) {
+        // "[\"a\",\"b\"]" or "a, b" or a single value
+        std::string s = util::trim(x.get<std::string>());
+        if (!s.empty() && s.front() == '[') {
+            try {
+                for (auto& e : Json::parse(s)) v.push_back(one(e));
+                return v;
+            } catch (...) {}
+        }
+        if (s.find(',') != std::string::npos && k != std::string("cells"))
+            for (auto& p : util::split(s, ',')) { if (!util::trim(p).empty()) v.push_back(util::trim(p)); }
+        else v.push_back(s);
+        return v;
+    }
+    if (x.is_array()) for (auto& e : x) v.push_back(one(e));
+    else v.push_back(one(x));
     return v;
 }
 
-util::Bytes read_file(const std::string& path) {
-    std::ifstream f(path, std::ios::binary);
-    if (!f) throw std::runtime_error("cannot read " + path);
-    return util::Bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-}
+util::Bytes load_file(const std::string& path) { return util::read_file(util::normalize_path(path)); }
 
 Json validate_doc(Document& d) {
     Json issues = Json::array();
@@ -193,22 +282,46 @@ Json validate_doc(Document& d) {
 
 std::string server_instructions() {
     return
-        "docx-mcp edits Word documents (.docx/.docm/.dotx) with Word's own semantics and 100% schema-valid output.\n"
-        "Workflow: open_document -> read_document (gives paragraph ids) -> edit tools -> save_document.\n"
-        "Address paragraphs by the 8-hex `id` from read_document (stable across edits) or by number. Address text inside a "
-        "paragraph with `match` (+ `occurrence`) or `start`/`end` character offsets in the visible text.\n"
-        "Track changes: set_track_changes on, or pass track:true per call; every edit then becomes a real Word revision "
-        "attributed to `author`. Review with list_revisions, accept_revisions, reject_revisions; comment with add_comment, "
-        "reply_comment, resolve_comment.\n"
-        "Formatting uses Word's names (bold, size in pt, alignment, space_after ...). Built-in styles (Heading 1, Title, "
-        "Quote, List Paragraph, TOC 1 ...) are added on first use with Word's exact definitions.\n"
-        "Nothing is written to disk until save_document. undo reverts the last change. validate_document checks the file "
-        "against the full OOXML schema.";
+        "docx-mcp edits Word documents (.docx) the way Word does. Output is always a valid Word file.\n"
+        "\n"
+        "Steps:\n"
+        "1. open_document {path} (or create_document {path}). It returns a handle like \"doc1\". "
+        "Any tool also accepts the file path as `doc`.\n"
+        "2. read_document {doc}. It lists paragraphs with an `id` (8 hex digits, e.g. \"1A2B3C4D\") and `n` (1, 2, 3...). "
+        "Pass either one as `paragraph`. Prefer `id`: it stays valid after other edits.\n"
+        "3. Edit. To target text inside a paragraph, give `match` (the exact text) instead of character offsets.\n"
+        "4. save_document {doc}. Nothing is written to disk before this.\n"
+        "\n"
+        "Track changes: set_track_changes {doc, on: true, author} makes every later edit a Word revision. "
+        "Review with list_revisions, accept_revisions, reject_revisions. Comments: add_comment, reply_comment, resolve_comment.\n"
+        "Formatting uses Word's names: bold, italic, size (points), color (hex like FF0000), alignment (left/center/right/both), "
+        "space_after (points), style (\"Heading 1\", \"Title\", \"Quote\"...).\n"
+        "If something goes wrong, the error says how to fix the call. undo reverts the last change.";
 }
 
 std::vector<ToolDef> make_tools() {
     std::vector<ToolDef> T;
-    auto add = [&](ToolDef t) { T.push_back(std::move(t)); };
+    auto add = [&](ToolDef t) {
+        // a short description for every argument, or none rather than an empty one
+        static const std::map<std::string, std::string> common = {
+            {"match", "Exact text to act on."}, {"occurrence", "Which occurrence of match (default 1)."},
+            {"start", "Start character offset."}, {"end", "End character offset."},
+            {"position", "Character offset to insert at (default end)."},
+            {"after", "Insert after this text."}, {"before", "Insert before this text."},
+            {"paragraphs", "Paragraph ids or numbers."}, {"text", "The text."}, {"style", "Style name or id."},
+            {"table", "Table number (1 = first table)."}, {"row", "Row number (1-based)."}, {"col", "Column number (1-based)."},
+            {"name", "Name."}, {"comment_id", "Comment id from list_comments."}, {"id", "Id."},
+            {"kind", "Kind."}, {"cells", "Cell texts."}, {"password", "Password."}, {"ids", "Ids."},
+            {"by_author", "Only this author's changes."}, {"where", "after or before."}};
+        if (t.schema.contains("properties"))
+            for (auto& [k, p] : t.schema["properties"].items()) {
+                if (!p.is_object() || !p.contains("description")) continue;
+                if (!p["description"].get<std::string>().empty()) continue;
+                if (auto it = common.find(k); it != common.end()) p["description"] = it->second;
+                else p.erase("description");
+            }
+        T.push_back(std::move(t));
+    };
 
     // ── documents ────────────────────────────────────────────────────────
     add({"open_document", "Open document",
@@ -219,7 +332,7 @@ std::vector<ToolDef> make_tools() {
          false, false, [](Sessions& S, const Json& a) {
              std::string h = S.open(need(a, "path"), barg(a, "create_if_missing", false));
              auto& s = S.get(h);
-             if (a.contains("author")) s.doc.author.name = a["author"].get<std::string>();
+             if (a.contains("author")) s.doc.author.name = sarg(a, "author");
              auto st = statistics(s.doc);
              return Json{{"doc", h}, {"path", s.path}, {"paragraphs", st["paragraphs"]}, {"words", st["words"]},
                          {"tables", st["tables"]}, {"comments", st["comments"]}, {"revisions", st["revisions"]},
@@ -235,7 +348,7 @@ std::vector<ToolDef> make_tools() {
              std::string h = S.create(need(a, "path"));
              auto& s = S.get(h);
              if (a.contains("author")) {
-                 s.doc.author.name = a["author"].get<std::string>();
+                 s.doc.author.name = sarg(a, "author");
                  set_core_properties(s.doc, {{"creator", s.doc.author.name}, {"last_modified_by", s.doc.author.name}});
              }
              if (a.contains("title")) set_core_properties(s.doc, {{"title", a["title"]}});
@@ -255,10 +368,11 @@ std::vector<ToolDef> make_tools() {
                  if (!v["valid"].get<bool>() && v["issue_count"].get<int>() > s.baseline_issues)
                      throw std::runtime_error("not saved: document has schema issues: " + v["issues"].dump());
              }
+             path = util::normalize_path(path);
              s.doc.save(path);
-             s.path = fs::weakly_canonical(fs::absolute(path)).string();
+             s.path = path;
              s.dirty = false;
-             return Json{{"saved", s.path}, {"bytes", fs::file_size(s.path)}};
+             return Json{{"saved", s.path}, {"bytes", util::file_size(s.path)}};
          }});
     add({"close_document", "Close", "Close a document without saving.", obj({{"doc", kDoc}}, {"doc"}), false, false,
          [](Sessions& S, const Json& a) {
@@ -361,31 +475,31 @@ std::vector<ToolDef> make_tools() {
          "the character before it, like typing in Word. \\t = tab, \\v = line break.",
          obj({{"doc", kDoc}, {"paragraph", kPara}, {"text", str("Text to insert.")}, {"position", integer("Character offset (negative counts from end).")},
               {"after", str("Insert after this text.")}, {"before", str("Insert before this text.")}, {"occurrence", integer("Which occurrence of after/before (default 1).")},
-              {"format", kRunFmt}, {"track", kTrack}, {"author", str("Override author for this change.")}},
+              {"format", kRunFmt}, {"track", kTrack}, {"author", str("Author of this change.")}},
              {"doc", "paragraph", "text"}),
          false, false, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
              auto r = para(s, a);
              int pos = pos_in(r.p, a);
-             insert_text(s.doc, r.p, pos, util::to_u32(need(a, "text")), a.value("format", Json()), track(a));
+             insert_text(s.doc, r.p, pos, util::to_u32(need(a, "text")), obj_arg(a, "format"), track(a));
              return para_brief(s.doc, r.p);
          }});
     add({"replace_text", "Replace text",
          "Replace text inside one paragraph (by match/occurrence or start/end). Tracked as deletion + insertion when tracking.",
          obj({{"doc", kDoc}, {"paragraph", kPara}, {"match", str("Text to replace.")}, {"occurrence", integer("Default 1.")},
               {"start", integer("")}, {"end", integer("")}, {"text", str("Replacement text (empty deletes).")}, {"format", kRunFmt},
-              {"track", kTrack}, {"author", str("")}},
+              {"track", kTrack}, {"author", str("Author of this change.")}},
              {"doc", "paragraph", "text"}),
          false, false, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
              auto r = para(s, a);
              auto [b, e] = range_in(r.p, a);
-             replace_text(s.doc, r.p, b, e, util::to_u32(sarg(a, "text")), a.value("format", Json()), track(a));
+             replace_text(s.doc, r.p, b, e, util::to_u32(sarg(a, "text")), obj_arg(a, "format"), track(a));
              return para_brief(s.doc, r.p);
          }});
     add({"delete_text", "Delete text", "Delete text inside a paragraph (match/occurrence or start/end).",
          obj({{"doc", kDoc}, {"paragraph", kPara}, {"match", str("")}, {"occurrence", integer("")}, {"start", integer("")}, {"end", integer("")},
-              {"track", kTrack}, {"author", str("")}},
+              {"track", kTrack}, {"author", str("Author of this change.")}},
              {"doc", "paragraph"}),
          false, true, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
@@ -399,7 +513,7 @@ std::vector<ToolDef> make_tools() {
          "Regex replacements support $1..$9.",
          obj({{"doc", kDoc}, {"find", str("Text or regex.")}, {"replace", str("Replacement.")}, {"match_case", boolean("Default true.")},
               {"whole_word", boolean("")}, {"regex", boolean("")}, {"format", kRunFmt}, {"limit", integer("Max replacements.")},
-              {"track", kTrack}, {"author", str("")}},
+              {"track", kTrack}, {"author", str("Author of this change.")}},
              {"doc", "find", "replace"}),
          false, false, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
@@ -408,7 +522,7 @@ std::vector<ToolDef> make_tools() {
              f.whole_word = barg(a, "whole_word", false);
              f.regex = barg(a, "regex", false);
              f.max = iarg(a, "limit", -1);
-             int n = replace_all(s.doc, need(a, "find"), sarg(a, "replace"), f, a.value("format", Json()), track(a));
+             int n = replace_all(s.doc, need(a, "find"), sarg(a, "replace"), f, obj_arg(a, "format"), track(a));
              return Json{{"replaced", n}};
          }});
     add({"insert_paragraph", "Insert paragraph",
@@ -417,7 +531,7 @@ std::vector<ToolDef> make_tools() {
          obj({{"doc", kDoc}, {"paragraph", kPara}, {"table", integer("Anchor on this table (1-based) instead of a paragraph.")},
               {"text", str("Text; \\n separates paragraphs.")}, {"where", enm({"after", "before"}, "Default after.")},
               {"style", str("Paragraph style id or name, e.g. Heading1 / \"Heading 1\" / Quote.")}, {"format", kRunFmt},
-              {"paragraph_format", kParaFmt}, {"track", kTrack}, {"author", str("")}},
+              {"paragraph_format", kParaFmt}, {"track", kTrack}, {"author", str("Author of this change.")}},
              {"doc"}),
          false, false, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
@@ -429,18 +543,18 @@ std::vector<ToolDef> make_tools() {
                  ref = ps.back();
              }
              auto np = insert_paragraph(s.doc, ref, sarg(a, "where", "after") == "after", util::to_u32(sarg(a, "text")),
-                                        sarg(a, "style"), a.value("format", Json()), track(a));
+                                        sarg(a, "style"), obj_arg(a, "format"), track(a));
              Json made = Json::array();
              int lines = (int)util::split(sarg(a, "text"), '\n').size();
              auto cur = np;
              for (int i = 0; i < lines && cur; i++, cur = cur.next_sibling("w:p")) {
-                 if (a.contains("paragraph_format")) format_paragraph(s.doc, cur, a["paragraph_format"], track(a));
+                 if (a.contains("paragraph_format")) format_paragraph(s.doc, cur, obj_arg(a, "paragraph_format"), track(a));
                  made.push_back(para_brief(s.doc, cur));
              }
              return Json{{"inserted", made}};
          }});
     add({"delete_paragraph", "Delete paragraph", "Delete whole paragraphs (text and paragraph mark).",
-         obj({{"doc", kDoc}, {"paragraphs", arr(str(""), "Paragraph ids/numbers.")}, {"track", kTrack}, {"author", str("")}}, {"doc", "paragraphs"}),
+         obj({{"doc", kDoc}, {"paragraphs", arr(str(""), "Paragraph ids/numbers.")}, {"track", kTrack}, {"author", str("Author of this change.")}}, {"doc", "paragraphs"}),
          false, true, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
              std::vector<pugi::xml_node> ps;
@@ -450,7 +564,7 @@ std::vector<ToolDef> make_tools() {
          }});
     add({"split_paragraph", "Split paragraph (Enter)", "Press Enter at a position: splits the paragraph in two.",
          obj({{"doc", kDoc}, {"paragraph", kPara}, {"position", integer("")}, {"after", str("Split after this text.")}, {"before", str("Split before this text.")},
-              {"track", kTrack}, {"author", str("")}},
+              {"track", kTrack}, {"author", str("Author of this change.")}},
              {"doc", "paragraph"}),
          false, false, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
@@ -459,7 +573,7 @@ std::vector<ToolDef> make_tools() {
              return Json{{"first", para_brief(s.doc, r.p)}, {"second", para_brief(s.doc, np)}};
          }});
     add({"merge_paragraphs", "Join with next paragraph", "Delete the paragraph mark, joining the paragraph with the next one.",
-         obj({{"doc", kDoc}, {"paragraph", kPara}, {"track", kTrack}, {"author", str("")}}, {"doc", "paragraph"}), false, false,
+         obj({{"doc", kDoc}, {"paragraph", kPara}, {"track", kTrack}, {"author", str("Author of this change.")}}, {"doc", "paragraph"}), false, false,
          [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
              auto r = para(s, a);
@@ -470,7 +584,7 @@ std::vector<ToolDef> make_tools() {
          "Cut paragraphs and paste them elsewhere (before/after a target). Untracked moves relocate the XML; tracked moves are "
          "recorded as a deletion plus an insertion.",
          obj({{"doc", kDoc}, {"paragraphs", arr(str(""), "Paragraph ids in order.")}, {"target", kPara}, {"where", enm({"after", "before"}, "")},
-              {"track", kTrack}, {"author", str("")}},
+              {"track", kTrack}, {"author", str("Author of this change.")}},
              {"doc", "paragraphs", "target"}),
          false, false, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
@@ -512,35 +626,35 @@ std::vector<ToolDef> make_tools() {
     // ── formatting ───────────────────────────────────────────────────────
     add({"format_text", "Format text (Font)", "Apply character formatting to text in a paragraph (match or start/end; default the whole paragraph).",
          obj({{"doc", kDoc}, {"paragraph", kPara}, {"match", str("")}, {"occurrence", integer("")}, {"start", integer("")}, {"end", integer("")},
-              {"all_occurrences", boolean("Format every occurrence of match in the paragraph.")}, {"format", kRunFmt}, {"track", kTrack}, {"author", str("")}},
+              {"all_occurrences", boolean("Format every occurrence of match in the paragraph.")}, {"format", kRunFmt}, {"track", kTrack}, {"author", str("Author of this change.")}},
              {"doc", "paragraph", "format"}),
          false, false, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
              auto r = para(s, a);
              if (barg(a, "all_occurrences", false) && a.contains("match")) {
                  auto t = analyze(r.p).text;
-                 auto m = util::to_u32(a["match"].get<std::string>());
+                 auto m = util::to_u32(sarg(a, "match"));
                  std::vector<std::pair<int, int>> rs;
                  for (std::size_t p = t.find(m); p != std::u32string::npos; p = t.find(m, p + m.size())) rs.push_back({(int)p, (int)(p + m.size())});
-                 for (auto it = rs.rbegin(); it != rs.rend(); ++it) format_runs(s.doc, r.p, it->first, it->second, a["format"], track(a));
+                 for (auto it = rs.rbegin(); it != rs.rend(); ++it) format_runs(s.doc, r.p, it->first, it->second, obj_arg(a, "format"), track(a));
                  return Json{{"formatted", rs.size()}, {"paragraph", para_brief(s.doc, r.p)}};
              }
              auto [b, e] = range_in(r.p, a);
-             format_runs(s.doc, r.p, b, e, a["format"], track(a));
+             format_runs(s.doc, r.p, b, e, obj_arg(a, "format"), track(a));
              return Json{{"formatted", 1}, {"paragraph", para_brief(s.doc, r.p)}};
          }});
     add({"format_paragraph", "Format paragraph", "Apply paragraph formatting / style to one or more paragraphs.",
-         obj({{"doc", kDoc}, {"paragraphs", arr(str(""), "Paragraph ids/numbers.")}, {"format", kParaFmt}, {"track", kTrack}, {"author", str("")}},
+         obj({{"doc", kDoc}, {"paragraphs", arr(str(""), "Paragraph ids/numbers.")}, {"format", kParaFmt}, {"track", kTrack}, {"author", str("Author of this change.")}},
              {"doc", "paragraphs", "format"}),
          false, false, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
              int n = 0;
-             for (auto& id : strs(a, "paragraphs")) { format_paragraph(s.doc, find_para(s.doc, id).p, a["format"], track(a)); n++; }
+             for (auto& id : strs(a, "paragraphs")) { format_paragraph(s.doc, find_para(s.doc, id).p, obj_arg(a, "format"), track(a)); n++; }
              return Json{{"formatted", n}};
          }});
     add({"apply_style", "Apply style", "Apply a paragraph or character style by id or name (\"Heading 1\", \"Title\", \"Quote\", \"Strong\"...).",
          obj({{"doc", kDoc}, {"paragraphs", arr(str(""), "")}, {"style", str("")}, {"match", str("For a character style: text to style.")},
-              {"track", kTrack}, {"author", str("")}},
+              {"track", kTrack}, {"author", str("Author of this change.")}},
              {"doc", "paragraphs", "style"}),
          false, false, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
@@ -560,7 +674,7 @@ std::vector<ToolDef> make_tools() {
          }});
     add({"clear_formatting", "Clear formatting", "Remove direct character formatting (and optionally paragraph formatting), like Ctrl+Space / Ctrl+Q.",
          obj({{"doc", kDoc}, {"paragraphs", arr(str(""), "")}, {"paragraph_too", boolean("Also reset paragraph formatting to the style.")},
-              {"track", kTrack}, {"author", str("")}},
+              {"track", kTrack}, {"author", str("Author of this change.")}},
              {"doc", "paragraphs"}),
          false, false, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
@@ -635,7 +749,7 @@ std::vector<ToolDef> make_tools() {
          "Make paragraphs a bulleted or numbered list (Word's default list definitions). Continues an adjacent list of the same kind.",
          obj({{"doc", kDoc}, {"paragraphs", arr(str(""), "")}, {"kind", enm({"bullet", "number", "lowerLetter", "upperLetter", "lowerRoman", "upperRoman"}, "")},
               {"level", integer("0-8 (indent level).")}, {"start", integer("First number.")}, {"text", str("Number format like \"%1)\" or \"(%1)\".")},
-              {"bullet", str("Bullet character.")}, {"continue_previous", boolean("Default true.")}, {"track", kTrack}, {"author", str("")}},
+              {"bullet", str("Bullet character.")}, {"continue_previous", boolean("Default true.")}, {"track", kTrack}, {"author", str("Author of this change.")}},
              {"doc", "paragraphs", "kind"}),
          false, false, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
@@ -682,7 +796,7 @@ std::vector<ToolDef> make_tools() {
          obj({{"doc", kDoc}, {"on", boolean("")}, {"author", str("Author name for subsequent changes.")}}, {"doc", "on"}), false, false,
          [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
-             s.doc.set_track_changes(a["on"].get<bool>());
+             s.doc.set_track_changes(barg(a, "on", true));
              return Json{{"track_changes", s.doc.track_changes()}, {"author", s.doc.author.name}};
          }});
     add({"list_revisions", "Revisions", "Every tracked change: id, type, author, date, text, paragraph.",
@@ -691,7 +805,7 @@ std::vector<ToolDef> make_tools() {
              auto& s = S.get(need(a, "doc"));
              Json v = Json::array();
              for (auto& r : list_revisions(s.doc)) {
-                 if (a.contains("author") && r.author != a["author"].get<std::string>()) continue;
+                 if (a.contains("author") && r.author != sarg(a, "author")) continue;
                  if (a.contains("type") && r.type != a["type"].get<std::string>()) continue;
                  Json j = {{"id", r.id}, {"type", r.type}, {"author", r.author}, {"date", r.date}};
                  if (!r.text.empty()) j["text"] = r.text;
@@ -737,7 +851,7 @@ std::vector<ToolDef> make_tools() {
     add({"add_comment", "New comment", "Comment on text in a paragraph (match or start/end; default the whole paragraph).",
          obj({{"doc", kDoc}, {"paragraph", kPara}, {"match", str("")}, {"occurrence", integer("")}, {"start", integer("")}, {"end", integer("")},
               {"end_paragraph", str("For a range spanning paragraphs: the paragraph where it ends (end = offset there).")},
-              {"text", str("Comment text (\\n for new paragraphs).")}, {"author", str("")}, {"initials", str("")}},
+              {"text", str("Comment text (\\n for new paragraphs).")}, {"author", str("Author of this change.")}, {"initials", str("")}},
              {"doc", "paragraph", "text"}),
          false, false, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
@@ -768,7 +882,7 @@ std::vector<ToolDef> make_tools() {
              return v;
          }});
     add({"reply_comment", "Reply", "Reply to a comment (threaded like Word's Reply).",
-         obj({{"doc", kDoc}, {"comment_id", str("")}, {"text", str("")}, {"author", str("")}}, {"doc", "comment_id", "text"}), false, false,
+         obj({{"doc", kDoc}, {"comment_id", str("")}, {"text", str("")}, {"author", str("Author of this change.")}}, {"doc", "comment_id", "text"}), false, false,
          [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
              return Json{{"comment_id", reply_comment(s.doc, need(a, "comment_id"), need(a, "text"))}};
@@ -799,19 +913,39 @@ std::vector<ToolDef> make_tools() {
     add({"insert_table", "Insert table",
          "Insert a table after/before a paragraph. rows = array of arrays of cell text. Default style Table Grid, autofit to window.",
          obj({{"doc", kDoc}, {"paragraph", kPara}, {"where", enm({"after", "before"}, "")},
-              {"rows", arr(arr(str(""), ""), "Cell texts, row by row.")}, {"style", str("Table style, e.g. TableGrid, \"Grid Table 4 Accent 1\".")},
+              {"rows", Json{{"type", "array"}, {"description", "Rows: [[\"Item\",\"Price\"],[\"Setup\",\"500\"]], or objects [{\"Item\":\"Setup\",\"Price\":500}] (keys become the header row)."}}}, {"style", str("Table style, e.g. TableGrid, \"Grid Table 4 Accent 1\".")},
               {"header_row", boolean("Default true.")}, {"repeat_header", boolean("Repeat header row on each page.")},
               {"widths", arr(num(""), "Column widths (pt or \"1.5in\").")}, {"alignment", enm({"left", "center", "right"}, "")},
-              {"track", kTrack}, {"author", str("")}},
+              {"track", kTrack}, {"author", str("Author of this change.")}},
              {"doc", "rows"}),
          false, false, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
              pugi::xml_node ref = a.contains("paragraph") ? para(s, a).p : paragraphs(s.doc.body(), false).back();
              std::vector<std::vector<std::string>> rows;
-             for (auto& r : a["rows"]) {
-                 std::vector<std::string> row;
-                 for (auto& c : r) row.push_back(c.is_string() ? c.get<std::string>() : c.dump());
-                 rows.push_back(row);
+             auto cell_text = [](const Json& c) { return c.is_string() ? c.get<std::string>() : c.is_null() ? std::string() : c.dump(); };
+             Json in = a["rows"];
+             if (in.is_array() && !in.empty() && in[0].is_object()) {
+                 // [{"Item":"Setup","Price":500}, ...] -> header row from the keys
+                 std::vector<std::string> keys;
+                 for (auto& [k, _] : in[0].items()) keys.push_back(k);
+                 rows.push_back(keys);
+                 for (auto& r : in) {
+                     std::vector<std::string> row;
+                     for (auto& k : keys) row.push_back(r.contains(k) ? cell_text(r[k]) : "");
+                     rows.push_back(row);
+                 }
+             } else {
+                 for (auto& r : in) {
+                     std::vector<std::string> row;
+                     if (r.is_array()) for (auto& c : r) row.push_back(cell_text(c));
+                     else if (r.is_string()) {
+                         // one row given as "a | b | c" or tab separated
+                         std::string sr = r.get<std::string>();
+                         char sep = sr.find('\t') != std::string::npos ? '\t' : '|';
+                         for (auto& c : util::split(sr, sep)) row.push_back(util::trim(c));
+                     } else row.push_back(cell_text(r));
+                     rows.push_back(row);
+                 }
              }
              Json o = Json::object();
              for (auto k : {"style", "header_row", "repeat_header", "widths", "alignment"}) if (a.contains(k)) o[k] = a[k];
@@ -828,18 +962,18 @@ std::vector<ToolDef> make_tools() {
     add({"set_cell", "Set cell text / format", "Replace a cell's text and/or format it. row/col are 1-based.",
          obj({{"doc", kDoc}, {"table", integer("")}, {"row", integer("")}, {"col", integer("")}, {"text", str("")},
               {"format", anyobj("Cell: shading, vertical_align (top|center|bottom), width, borders, text_direction, no_wrap, paragraph{..}, run{..}")},
-              {"track", kTrack}, {"author", str("")}},
+              {"track", kTrack}, {"author", str("Author of this change.")}},
              {"doc", "table", "row", "col"}),
          false, false, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
              auto tc = cell(table_at(s.doc, iarg(a, "table", 1)), iarg(a, "row", 1) - 1, iarg(a, "col", 1) - 1);
              if (a.contains("text")) set_cell_text(s.doc, tc, sarg(a, "text"), track(a));
-             if (a.contains("format")) format_cell(s.doc, tc, a["format"], track(a));
+             if (a.contains("format")) format_cell(s.doc, tc, obj_arg(a, "format"), track(a));
              return Json{{"ok", true}};
          }});
     add({"table_rows", "Insert / delete rows", "Insert a row above/below, or delete rows. row is 1-based.",
          obj({{"doc", kDoc}, {"table", integer("")}, {"action", enm({"insert_above", "insert_below", "delete"}, "")}, {"row", integer("")},
-              {"cells", arr(str(""), "Texts for the new row.")}, {"track", kTrack}, {"author", str("")}},
+              {"cells", arr(str(""), "Texts for the new row.")}, {"track", kTrack}, {"author", str("Author of this change.")}},
              {"doc", "table", "action", "row"}),
          false, false, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
@@ -851,7 +985,7 @@ std::vector<ToolDef> make_tools() {
              return table_json(tbl);
          }});
     add({"table_columns", "Insert / delete columns", "", obj({{"doc", kDoc}, {"table", integer("")}, {"action", enm({"insert_left", "insert_right", "delete"}, "")},
-                                                         {"col", integer("")}, {"track", kTrack}, {"author", str("")}},
+                                                         {"col", integer("")}, {"track", kTrack}, {"author", str("Author of this change.")}},
                                                         {"doc", "table", "action", "col"}),
          false, false, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
@@ -877,10 +1011,10 @@ std::vector<ToolDef> make_tools() {
          obj({{"doc", kDoc}, {"table", integer("")}, {"format", anyobj("")}, {"track", kTrack}}, {"doc", "table", "format"}), false, false,
          [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
-             format_table(s.doc, table_at(s.doc, iarg(a, "table", 1)), a["format"], track(a));
+             format_table(s.doc, table_at(s.doc, iarg(a, "table", 1)), obj_arg(a, "format"), track(a));
              return Json{{"ok", true}};
          }});
-    add({"delete_table", "Delete table", "", obj({{"doc", kDoc}, {"table", integer("")}, {"track", kTrack}, {"author", str("")}}, {"doc", "table"}), false, true,
+    add({"delete_table", "Delete table", "", obj({{"doc", kDoc}, {"table", integer("")}, {"track", kTrack}, {"author", str("Author of this change.")}}, {"doc", "table"}), false, true,
          [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
              delete_table(s.doc, table_at(s.doc, iarg(a, "table", 1)), track(a));
@@ -893,24 +1027,24 @@ std::vector<ToolDef> make_tools() {
          "give width or height to keep the aspect ratio. Too-wide pictures are scaled to the text width like Word.",
          obj({{"doc", kDoc}, {"paragraph", kPara}, {"position", integer("")}, {"after", str("")}, {"file", str("Image file path.")},
               {"data_base64", str("Image bytes (alternative to file).")}, {"width", num("pt")}, {"height", num("pt")},
-              {"alt_text", str("Alt text for accessibility.")}, {"track", kTrack}, {"author", str("")}},
+              {"alt_text", str("Alt text for accessibility.")}, {"track", kTrack}, {"author", str("Author of this change.")}},
              {"doc", "paragraph"}),
          false, false, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
              auto r = para(s, a);
              util::Bytes data;
-             if (a.contains("file")) data = read_file(a["file"].get<std::string>());
+             if (a.contains("file")) data = load_file(sarg(a, "file"));
              else if (a.contains("data_base64")) {
                  auto b = util::base64_decode(a["data_base64"].get<std::string>());
                  if (!b) throw std::runtime_error("bad base64");
                  data = *b;
              } else throw std::runtime_error("give file or data_base64");
-             insert_picture(s.doc, r.p, pos_in(r.p, a), data, a.value("width", 0.0), a.value("height", 0.0), sarg(a, "alt_text"), r.part, track(a));
+             insert_picture(s.doc, r.p, pos_in(r.p, a), data, darg(a, "width", 0.0), darg(a, "height", 0.0), sarg(a, "alt_text"), r.part, track(a));
              return Json{{"ok", true}};
          }});
     add({"insert_break", "Insert break", "Page break, column break, line break, or a section break after a paragraph.",
          obj({{"doc", kDoc}, {"paragraph", kPara}, {"type", enm({"page", "column", "line", "section_next_page", "section_continuous", "section_even_page", "section_odd_page"}, "")},
-              {"position", integer("For page/column/line breaks.")}, {"after", str("")}, {"track", kTrack}, {"author", str("")}},
+              {"position", integer("For page/column/line breaks.")}, {"after", str("")}, {"track", kTrack}, {"author", str("Author of this change.")}},
              {"doc", "paragraph", "type"}),
          false, false, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
@@ -928,7 +1062,7 @@ std::vector<ToolDef> make_tools() {
     add({"insert_hyperlink", "Insert link", "Link text to a URL or to a bookmark (\"#name\"). Wrap existing text (match) or insert new link text.",
          obj({{"doc", kDoc}, {"paragraph", kPara}, {"url", str("https://..., mailto:..., or #bookmark")}, {"match", str("Existing text to link.")},
               {"occurrence", integer("")}, {"text", str("New link text to insert.")}, {"position", integer("Where to insert new text.")},
-              {"tooltip", str("")}, {"track", kTrack}, {"author", str("")}},
+              {"tooltip", str("")}, {"track", kTrack}, {"author", str("Author of this change.")}},
              {"doc", "paragraph", "url"}),
          false, false, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
@@ -974,7 +1108,7 @@ std::vector<ToolDef> make_tools() {
     }});
     add({"insert_note", "Footnote / endnote", "Insert a footnote or endnote reference at a position with the note text.",
          obj({{"doc", kDoc}, {"paragraph", kPara}, {"kind", enm({"footnote", "endnote"}, "")}, {"text", str("")}, {"position", integer("")},
-              {"after", str("Place the reference mark after this text.")}, {"track", kTrack}, {"author", str("")}},
+              {"after", str("Place the reference mark after this text.")}, {"track", kTrack}, {"author", str("Author of this change.")}},
              {"doc", "paragraph", "text"}),
          false, false, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
@@ -995,12 +1129,12 @@ std::vector<ToolDef> make_tools() {
          "Insert a Word field: PAGE, NUMPAGES, DATE \\@ \"MMMM d, yyyy\", TIME, AUTHOR, TITLE, FILENAME, REF bookmark \\h, "
          "PAGEREF bookmark \\h, SEQ Figure \\* ARABIC, STYLEREF \"Heading 1\", NUMWORDS, MERGEFIELD Name, IF ...",
          obj({{"doc", kDoc}, {"paragraph", kPara}, {"code", str("Field instruction.")}, {"result", str("Cached display text (Word updates it).")},
-              {"position", integer("")}, {"after", str("")}, {"format", kRunFmt}, {"track", kTrack}, {"author", str("")}},
+              {"position", integer("")}, {"after", str("")}, {"format", kRunFmt}, {"track", kTrack}, {"author", str("Author of this change.")}},
              {"doc", "paragraph", "code"}),
          false, false, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
              auto r = para(s, a);
-             insert_field(s.doc, r.p, pos_in(r.p, a), need(a, "code"), sarg(a, "result"), a.value("format", Json()), track(a));
+             insert_field(s.doc, r.p, pos_in(r.p, a), need(a, "code"), sarg(a, "result"), obj_arg(a, "format"), track(a));
              return Json{{"ok", true}};
          }});
     add({"list_fields", "Fields", "", obj({{"doc", kDoc}}, {"doc"}), true, false, [](Sessions& S, const Json& a) {
@@ -1088,7 +1222,7 @@ std::vector<ToolDef> make_tools() {
              {"doc", "setup"}),
          false, false, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
-             Json props = a["setup"];
+             Json props = obj_arg(a, "setup");
              if (a.contains("even_odd_headers")) props["even_odd_headers"] = a["even_odd_headers"];
              int n = (int)sections(s.doc).size();
              if (a.contains("section")) format_section(s.doc, iarg(a, "section", 1), props, track(a));
@@ -1142,8 +1276,8 @@ std::vector<ToolDef> make_tools() {
          "custom properties (name -> string/number/bool; null removes).",
          obj({{"doc", kDoc}, {"core", anyobj("")}, {"custom", anyobj("")}}, {"doc"}), false, false, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
-             if (a.contains("core")) set_core_properties(s.doc, a["core"]);
-             if (a.contains("custom")) for (auto& [k, v] : a["custom"].items()) set_custom_property(s.doc, k, v);
+             if (a.contains("core")) set_core_properties(s.doc, obj_arg(a, "core"));
+             if (a.contains("custom")) for (auto& [k, v] : obj_arg(a, "custom").items()) set_custom_property(s.doc, k, v);
              return Json{{"core", core_properties(s.doc)}, {"custom", custom_properties(s.doc)}};
          }});
     add({"get_settings", "Settings", "Document settings: track changes, protection, compatibility mode, tab stops, zoom, ...",
@@ -1154,7 +1288,7 @@ std::vector<ToolDef> make_tools() {
          "embed_true_type_fonts, hide_spelling_errors, hide_grammar_errors, compatibility_mode (15 = Word 2013+).",
          obj({{"doc", kDoc}, {"settings", anyobj("")}}, {"doc", "settings"}), false, false, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
-             set_settings(s.doc, a["settings"]);
+             set_settings(s.doc, obj_arg(a, "settings"));
              return settings_json(s.doc);
          }});
     add({"protect_document", "Restrict editing",

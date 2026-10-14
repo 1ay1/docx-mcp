@@ -1,5 +1,8 @@
 #include "wml/docops.hpp"
 
+#include <cmath>
+#include <cctype>
+#include <cstdio>
 #include <algorithm>
 #include <functional>
 #include <map>

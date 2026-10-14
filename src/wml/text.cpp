@@ -135,7 +135,7 @@ std::string ParaText::utf8() const { return util::to_utf8(text); }
 
 ParaText analyze(pugi::xml_node p) {
     ParaText pt;
-    Walker w{pt.atoms};
+    Walker w{pt.atoms, 0, {}};
     w.walk(p, Rev::None, {}, {});
     for (int i = 0; i < (int)pt.atoms.size(); i++) {
         auto& a = pt.atoms[i];
@@ -148,7 +148,7 @@ ParaText analyze(pugi::xml_node p) {
 
 std::u32string original_text(pugi::xml_node p) {
     ParaText pt;
-    Walker w{pt.atoms};
+    Walker w{pt.atoms, 0, {}};
     w.walk(p, Rev::None, {}, {});
     std::u32string s;
     for (auto& a : pt.atoms) {

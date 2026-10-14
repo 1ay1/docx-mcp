@@ -1,5 +1,8 @@
 #include "wml/styles.hpp"
 
+#include <algorithm>
+#include <map>
+#include <cctype>
 #include <functional>
 #include <set>
 #include <stdexcept>
@@ -166,9 +169,7 @@ std::string upsert_style(Document& d, const std::string& id_in, const Json& prop
         if (k == "name") xml::set_attr(schema::ensure_child(s, "w:name"), "w:val", v.get<std::string>());
         else if (k == "type") {
             if (xml::attr(s, "w:type") != v.get<std::string>()) {
-                std::string why;
-                if (!schema::value_valid(schema::type_of(s), "w:type", v.get<std::string>(), &why)) throw std::runtime_error(why);
-                xml::set_attr(s, "w:type", v.get<std::string>());
+                enum_attr(s, "w:type", v.get<std::string>());
             }
         } else if (k == "based_on" || k == "next" || k == "link") {
             const char* q = k == "based_on" ? "w:basedOn" : k == "next" ? "w:next" : "w:link";

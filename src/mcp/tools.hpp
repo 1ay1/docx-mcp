@@ -22,7 +22,20 @@ struct ToolDef {
 
 std::vector<ToolDef> make_tools();
 
+// Named subsets of the catalog. "full" = everything. "core" fits clients
+// with tool limits (Cursor) and small context windows. "review" is for
+// commenting and track-changes work. A comma list of tool names also works.
+std::vector<ToolDef> select_tools(std::vector<ToolDef> all, const std::string& profile);
+std::vector<std::string> profile_names();
+
 // Instructions sent to the client at initialize.
 std::string server_instructions();
+
+// Coerce arguments to the tool's schema the way models tend to get them
+// wrong: numbers/booleans/objects/arrays sent as strings, a single value
+// where a list is expected, wrong-case enum values, unknown argument names
+// that are close to a real one. Throws with a clear message when an argument
+// can't be made to fit. Returns notes about corrections it made.
+std::vector<std::string> normalize_args(const ToolDef& t, Json& args);
 
 }  // namespace docx::server

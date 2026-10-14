@@ -128,20 +128,20 @@ int main(int argc, char** argv) {
                 // and no revision markup may remain
                 auto left = wml::list_revisions(re);
                 if (!left.empty()) {
-                    std::printf("LEFTOVER %s %s: %zu revisions (%s)\n", base.filename().c_str(), acc ? "accept" : "reject",
+                    std::printf("LEFTOVER %s %s: %zu revisions (%s)\n", base.filename().string().c_str(), acc ? "accept" : "reject",
                                 left.size(), left[0].type.c_str());
                     m = 1;
                 }
                 // schema validity of the result
                 auto issues = schema::validate(re.doc_xml().document_element());
                 if (!issues.empty()) {
-                    std::printf("INVALID %s %s: %s :: %s\n", base.filename().c_str(), acc ? "accept" : "reject",
+                    std::printf("INVALID %s %s: %s :: %s\n", base.filename().string().c_str(), acc ? "accept" : "reject",
                                 issues[0].path.c_str(), issues[0].message.c_str());
                     m = 1;
                 }
                 bad += m;
             } catch (std::exception& e) {
-                std::printf("ERROR %s: %s\n", base.filename().c_str(), e.what());
+                std::printf("ERROR %s: %s\n", base.filename().string().c_str(), e.what());
                 bad++;
             }
         }

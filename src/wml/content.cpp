@@ -1,4 +1,6 @@
 // Pictures, breaks, sections, headers/footers, notes, bookmarks, hyperlinks.
+#include <map>
+#include <cctype>
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -390,9 +392,9 @@ void format_section(Document& d, int index, const Json& props, const EditOpts& o
         } else if (k == "column_space") xml::set_attr(schema::ensure_child(s, "w:cols"), "w:space", std::to_string(twips_of(v)));
         else if (k == "type") {
             if (v.get<std::string>() == "nextPage") s.remove_child("w:type");
-            else xml::set_attr(schema::ensure_child(s, "w:type"), "w:val", v.get<std::string>());
+            else enum_attr(schema::ensure_child(s, "w:type"), "w:val", v.get<std::string>());
         } else if (k == "title_page") { if (v.get<bool>()) schema::ensure_child(s, "w:titlePg"); else s.remove_child("w:titlePg"); }
-        else if (k == "vertical_align") xml::set_attr(schema::ensure_child(s, "w:vAlign"), "w:val", v.get<std::string>());
+        else if (k == "vertical_align") enum_attr(schema::ensure_child(s, "w:vAlign"), "w:val", v.get<std::string>());
         else if (k == "line_numbers") {
             if (v.is_null() || (v.is_boolean() && !v.get<bool>())) { s.remove_child("w:lnNumType"); continue; }
             auto l = schema::ensure_child(s, "w:lnNumType");
