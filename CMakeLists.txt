@@ -37,6 +37,19 @@ target_compile_options(docx_schema_data PRIVATE -O1 -w)
 file(GLOB_RECURSE DOCX_CORE_SOURCES CONFIGURE_DEPENDS
     src/util/*.cpp src/opc/*.cpp src/xml/*.cpp src/schema/*.cpp src/wml/*.cpp)
 list(REMOVE_ITEM DOCX_CORE_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/schema/schema_data.cpp)
+
+# Word's template parts (blank document, built-in styles) compiled in.
+file(GLOB_RECURSE DOCX_ASSETS CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/assets/*.xml)
+set(DOCX_ASSETS_CPP ${CMAKE_CURRENT_BINARY_DIR}/assets_data.cpp)
+set(DOCX_ASSETS_LIST ${CMAKE_CURRENT_BINARY_DIR}/assets_list.txt)
+string(REPLACE ";" "\n" _assets_lines "${DOCX_ASSETS}")
+file(WRITE ${DOCX_ASSETS_LIST}.tmp "${_assets_lines}")
+file(COPY_FILE ${DOCX_ASSETS_LIST}.tmp ${DOCX_ASSETS_LIST} ONLY_IF_DIFFERENT)
+add_custom_command(OUTPUT ${DOCX_ASSETS_CPP}
+    COMMAND ${CMAKE_COMMAND} -DOUT=${DOCX_ASSETS_CPP} -DLIST=${DOCX_ASSETS_LIST}
+            -DROOT=${CMAKE_CURRENT_SOURCE_DIR}/assets -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed.cmake
+    DEPENDS ${DOCX_ASSETS} ${DOCX_ASSETS_LIST} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed.cmake)
+list(APPEND DOCX_CORE_SOURCES ${DOCX_ASSETS_CPP})
 add_library(docx_core STATIC ${DOCX_CORE_SOURCES})
 target_include_directories(docx_core PUBLIC src)
 target_link_libraries(docx_core PUBLIC docx_thirdparty docx_schema_data nlohmann_json::nlohmann_json)

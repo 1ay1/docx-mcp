@@ -242,6 +242,13 @@ pugi::xml_node ancestor(pugi::xml_node n, std::string_view q) {
 
 bool is(pugi::xml_node n, std::string_view q) { return n && n.type() == pugi::node_element && q == n.name(); }
 
+pugi::xml_node root_of(pugi::xml_node n) {
+    auto r = n.root();
+    for (auto c : r.children())
+        if (c.type() == pugi::node_element) return c;
+    return {};
+}
+
 std::string attr(pugi::xml_node n, std::string_view q, std::string_view def) {
     auto a = n.attribute(std::string(q).c_str());
     return a ? std::string(a.value()) : std::string(def);

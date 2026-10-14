@@ -27,6 +27,8 @@ std::vector<pugi::xml_node> descendants(pugi::xml_node n, std::string_view qname
 pugi::xml_node first_descendant(pugi::xml_node n, std::string_view qname);
 pugi::xml_node ancestor(pugi::xml_node n, std::string_view qname);
 bool is(pugi::xml_node n, std::string_view qname);
+// Document element of the tree n lives in.
+pugi::xml_node root_of(pugi::xml_node n);
 std::string attr(pugi::xml_node n, std::string_view qname, std::string_view def = "");
 void set_attr(pugi::xml_node n, std::string_view qname, std::string_view value);
 void remove_attr(pugi::xml_node n, std::string_view qname);
