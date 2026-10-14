@@ -16,8 +16,8 @@ const std::vector<TaskGroup>& task_groups() {
          {"read_document", "get_text", "get_paragraph", "get_outline", "find_text", "get_statistics"}},
         {"Text", "type, insert, replace, delete or find-and-replace text",
          {"insert_text", "replace_text", "delete_text", "find_replace"}},
-        {"Paragraphs", "add, delete, split, merge or move paragraphs",
-         {"insert_paragraph", "delete_paragraph", "split_paragraph", "merge_paragraphs", "move_paragraphs"}},
+        {"Paragraphs", "add, delete, split, merge or move paragraphs; write a whole document from Markdown",
+         {"insert_markdown", "insert_paragraph", "delete_paragraph", "split_paragraph", "merge_paragraphs", "move_paragraphs"}},
         {"Formatting", "bold, italic, font, size, color, highlight; alignment, spacing, indents; styles like Heading 1",
          {"format_text", "format_paragraph", "apply_style", "clear_formatting", "list_styles", "get_style", "modify_style",
           "delete_style"}},
@@ -266,9 +266,9 @@ const std::vector<Workflow>& workflows() {
          {{"path", "Where to save the new .docx.", true}, {"brief", "What the document should say.", true}},
          [](const std::vector<std::pair<std::string, std::string>>& a) -> std::string {
              return "Create a Word document at " + arg(a, "path") + " from this brief:\n\n" + arg(a, "brief") +
-                    "\n\nUse create_document, then insert_paragraph with style \"Title\", \"Heading 1\", \"Heading 2\" for "
-                    "structure, apply_list for bullet or numbered points, insert_table for tabular content, and "
-                    "set_header_footer for a page-number footer (\"Page {PAGE} of {NUMPAGES}\"). Save with save_document.";
+                    "\n\nUse create_document, then write the content in one insert_markdown call (# headings, lists, tables, "
+                    "**bold**), and set_header_footer for a page-number footer (\"Page {PAGE} of {NUMPAGES}\"). "
+                    "Polish with format_paragraph, format_table and set_page_setup. Save with save_document.";
          }},
         {"redline", "Compare two versions",
          "Show the differences between two versions of a document as tracked changes.",

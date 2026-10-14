@@ -137,6 +137,10 @@ def exercise(R, doc, track, work, tag):
     np3 = R.call("insert_paragraph", doc=doc, paragraph=p3, text="Doomed paragraph", **t)
     if new_id(np3):
         R.call("delete_paragraph", doc=doc, paragraphs=[new_id(np3)], **t)
+    R.call("insert_markdown", doc=doc, paragraph=p3, markdown=(
+        "## Imported\n\nSome **bold**, *italic*, `code` and a [link](https://example.com).\n\n"
+        "- one\n  - nested\n- two\n\n1. first\n2. second\n\n> quoted\n\n| A | B |\n|---|--:|\n| x | **y** |\n\n"
+        "```\ncode block\n```\n\n---\n"), **t)
 
     # styles
     R.call("list_styles", doc=doc)

@@ -16,6 +16,7 @@
 #include "wml/document.hpp"
 #include "wml/render.hpp"
 #include "wml/edit.hpp"
+#include "wml/markdown.hpp"
 #include "wml/structure.hpp"
 #include "wml/styles.hpp"
 #include "wml/text.hpp"
@@ -623,6 +624,35 @@ std::vector<ToolDef> make_tools() {
                  made.push_back(para_brief(s.doc, cur));
              }
              return Json{{"inserted", made}};
+         }});
+    add({"insert_markdown", "Insert Markdown",
+         "Write Markdown as real Word content: # headings (Heading 1-6), paragraphs with **bold**, *italic*, `code`, ~~strike~~ and "
+         "[links](url), - bullets and 1. numbered lists (indent 2 spaces to nest), > quotes, ``` code blocks, | tables |, --- rules, "
+         "\\pagebreak. The fastest way to write a whole document. Goes after `paragraph` (or the end).",
+         obj({{"doc", kDoc}, {"markdown", str("Markdown text.")}, {"paragraph", kPara},
+              {"table", integer("Anchor on this table (1-based) instead of a paragraph.")},
+              {"where", enm({"after", "before"}, "Default after.")}, {"track", kTrack}},
+             {"doc", "markdown"}),
+         false, false, [](Sessions& S, const Json& a) {
+             auto& s = mut(S, a);
+             pugi::xml_node ref;
+             if (a.contains("table")) ref = table_at(s.doc, iarg(a, "table", 1));
+             else if (a.contains("paragraph")) ref = para(s, a).p;
+             else ref = last_block(s.doc);
+             bool fill_blank = !a.contains("paragraph") && !a.contains("table") && blocks(s.doc.body()).size() == 1 &&
+                               std::string_view(ref.name()) == "w:p" && analyze(ref).atoms.empty() &&
+                               !ref.child("w:pPr").child("w:sectPr") && !ref.child("w:pPr").child("w:numPr");
+             auto r = insert_markdown(s.doc, ref, sarg(a, "where", "after") == "after", need(a, "markdown"), track(a));
+             if (fill_blank && (r.paragraphs.size() || r.tables)) delete_paragraph(s.doc, ref, {false});
+             Json made = Json::array();
+             for (std::size_t i = 0; i < r.paragraphs.size(); i++) {
+                 if (i == 12 && r.paragraphs.size() > 14) {
+                     made.push_back("... " + std::to_string(r.paragraphs.size() - 13) + " more");
+                     i = r.paragraphs.size() - 1;
+                 }
+                 made.push_back(para_brief(s.doc, r.paragraphs[i]));
+             }
+             return Json{{"paragraphs", r.paragraphs.size()}, {"tables", r.tables}, {"lists", r.lists}, {"inserted", made}};
          }});
     add({"delete_paragraph", "Delete paragraph", "Delete whole paragraphs (text and paragraph mark).",
          obj({{"doc", kDoc}, {"paragraphs", arr(str(""), "Paragraph ids/numbers.")}, {"track", kTrack}, {"author", str("Author of this change.")}}, {"doc", "paragraphs"}),
