@@ -1,6 +1,6 @@
 # Tool reference
 
-Generated from `docx-mcp --list-tools` by `tools/gen_tool_docs.py`. 87 tools.
+Generated from `docx-mcp --list-tools` by `tools/gen_tool_docs.py`. 90 tools.
 
 Every tool that edits takes `doc` (a handle or a file path), and most take `track` (record as a tracked change) and `author`. Paragraphs are addressed by the `id` that `read_document` returns.
 
@@ -15,7 +15,7 @@ Every tool that edits takes `doc` (a handle or a file path), and most take `trac
 - [Track changes](#track-changes): `set_track_changes`, `list_revisions`, `accept_revisions`, `reject_revisions`, `compare_documents`
 - [Comments](#comments): `add_comment`, `list_comments`, `reply_comment`, `resolve_comment`, `edit_comment`, `delete_comment`
 - [Tables](#tables): `insert_table`, `read_table`, `set_cell`, `table_rows`, `table_columns`, `merge_cells`, `format_table`, `delete_table`
-- [Insert](#insert): `insert_picture`, `insert_break`, `insert_hyperlink`, `list_hyperlinks`, `remove_hyperlinks`, `add_bookmark`, `list_bookmarks`, `delete_bookmark`, `insert_note`, `list_notes`, `delete_note`, `insert_field`, `list_fields`, `update_fields`, `insert_toc`, `insert_equation`, `add_content_control`, `list_content_controls`, `set_content_control`
+- [Insert](#insert): `insert_picture`, `insert_break`, `insert_hyperlink`, `list_hyperlinks`, `remove_hyperlinks`, `add_bookmark`, `list_bookmarks`, `delete_bookmark`, `insert_note`, `list_notes`, `delete_note`, `insert_field`, `list_fields`, `update_fields`, `insert_toc`, `insert_equation`, `insert_caption`, `insert_cross_reference`, `list_reference_targets`, `add_content_control`, `list_content_controls`, `set_content_control`
 - [Page layout](#page-layout): `get_page_setup`, `set_page_setup`, `set_header_footer`, `remove_header_footer`, `read_header_footer`
 - [File](#file): `get_properties`, `set_properties`, `get_settings`, `set_settings`, `protect_document`, `unprotect_document`
 - [Expert](#expert): `validate_document`, `get_xml`, `set_paragraph_xml`
@@ -844,6 +844,46 @@ Insert an equation from LaTeX-like input: x^2, a_i, \frac{a}{b}, \sqrt{x}, \sum_
 | `paragraph` | string | yes | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
 | `position` | integer |  | Character offset to insert at (default end). |
 | `track` | boolean |  | Record as a tracked change (default: the document's setting). |
+
+### `insert_caption`
+
+Add a numbered caption (References > Insert Caption): "Figure 1: text", "Table 2: text". Numbers are real SEQ fields, so they renumber when captions are added or moved. Put it after a picture's paragraph, or before a table (table = n).
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `author` | string |  | Author of this change. |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `label` | string |  | Figure (default), Table, Equation, or your own one-word label. |
+| `paragraph` | string |  | Paragraph to put the caption next to. |
+| `separator` | string |  | Between number and text (default ": "). |
+| `table` | integer |  | Or a table number (1-based) to caption. |
+| `text` | string |  | Caption text after the number. |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
+| `where` | `after` \\| `before` |  | Default: before a table, after anything else. |
+
+### `insert_cross_reference`
+
+Insert a cross-reference (References > Cross-reference) to a heading, caption, bookmark or note: "see Figure 2", "as described in Section 3", "on page 5". It's a REF/PAGEREF/NOTEREF field that stays right when the document changes. Targets come from list_reference_targets.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `after` | string |  | Insert after this text. |
+| `author` | string |  | Author of this change. |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `link` | boolean |  | Ctrl+click jumps to the target (default true). |
+| `paragraph` | string | yes | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
+| `position` | integer |  | Character offset to insert at (default end). |
+| `show` | `text` \\| `number` \\| `label_number` \\| `page` \\| `above_below` |  | What to show: the text, its number, "Figure 2" (label_number), the page, or above/below. Default text. |
+| `target` | string | yes | Heading or caption paragraph id, bookmark name, or footnote:N / endnote:N. |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
+
+### `list_reference_targets`
+
+What a cross-reference can point at: headings, figure/table captions, bookmarks, footnotes and endnotes, with the target id to pass to insert_cross_reference.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 
 ### `add_content_control`
 

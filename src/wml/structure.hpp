@@ -90,6 +90,21 @@ void insert_toc(Document& d, pugi::xml_node p, const Json& opts, const EditOpts&
 // Recompute TOC entries, SEQ/REF/STYLEREF results that don't need layout.
 // Sets updateFields so Word refreshes page numbers on open.
 int update_fields(Document& d);
+
+// ── captions and cross-references (References tab) ──
+// A "Figure 3: text" caption paragraph (style Caption, SEQ field numbered like
+// Word) before or after block `ref` (a paragraph or table). Returns it.
+pugi::xml_node insert_caption(Document& d, pugi::xml_node ref, bool after, const std::string& label,
+                              const std::string& text, const std::string& separator, const EditOpts& o);
+// What a cross-reference can point at: headings, captions, bookmarks, notes.
+struct RefTarget { std::string kind, id, text, label, para; };
+std::vector<RefTarget> reference_targets(Document& d);
+// Insert a cross-reference at visible pos of p. target = paragraph id of a
+// heading/caption, a bookmark name, or "footnote:2"/"endnote:1". show:
+// text | number | page | label_number | above_below. Adds Word's hidden
+// _Ref bookmark around the target when it needs one. Returns the field code.
+std::string insert_cross_reference(Document& d, pugi::xml_node p, int pos, const std::string& target,
+                                   const std::string& show, bool link, const EditOpts& o);
 struct FieldInfo { std::string instr, result, para; };
 std::vector<FieldInfo> list_fields(Document& d);
 

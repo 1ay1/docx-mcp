@@ -232,6 +232,12 @@ def exercise(R, doc, track, work, tag):
     R.call("insert_field", doc=doc, paragraph=p1, code="DATE \\@ \"yyyy-MM-dd\"", **t)
     R.call("insert_field", doc=doc, paragraph=p2, code="REF cov_bm \\h", **t)
     R.call("list_fields", doc=doc)
+    cap = R.call("insert_caption", doc=doc, paragraph=p0, text="A caption", **t)
+    R.call("insert_caption", doc=doc, table=1, label="Table", text="Table caption", ok_errors="*", **t)
+    R.call("list_reference_targets", doc=doc)
+    if isinstance(cap, dict) and cap.get("id"):
+        for show in ("label_number", "text", "number", "page"):
+            R.call("insert_cross_reference", doc=doc, paragraph=p3, target=cap["id"], show=show, **t)
     R.call("insert_toc", doc=doc, paragraph=p0, title="Contents", from_level=1, to_level=3, **t)
     R.call("update_fields", doc=doc)
     R.call("insert_equation", doc=doc, paragraph=p2, position=1, equation="x^2 + y_1 = \\sqrt(z)/2", **t)

@@ -334,4 +334,33 @@ TEST(tracked_toc_valid) {
     CHECK_EQ(schema_issues(d), 0);
 }
 
+// captions number in document order; cross-references show label+number,
+// text, number, a note's number; text typed after a field lands after it
+TEST(captions_and_cross_references) {
+    auto d = sample(false);
+    auto ps = paragraphs(d.body());
+    auto c2 = insert_caption(d, ps[1], true, "Figure", "Later", "", {});
+    auto c1 = insert_caption(d, ps[0], true, "Figure", "Earlier", "", {});
+    CHECK_EQ(analyze(c1).utf8(), std::string("Figure 1: Earlier"));
+    CHECK_EQ(analyze(c2).utf8(), std::string("Figure 2: Later"));
+    auto q = insert_paragraph(d, ps.back(), true, U"See ", "", nullptr, {});
+    insert_cross_reference(d, q, (int)analyze(q).vis.size(), para_id(c2), "label_number", true, {});
+    insert_text(d, q, (int)analyze(q).vis.size(), U", ", nullptr, {});
+    insert_cross_reference(d, q, (int)analyze(q).vis.size(), para_id(c2), "text", true, {});
+    insert_text(d, q, (int)analyze(q).vis.size(), U", ", nullptr, {});
+    insert_cross_reference(d, q, (int)analyze(q).vis.size(), para_id(c2), "number", true, {});
+    insert_text(d, q, (int)analyze(q).vis.size(), U".", nullptr, {});
+    CHECK_EQ(analyze(q).utf8(), std::string("See Figure 2, Later, 2."));
+    // a new caption before the referenced one renumbers it, and the reference follows
+    insert_caption(d, paragraphs(d.body())[0], false, "Figure", "First", "", {});
+    update_fields(d);
+    CHECK_EQ(analyze(c2).utf8(), std::string("Figure 3: Later"));
+    CHECK_EQ(analyze(q).utf8(), std::string("See Figure 3, Later, 3."));
+    bool threw = false;
+    try { insert_caption(d, ps[0], true, "Two words", "x", "", {}); } catch (std::exception&) { threw = true; }
+    CHECK(threw);
+    CHECK_EQ(schema_issues(d), 0);
+    save(d, "captions_and_cross_references");
+}
+
 int main(int argc, char** argv) { return t::run(argc, argv); }

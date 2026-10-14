@@ -77,6 +77,10 @@ void copy_rpr(pugi::xml_node dst_run, pugi::xml_node src_rpr);
 // Paragraph-mark run properties as a run rPr (minus ins/del/rPrChange).
 void copy_mark_rpr(pugi::xml_node dst_run, pugi::xml_node p);
 
+// After `after` (a node at p's level): if it's inside a complex field's
+// result, the node just past that field's end mark; else after.next_sibling().
+pugi::xml_node past_field_result(pugi::xml_node after);
+
 bool is_revision_container(pugi::xml_node n);
 // Merge adjacent runs with identical properties (and adjacent same revision
 // containers) — keeps the XML tidy after edits.

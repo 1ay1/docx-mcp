@@ -71,6 +71,8 @@ TASKS = [
     ("protect the document with a password", "protect_document"),
     ("undo the last change", "undo"),
     ("update fields", "update_fields"),
+    ("add a figure caption", "insert_caption"),
+    ("insert a cross-reference to a figure", "insert_cross_reference"),
 ]
 BROAD = ["what can you do with ms word docs?", "help me edit a docx", "work on my Word file"]
 

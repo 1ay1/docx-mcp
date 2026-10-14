@@ -1217,6 +1217,60 @@ std::vector<ToolDef> make_tools() {
              insert_toc(s.doc, para(s, a).p, o, track(a));
              return Json{{"ok", true}};
          }});
+    add({"insert_caption", "Caption",
+         "Add a numbered caption (References > Insert Caption): \"Figure 1: text\", \"Table 2: text\". Numbers are "
+         "real SEQ fields, so they renumber when captions are added or moved. Put it after a picture's paragraph, or "
+         "before a table (table = n).",
+         obj({{"doc", kDoc}, {"paragraph", str("Paragraph to put the caption next to.")},
+              {"table", integer("Or a table number (1-based) to caption.")},
+              {"label", str("Figure (default), Table, Equation, or your own one-word label.")},
+              {"text", str("Caption text after the number.")}, {"separator", str("Between number and text (default \": \").")},
+              {"where", enm({"after", "before"}, "Default: before a table, after anything else.")}, {"track", kTrack},
+              {"author", str("Author of this change.")}},
+             {"doc"}),
+         false, false, [](Sessions& S, const Json& a) {
+             auto& s = mut(S, a);
+             pugi::xml_node ref;
+             if (a.contains("table")) ref = table_at(s.doc, iarg(a, "table", 1));
+             else if (a.contains("paragraph")) ref = para(s, a).p;
+             else throw std::runtime_error("give paragraph or table");
+             bool is_table = std::string_view(ref.name()) == "w:tbl";
+             bool after = sarg(a, "where", is_table ? "before" : "after") == "after";
+             auto p = insert_caption(s.doc, ref, after, sarg(a, "label", "Figure"), sarg(a, "text"), sarg(a, "separator"), track(a));
+             return para_brief(s.doc, p);
+         }});
+    add({"list_reference_targets", "Cross-reference targets",
+         "What a cross-reference can point at: headings, figure/table captions, bookmarks, footnotes and endnotes, "
+         "with the target id to pass to insert_cross_reference.",
+         obj({{"doc", kDoc}}, {"doc"}), true, false, [](Sessions& S, const Json& a) {
+             Json v = Json::array();
+             for (auto& t : reference_targets(sess(S, a).doc)) {
+                 Json j = {{"kind", t.kind}, {"target", t.id}, {"text", t.text}};
+                 if (!t.label.empty()) j["label"] = t.label;
+                 if (!t.para.empty() && t.para != t.id) j["paragraph"] = t.para;
+                 v.push_back(j);
+             }
+             return v;
+         }});
+    add({"insert_cross_reference", "Cross-reference",
+         "Insert a cross-reference (References > Cross-reference) to a heading, caption, bookmark or note: \"see Figure "
+         "2\", \"as described in Section 3\", \"on page 5\". It's a REF/PAGEREF/NOTEREF field that stays right when "
+         "the document changes. Targets come from list_reference_targets.",
+         obj({{"doc", kDoc}, {"paragraph", kPara}, {"target", str("Heading or caption paragraph id, bookmark name, or footnote:N / endnote:N.")},
+              {"show", enm({"text", "number", "label_number", "page", "above_below"},
+                           "What to show: the text, its number, \"Figure 2\" (label_number), the page, or above/below. Default text.")},
+              {"link", boolean("Ctrl+click jumps to the target (default true).")}, {"position", integer("")}, {"after", str("")},
+              {"track", kTrack}, {"author", str("Author of this change.")}},
+             {"doc", "paragraph", "target"}),
+         false, false, [](Sessions& S, const Json& a) {
+             auto& s = mut(S, a);
+             auto r = para(s, a);
+             auto code = insert_cross_reference(s.doc, r.p, pos_in(r.p, a), need(a, "target"), sarg(a, "show", "text"),
+                                                barg(a, "link", true), track(a));
+             Json out = para_brief(s.doc, r.p);
+             out["field"] = code;
+             return out;
+         }});
     add({"insert_equation", "Equation", "Insert an equation from LaTeX-like input: x^2, a_i, \\frac{a}{b}, \\sqrt{x}, \\sum_{i=1}^{n}, \\int, Greek letters.",
          obj({{"doc", kDoc}, {"paragraph", kPara}, {"equation", str("")}, {"display", boolean("Own line (display) vs inline.")}, {"position", integer("")},
               {"track", kTrack}},

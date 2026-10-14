@@ -19,7 +19,7 @@ GROUPS = [
     ("Tables", ["insert_table", "read_table", "set_cell", "table_rows", "table_columns", "merge_cells", "format_table", "delete_table"]),
     ("Insert", ["insert_picture", "insert_break", "insert_hyperlink", "list_hyperlinks", "remove_hyperlinks", "add_bookmark",
                 "list_bookmarks", "delete_bookmark", "insert_note", "list_notes", "delete_note", "insert_field", "list_fields",
-                "update_fields", "insert_toc", "insert_equation", "add_content_control", "list_content_controls", "set_content_control"]),
+                "update_fields", "insert_toc", "insert_equation", "insert_caption", "insert_cross_reference", "list_reference_targets", "add_content_control", "list_content_controls", "set_content_control"]),
     ("Page layout", ["get_page_setup", "set_page_setup", "set_header_footer", "remove_header_footer", "read_header_footer"]),
     ("File", ["get_properties", "set_properties", "get_settings", "set_settings", "protect_document", "unprotect_document"]),
     ("Expert", ["validate_document", "get_xml", "set_paragraph_xml"]),

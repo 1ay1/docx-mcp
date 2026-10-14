@@ -408,6 +408,31 @@ bool is_revision_container(pugi::xml_node n) {
     return q == "w:ins" || q == "w:del" || q == "w:moveFrom" || q == "w:moveTo";
 }
 
+pugi::xml_node past_field_result(pugi::xml_node after) {
+    int depth = 0;
+    for (auto s = after.next_sibling(); s; s = s.next_sibling()) {
+        // fldChars sit in runs, possibly inside an ins/del wrapper
+        pugi::xml_node fc;
+        for (auto r = s; r && !fc;) {
+            fc = r.child("w:fldChar");
+            if (fc || !is_revision_container(r)) break;
+            r = r.first_child();
+        }
+        if (!fc) {
+            // text means we're past any field result
+            if (xml::first_descendant(s, "w:t") || xml::first_descendant(s, "w:delText")) return after.next_sibling();
+            continue;
+        }
+        std::string t = xml::attr(fc, "w:fldCharType");
+        if (t == "begin") depth++;
+        else if (t == "end") {
+            if (depth == 0) return s.next_sibling();
+            depth--;
+        }
+    }
+    return after.next_sibling();
+}
+
 namespace {
 bool same_rpr(pugi::xml_node a, pugi::xml_node b) {
     auto ra = a.child("w:rPr"), rb = b.child("w:rPr");

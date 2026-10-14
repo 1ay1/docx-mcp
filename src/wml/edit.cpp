@@ -76,7 +76,9 @@ InsPoint insertion_point(pugi::xml_node p, int pos) {
             pugi::xml_node node = a.run;
             while (is_revision_container(node.parent())) node = node.parent();
             ip.parent = node.parent();
-            ip.before = node.next_sibling();
+            // the last visible text may be a complex field's result: new text
+            // goes after the field's end mark, not inside the result
+            ip.before = past_field_result(node);
             ip.fmt_run = a.run;
             // don't put text after the last paragraph-level bookmark/comment ends inside a hyperlink
         } else {

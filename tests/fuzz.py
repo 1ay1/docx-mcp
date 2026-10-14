@@ -135,7 +135,15 @@ class Fuzz:
 
     def extra(self, pid, s, e, track):
         r = self.r
-        k = r.randint(0, 33)
+        k = r.randint(0, 36)
+        if k == 34:
+            return self.call("insert_caption", paragraph=pid, label=r.choice(["Figure", "Table", "Chart"]), text=self.text() or "c", **track)
+        if k == 35:
+            tg = self.first("list_reference_targets", "target")
+            return self.call("insert_cross_reference", paragraph=pid, position=s, target=tg or pid,
+                             show=r.choice(["text", "number", "label_number", "page", "above_below"]), **track)
+        if k == 36:
+            return self.call("list_reference_targets")
         if k == 0:
             return self.call(r.choice(["get_outline", "get_statistics", "list_styles", "list_revisions", "list_comments",
                                         "list_hyperlinks", "list_bookmarks", "list_notes", "list_fields",

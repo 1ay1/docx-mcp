@@ -34,7 +34,7 @@ std::pair<pugi::xml_node, pugi::xml_node> insert_spot(pugi::xml_node p, int pos)
     if (n > 0) {
         auto node = pt.atoms[pt.vis[n - 1]].run;
         while (is_revision_container(node.parent())) node = node.parent();
-        return {node.parent(), node.next_sibling()};
+        return {node.parent(), past_field_result(node)};
     }
     return {p, {}};
 }
@@ -439,7 +439,35 @@ int update_fields(Document& d) {
                 result = format_number(seq[id], fmt);
                 have = true;
             } else if (kind == "ref" && words.size() > 1) {
-                for (auto& b : bms) if (b.name == words[1]) { result = b.text; have = true; }
+                for (auto& b : bms) {
+                    if (b.name != words[1]) continue;
+                    result = b.text;
+                    have = true;
+                    // \n \r \w: the paragraph number (a heading's list label, a caption's label + number)
+                    bool num = instr.find("\\n") != std::string::npos || instr.find("\\r") != std::string::npos ||
+                               instr.find("\\w") != std::string::npos;
+                    if (num) {
+                        auto lbl = !b.para.empty() ? list_label(d, find_para(d, b.para).p) : std::string();
+                        if (!lbl.empty()) result = util::trim(lbl);
+                    }
+                }
+            } else if (kind == "noteref" && words.size() > 1) {
+                // the note's number: its position among notes of that kind, in document order
+                for (auto& b : bms) {
+                    if (b.name != words[1]) continue;
+                    auto bp = find_para(d, b.para).p;
+                    auto fr = xml::first_descendant(bp, "w:footnoteReference");
+                    const char* q = fr ? "w:footnoteReference" : "w:endnoteReference";
+                    auto ref = fr ? fr : xml::first_descendant(bp, "w:endnoteReference");
+                    if (!ref) break;
+                    int k = 0;
+                    for (auto r : xml::descendants(d.body(), q)) {
+                        k++;
+                        if (r == ref) break;
+                    }
+                    result = std::to_string(k);
+                    have = true;
+                }
             }
             if (!have) continue;
             // replace the cached result runs between sep and end
@@ -458,6 +486,154 @@ int update_fields(Document& d) {
     }
     set_update_fields(d);  // page-dependent results (PAGE, PAGEREF, NUMPAGES) refresh on open
     return n;
+}
+
+// ── captions and cross-references ──────────────────────────────────────────────────
+
+namespace {
+// SEQ identifier of a caption paragraph, or "".
+std::string caption_label(pugi::xml_node p) {
+    for (auto it : xml::descendants(p, "w:instrText")) {
+        auto w = util::split(util::trim(it.text().get()), ' ');
+        if (w.size() > 1 && util::iequals(w[0], "SEQ")) return w[1];
+    }
+    for (auto f : xml::descendants(p, "w:fldSimple")) {
+        auto w = util::split(util::trim(xml::attr(f, "w:instr")), ' ');
+        if (w.size() > 1 && util::iequals(w[0], "SEQ")) return w[1];
+    }
+    return "";
+}
+
+// The caption label of a target given as a paragraph id, or "".
+std::string lbl_of_target(Document& d, const std::string& target) {
+    try {
+        return caption_label(find_para(d, target).p);
+    } catch (...) {
+        return "";
+    }
+}
+
+// A hidden _Ref bookmark over visible [from, to) of p: an existing one with
+// exactly that text is reused (Word adds one per distinct range).
+std::string ref_bookmark(Document& d, pugi::xml_node p, int from, int to) {
+    auto t = analyze(p).text;
+    std::string want = util::to_utf8(t.substr(from, to - from));
+    std::set<std::string> taken;
+    for (auto& b : list_bookmarks(d)) {
+        taken.insert(b.name);
+        if (util::starts_with(b.name, "_Ref") && b.para == para_id(p) && b.text == want) return b.name;
+    }
+    std::string name;
+    do name = "_Ref" + std::to_string(100000000 + util::random_u32() % 900000000);
+    while (taken.count(name));
+    add_bookmark(d, p, from, p, to, name);
+    return name;
+}
+}  // namespace
+
+pugi::xml_node insert_caption(Document& d, pugi::xml_node ref, bool after, const std::string& label_in,
+                              const std::string& text, const std::string& separator, const EditOpts& o) {
+    std::string label = util::trim(label_in.empty() ? "Figure" : label_in);
+    for (char c : label)
+        if (!(std::isalnum((unsigned char)c) || c == '_'))
+            throw std::runtime_error("a caption label is one word (Figure, Table, Equation, or your own)");
+    // Word puts table captions above the table by default and others below; the caller decides
+    auto p = insert_paragraph(d, ref, after, U"", "Caption", nullptr, o);
+    insert_text(d, p, 0, util::to_u32(label + " "), nullptr, o);
+    insert_field(d, p, (int)analyze(p).vis.size(), "SEQ " + label + " \\* ARABIC", "1", nullptr, o);
+    std::string sep = separator.empty() ? ": " : separator;
+    if (!text.empty()) insert_text(d, p, (int)analyze(p).vis.size(), util::to_u32(sep + text), nullptr, o);
+    update_fields(d);
+    return p;
+}
+
+std::vector<RefTarget> reference_targets(Document& d) {
+    std::vector<RefTarget> v;
+    for (auto p : paragraphs(d.body(), false)) {
+        std::string t = util::trim(analyze(p).utf8());
+        if (t.empty()) continue;
+        if (int lv = heading_level(d, p); lv >= 1 && lv <= 9) {
+            v.push_back({"heading", para_id(p), t, "", para_id(p)});
+            continue;
+        }
+        if (auto lbl = caption_label(p); !lbl.empty()) v.push_back({"caption", para_id(p), t, lbl, para_id(p)});
+    }
+    for (auto& b : list_bookmarks(d))
+        if (!util::starts_with(b.name, "_")) v.push_back({"bookmark", b.name, b.text, "", b.para});
+    for (auto& n : list_notes(d)) v.push_back({n.kind, n.kind + ":" + n.id, n.text, "", n.anchor_para});
+    return v;
+}
+
+std::string insert_cross_reference(Document& d, pugi::xml_node p, int pos, const std::string& target,
+                                   const std::string& show_in, bool link, const EditOpts& o) {
+    std::string show = util::lower(show_in.empty() ? "text" : show_in);
+    std::string h = link ? " \\h" : "";
+    std::string instr;
+    // notes: NOTEREF to a bookmark around the reference mark
+    if (util::starts_with(target, "footnote:") || util::starts_with(target, "endnote:")) {
+        bool fn = target[0] == 'f';
+        std::string id = target.substr(target.find(':') + 1);
+        pugi::xml_node mark;
+        for (auto r : xml::descendants(d.body(), fn ? "w:footnoteReference" : "w:endnoteReference"))
+            if (xml::attr(r, "w:id") == id) mark = r;
+        if (!mark) throw std::runtime_error("no " + std::string(fn ? "footnote" : "endnote") + " " + id + " (list_notes shows them)");
+        auto mp = xml::ancestor(mark, "w:p");
+        // the mark's visible offset
+        ParaText pt = analyze(mp);
+        int at = 0;
+        for (std::size_t i = 0; i < pt.vis.size(); i++)
+            if (pt.atoms[pt.vis[i]].run == mark.parent()) at = (int)i;
+        std::string bm;
+        for (auto& b : list_bookmarks(d))
+            if (util::starts_with(b.name, "_Ref") && b.para == para_id(mp) && b.text.size() <= 4) bm = b.name;
+        if (bm.empty()) bm = ref_bookmark(d, mp, at, at + 1);
+        instr = "NOTEREF " + bm + h;
+        if (show == "page") instr = "PAGEREF " + bm + h;
+        else if (show == "above_below") instr = "NOTEREF " + bm + " \\p" + h;
+    } else {
+        // a bookmark by name, or a heading / caption paragraph by id
+        std::string bm;
+        for (auto& b : list_bookmarks(d))
+            if (b.name == target) bm = b.name;
+        if (bm.empty()) {
+            auto r = find_para(d, target);
+            if (r.part != d.main()) throw std::runtime_error("cross-references point at body paragraphs");
+            int n = (int)analyze(r.p).vis.size();
+            auto lbl = caption_label(r.p);
+            int from = 0, to = n;
+            if (!lbl.empty() && (show == "text" || show == "label_number" || show == "number")) {
+                // Word splits a caption at its separator: "Figure 1" | ": " | "text"
+                auto t = analyze(r.p).text;
+                auto k = t.find_first_of(U":.-\u2013\u2014");
+                if (k != std::u32string::npos) {
+                    if (show == "text") {
+                        from = (int)k + 1;
+                        while (from < n && t[from] == U' ') from++;
+                    } else {
+                        to = (int)k;
+                        while (to > 0 && t[to - 1] == U' ') to--;
+                        if (show == "number") {
+                            // just the number: back over the digits before the separator
+                            from = to;
+                            while (from > 0 && t[from - 1] >= U'0' && t[from - 1] <= U'9') from--;
+                        }
+                    }
+                }
+            }
+            bm = ref_bookmark(d, r.p, from, to);
+        }
+        bool caption_num = show == "number" && !lbl_of_target(d, target).empty();
+        if (show == "text" || show == "label_number" || caption_num) instr = "REF " + bm + h;
+        else if (show == "number") instr = "REF " + bm + " \\r" + h;
+        else if (show == "page") instr = "PAGEREF " + bm + h;
+        else if (show == "above_below") instr = "REF " + bm + " \\p" + h;
+        else throw std::runtime_error(util::unknown_key("show", show, {"text", "number", "label_number", "page", "above_below"}));
+    }
+    // PAGEREF needs layout; Word refreshes it on open (updateFields), until
+    // then show a page number rather than nothing
+    insert_field(d, p, pos, instr, util::starts_with(instr, "PAGEREF") ? "1" : "", nullptr, o);
+    update_fields(d);
+    return instr;
 }
 
 // ── content controls ─────────────────────────────────────────────────────
