@@ -195,10 +195,12 @@ int main(int argc, char** argv) {
                         images.push_back(mcp::image(im.value("data", ""), im.value("mime", "image/png")));
                     out.erase("_images");
                 }
-                r.content = {mcp::text(out.contains("_text") && out.size() == 1 ? out["_text"].get<std::string>()
-                                                                                 : out.dump(2))};
+                const bool plain = out.contains("_text") && out.size() == 1;
+                r.content = {mcp::text(plain ? out["_text"].get<std::string>() : out.dump(2))};
                 for (auto& b : images) r.content.push_back(std::move(b));
-                r.structuredContent = out;
+                // structuredContent mirrors JSON results; a plain-text answer
+                // (help) has nothing to structure, and a copy just repeats it
+                if (!plain) r.structuredContent = out;
             } catch (const std::bad_alloc&) {
                 r.content = {mcp::text("error: out of memory while running " + def->name)};
                 r.isError = true;

@@ -238,7 +238,15 @@ std::vector<std::string> normalize_args(const ToolDef& t, Json& args) {
         if (target.empty()) {
             std::string names;
             for (auto& [p, _] : props.items()) names += (names.empty() ? "" : ", ") + p;
-            throw std::runtime_error("unknown argument '" + k + "' for " + t.name + ". Valid arguments: " + names);
+            // A read tool loses nothing by dropping a guess ("xml_hint" on
+            // get_paragraph): answer, and say what was ignored. A tool that
+            // changes the document refuses instead: the stray argument may be
+            // the change the caller wanted, and half-doing it is worse.
+            if (t.read_only) {
+                notes.push_back("ignored '" + k + "', which " + t.name + " doesn't take (it takes: " + names + ")");
+                continue;
+            }
+            throw std::runtime_error(t.name + " has no argument '" + k + "'. Valid arguments: " + names);
         }
         if (out.contains(target) || args.contains(target)) continue;  // the real key wins
         out[target] = v;

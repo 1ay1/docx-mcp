@@ -134,25 +134,34 @@ std::vector<const ToolDef*> match_topic(const std::vector<ToolDef>& all, const s
     static const std::vector<std::pair<const char*, const char*>> syn = {
         {"new", "create"}, {"blank", "create"}, {"bold", "format_text"}, {"italic", "format_text"},
         {"center", "format_paragraph"}, {"align", "format_paragraph"}, {"indent", "format_paragraph"},
-        {"spacing", "format_paragraph"}, {"shade", "format_table"}, {"border", "format_table"}, {"heading", "outline"},
+        {"spacing", "format_paragraph"}, {"shade", "format_table"}, {"border", "format_table"}, {"heading", "apply_style insert_paragraph outline"},
         {"size", "format_text"}, {"underline", "format_text"}, {"font", "format_text"}, {"color", "format_text"},
         {"bullet", "list"}, {"numbering", "list"}, {"row", "table_rows"}, {"column", "table_columns"},
         {"cell", "set_cell"}, {"image", "picture"}, {"photo", "picture"}, {"logo", "picture"},
         {"wrap", "format_picture"}, {"resize", "format_picture"}, {"link", "hyperlink"}, {"url", "hyperlink"},
         {"footnote", "note"}, {"endnote", "note"}, {"redline", "revision"}, {"change", "revision"},
         {"margin", "page_setup"}, {"landscape", "page_setup"}, {"orientation", "page_setup"}, {"paper", "page_setup"},
-        {"page number", "header_footer"}, {"header", "header_footer"}, {"footer", "header_footer"},
+        {"page number", "header_footer"}, {"page num", "header_footer"}, {"footer", "header_footer"}, {"header", "header_footer"}, {"footer", "header_footer"},
         {"contents", "toc"}, {"password", "protect"}, {"lock", "protect"}, {"title", "properties"},
         {"metadata", "properties"}, {"read", "read_document"}, {"word count", "statistics"}, {"search", "find_text"},
         {"replace", "replace"}, {"equation", "equation"}, {"formula", "equation"}, {"checkbox", "content_control"},
         {"dropdown", "content_control"}, {"pdf", "export_pdf"}, {"render", "render_pages"}, {"look", "render_pages"},
         {"preview", "render_pages"}, {"caption", "caption"}, {"cross", "cross_reference"}};
+    // a guessed tool name ("insert_page_number", "add_footnote") is words too
     std::string expanded = topic;
+    for (auto& c : expanded) if (c == '_' || c == '-') c = ' ';
+    std::string spaced = expanded;
     for (auto& [k, v] : syn)
-        if (topic.find(k) != std::string::npos) expanded += std::string(" ") + v;
+        if (spaced.find(k) != std::string::npos) expanded += std::string(" ") + v;
     std::vector<std::string> words;
     for (auto& w : util::split(expanded, ' '))
-        if (w.size() >= 3) words.push_back(w.back() == 's' && w.size() > 3 ? w.substr(0, w.size() - 1) : w);
+        if (w.size() >= 3 && w != "the" && w != "and" && w != "for" && w != "with")
+            words.push_back(w.back() == 's' && w.size() > 3 ? w.substr(0, w.size() - 1) : w);
+    // verbs say less than nouns: "insert_page_number" is about page numbers
+    auto verb = [](const std::string& w) {
+        return w == "add" || w == "insert" || w == "set" || w == "get" || w == "new" || w == "make" ||
+               w == "create" || w == "put" || w == "change" || w == "update";
+    };
     std::vector<std::pair<int, const ToolDef*>> scored;
     for (auto& g : task_groups())
         for (auto n : g.tools) {
@@ -162,9 +171,10 @@ std::vector<const ToolDef*> match_topic(const std::vector<ToolDef>& all, const s
             std::string grp = util::lower(std::string(g.area) + " " + g.says);
             int sc = 0;
             for (auto& w : words) {
-                if (t->name.find(w) != std::string::npos) sc += 6;
-                else if (own.find(w) != std::string::npos) sc += 2;
-                else if (grp.find(w) != std::string::npos) sc += 1;
+                int k = verb(w) ? 1 : 3;
+                if (t->name.find(w) != std::string::npos) sc += 2 * k;
+                else if (own.find(w) != std::string::npos) sc += k;
+                else if (grp.find(w) != std::string::npos) sc += k > 1 ? 1 : 0;
             }
             if (sc > 1) scored.push_back({sc, t});
         }

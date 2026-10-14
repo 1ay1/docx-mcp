@@ -607,8 +607,14 @@ std::vector<ToolDef> make_tools() {
              if (a.contains("table")) ref = table_at(s.doc, iarg(a, "table", 1));
              else if (a.contains("paragraph")) ref = para(s, a).p;
              else ref = last_block(s.doc);
+             // A blank document's only paragraph is where Word puts what you
+             // type first; appending after it left an empty line at the top.
+             bool fill_blank = !a.contains("paragraph") && !a.contains("table") && blocks(s.doc.body()).size() == 1 &&
+                               std::string_view(ref.name()) == "w:p" && analyze(ref).atoms.empty() &&
+                               !ref.child("w:pPr").child("w:sectPr") && !ref.child("w:pPr").child("w:numPr");
              auto np = insert_paragraph(s.doc, ref, sarg(a, "where", "after") == "after", util::to_u32(sarg(a, "text")),
                                         sarg(a, "style"), obj_arg(a, "format"), track(a));
+             if (fill_blank) delete_paragraph(s.doc, ref, {false});
              Json made = Json::array();
              int lines = (int)util::split(sarg(a, "text"), '\n').size();
              auto cur = np;
@@ -1483,29 +1489,47 @@ std::vector<ToolDef> make_tools() {
              return Json{{"xml", x}, {"truncated", cut}, {"parts", s.doc.pkg().part_names()}};
          }});
     add({"set_paragraph_xml", "Replace paragraph XML",
-         "Expert escape hatch: replace a paragraph with raw WordprocessingML (one or more w:p/w:tbl). Prefixes w, r, a, m, wp, w14... "
-         "are predeclared. The result is schema-validated; invalid XML is rejected.",
+         "Expert escape hatch for things no other tool covers: replace a paragraph with raw WordprocessingML (one or "
+         "more w:p/w:tbl). Prefixes w, r, a, m, wp, w14... are predeclared. Properties are put in the schema's order "
+         "for you; anything still invalid is rejected with the reason. Prefer format_paragraph / format_text.",
          obj({{"doc", kDoc}, {"paragraph", kPara}, {"xml", str("")}}, {"doc", "paragraph", "xml"}), false, false, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
              auto r = para(s, a);
+             std::string old_id = para_id(r.p);
              pugi::xml_document frag;
              std::string err;
              if (!xml::parse_fragment(need(a, "xml"), frag, &err)) throw std::runtime_error("bad XML: " + err);
+             // Word rejects properties out of schema order (w:jc before
+             // w:spacing...). That's bookkeeping, not intent: fix it here.
+             std::function<void(pugi::xml_node)> order = [&](pugi::xml_node n) {
+                 for (auto c : n.children())
+                     if (c.type() == pugi::node_element) order(c);
+                 std::string_view q = n.name();
+                 if (q.size() > 2 && q.substr(q.size() - 2) == "Pr") schema::sort_children(n);
+             };
+             for (auto c : frag.children()) order(c);
              // validate in place on a copy of the part; reject only issues we introduce
              auto& part = s.doc.pkg().xml(r.part);
              std::size_t before = schema::validate(part.document_element(), {100000}).size();
              pugi::xml_document trial;
              trial.reset(part);
              auto parent = r.p.parent();
-             for (auto c : frag.children()) parent.insert_copy_before(c, r.p);
+             std::vector<pugi::xml_node> added;
+             for (auto c : frag.children()) added.push_back(parent.insert_copy_before(c, r.p));
              parent.remove_child(r.p);
              auto issues = schema::validate(part.document_element(), {100000});
              if (issues.size() > before) {
                  part.reset(trial);
-                 throw std::runtime_error("rejected, schema issue: " + issues[0].path + " :: " + issues[0].message);
+                 throw std::runtime_error("rejected: " + issues[0].message + " (at " + issues[0].path + ")");
              }
              xml::fix_declarations(part.document_element());
-             return Json{{"ok", true}};
+             Json ids = Json::array();
+             for (auto n : added)
+                 if (std::string_view(n.name()) == "w:p") {
+                     if (para_id(n).empty()) xml::set_attr(n, "w14:paraId", s.doc.new_hex_id());
+                     ids.push_back(para_brief(s.doc, n));
+                 }
+             return Json{{"replaced", old_id}, {"paragraphs", ids}};
          }});
 
     // ── seeing the page ──
