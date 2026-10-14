@@ -102,6 +102,31 @@ claude mcp add docx -- /path/to/docx-mcp --author "Your Name"
 }
 ```
 
+## agentty
+
+`~/.agentty/mcp.json` (all projects) or `.agentty/mcp.json` (one project; agentty asks you to approve it first):
+
+```json
+{
+  "mcpServers": {
+    "docx": {
+      "command": "/path/to/docx-mcp",
+      "args": ["--author", "Your Name"],
+      "timeoutMs": 120000,
+      "trustAnnotations": true,
+      "tools": { "pin": ["open_document", "read_document", "save_document"] }
+    }
+  }
+}
+```
+
+agentty sends at most 16 MCP tools per turn and reaches the rest through
+`mcp_search_tools`, so all 85 work without `--tools core`. Pinning keeps the
+three you always need in every turn. `trustAnnotations` lets agentty believe
+the server's read-only marks, so tools like `read_document` and `list_*` are
+treated as reads instead of as commands that can write and run anything.
+`agentty mcp-status` shows whether it's loaded.
+
 ## Zed
 
 In `settings.json`:

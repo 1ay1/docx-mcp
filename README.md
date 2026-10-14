@@ -50,7 +50,7 @@ cmake --build build
 ```
 
 Add it to your MCP client (setup for Claude Desktop, Claude Code, Cursor,
-VS Code, Windsurf, Zed and others is in [docs/clients.md](docs/clients.md)):
+VS Code, Windsurf, Zed, agentty and others is in [docs/clients.md](docs/clients.md)):
 
 ```json
 {
