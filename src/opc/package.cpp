@@ -157,7 +157,11 @@ Package Package::from_bytes(const util::Bytes& zip) {
         throw std::runtime_error("file is an OLE compound file (encrypted .docx or legacy .doc), not an OPC zip package");
     mz_zip_archive za{};
     if (!mz_zip_reader_init_mem(&za, zip.data(), zip.size(), 0))
-        throw std::runtime_error("not a zip package");
+        throw std::runtime_error("not a zip package (is this really a .docx?)");
+    struct Guard {
+        mz_zip_archive* z;
+        ~Guard() { mz_zip_reader_end(z); }
+    } guard{&za};
     Package p;
     std::vector<std::pair<std::string, util::Bytes>> raw;
     util::Bytes ctypes;
@@ -169,7 +173,7 @@ Package Package::from_bytes(const util::Bytes& zip) {
         if (st.m_is_directory) continue;
         std::size_t sz = 0;
         void* data = mz_zip_reader_extract_to_heap(&za, i, &sz, 0);
-        if (!data) { mz_zip_reader_end(&za); throw std::runtime_error(std::string("cannot inflate ") + st.m_filename); }
+        if (!data) throw std::runtime_error(std::string("cannot inflate ") + st.m_filename + " (the file is damaged)");
         util::Bytes b((std::uint8_t*)data, (std::uint8_t*)data + sz);
         mz_free(data);
         std::string zname = st.m_filename;
@@ -177,7 +181,6 @@ Package Package::from_bytes(const util::Bytes& zip) {
         if (util::iequals(zname, "[Content_Types].xml")) { ctypes = std::move(b); have_ct = true; continue; }
         raw.emplace_back("/" + zname, std::move(b));
     }
-    mz_zip_reader_end(&za);
     if (!have_ct) throw std::runtime_error("package has no [Content_Types].xml");
 
     std::map<std::string, std::string> overrides;
@@ -213,6 +216,11 @@ Package Package::from_bytes(const util::Bytes& zip) {
 util::Bytes Package::to_bytes() const {
     mz_zip_archive za{};
     if (!mz_zip_writer_init_heap(&za, 0, 1 << 16)) throw std::runtime_error("zip init failed");
+    // ends the writer on every path (including throws below)
+    struct Guard {
+        mz_zip_archive* z;
+        ~Guard() { mz_zip_writer_end(z); }
+    } guard{&za};
     auto add = [&](const std::string& name, const std::string& data) {
         std::string zn = name[0] == '/' ? name.substr(1) : name;
         if (!mz_zip_writer_add_mem(&za, zn.c_str(), data.data(), data.size(), MZ_DEFAULT_LEVEL))
@@ -259,12 +267,10 @@ util::Bytes Package::to_bytes() const {
     }
     void* buf = nullptr;
     std::size_t sz = 0;
-    if (!mz_zip_writer_finalize_heap_archive(&za, &buf, &sz)) {
-        mz_zip_writer_end(&za);
-        throw std::runtime_error("zip finalize failed");
-    }
+    if (!mz_zip_writer_finalize_heap_archive(&za, &buf, &sz)) throw std::runtime_error("zip finalize failed");
+    // finalize hands the heap buffer to us; the writer no longer owns it
     util::Bytes out((std::uint8_t*)buf, (std::uint8_t*)buf + sz);
-    mz_zip_writer_end(&za);
+    mz_free(buf);
     return out;
 }
 
