@@ -107,6 +107,74 @@ void stamp(Document& d, pugi::xml_node rev) {
 
 // ── text ─────────────────────────────────────────────────────────────────
 
+void mark_paragraph_inserted(Document& d, pugi::xml_node p) {
+    // Copied content carries its old revisions: deleted text is gone in the
+    // copy, inserted text is plain content of the new insertion.
+    std::function<void(pugi::xml_node)> settle = [&](pugi::xml_node n) {
+        for (auto c = n.first_child(); c;) {
+            auto nx = c.next_sibling();
+            std::string_view q = c.name();
+            if (q == "w:del" || q == "w:moveFrom") {
+                n.remove_child(c);
+            } else if (q == "w:ins" || q == "w:moveTo") {
+                // lift the content, then visit it (it may hold refs and ranges too)
+                nx = c.first_child() ? c.first_child() : c.next_sibling();
+                for (auto k = c.first_child(); k;) {
+                    auto kn = k.next_sibling();
+                    n.insert_move_before(k, c);
+                    k = kn;
+                }
+                n.remove_child(c);
+            } else if (q == "w:moveFromRangeStart" || q == "w:moveFromRangeEnd" || q == "w:moveToRangeStart" ||
+                       q == "w:moveToRangeEnd" || q == "w:commentRangeStart" || q == "w:commentRangeEnd" ||
+                       q == "w:bookmarkStart" || q == "w:bookmarkEnd" || q == "w:proofErr" ||
+                       q == "w:permStart" || q == "w:permEnd") {
+                // ranges belong to the original; the copy doesn't own them
+                n.remove_child(c);
+            } else if (q == "w:r") {
+                // a comment reference is the original's too
+                if (c.child("w:commentReference")) n.remove_child(c);
+                else for (auto k : xml::descendants(c, "w:rPrChange")) k.parent().remove_child(k);
+            } else if (q != "w:pPr") {
+                settle(c);
+            }
+            c = nx;
+        }
+    };
+    settle(p);
+    auto rpr = schema::ensure_child(schema::ensure_child(p, "w:pPr"), "w:rPr");
+    for (auto q : {"w:ins", "w:del", "w:moveFrom", "w:moveTo"}) rpr.remove_child(q);
+    stamp(d, schema::ensure_child(rpr, "w:ins"));
+    p.child("w:pPr").remove_child("w:pPrChange");
+    // wrap runs (and math) where they sit: in p, hyperlinks, fldSimple, sdtContent...
+    std::function<void(pugi::xml_node)> wrap_runs = [&](pugi::xml_node n) {
+        std::vector<pugi::xml_node> run;
+        auto flush = [&]() {
+            if (run.empty()) return;
+            auto ins = n.insert_child_before("w:ins", run.front());
+            stamp(d, ins);
+            for (auto r : run) ins.append_move(r);
+            run.clear();
+        };
+        for (auto c = n.first_child(); c;) {
+            auto nx = c.next_sibling();
+            std::string_view q = c.name();
+            if (q == "w:r" || q == "m:oMath" || q == "m:oMathPara") {
+                if (q == "w:r") run.push_back(c);
+                else { flush(); for (auto mr : xml::descendants(c, "m:r")) wrap_math_run(d, mr, "w:ins"); }
+            } else {
+                flush();
+                if (q == "w:hyperlink" || q == "w:fldSimple" || q == "w:smartTag" || q == "w:customXml" ||
+                    q == "w:sdtContent" || q == "w:sdt" || q == "w:dir" || q == "w:bdo")
+                    wrap_runs(c);
+            }
+            c = nx;
+        }
+        flush();
+    };
+    wrap_runs(p);
+}
+
 void wrap_math_run(Document& d, pugi::xml_node mr, const char* q) {
     // ECMA CT_RunTrackChange allows math content (EG_OMathMathElements), so the
     // valid form is <w:ins><m:r>..</m:r></w:ins>. Word itself writes the

@@ -109,7 +109,8 @@ public:
     static Package open(const std::string& path);
     static Package from_bytes(const util::Bytes& zip);
     void save(const std::string& path) const;
-    util::Bytes to_bytes() const;
+    // level: zlib level; 0 stores (fast, for in-memory snapshots)
+    util::Bytes to_bytes(int level = 6) const;
 
     bool has(std::string_view name) const;
     Part* part(std::string_view name);

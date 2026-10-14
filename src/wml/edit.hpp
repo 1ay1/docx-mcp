@@ -97,6 +97,10 @@ std::string enum_attr(pugi::xml_node e, const char* attr, const std::string& val
 
 // Stamp a revision element with id/author/date.
 void stamp(Document& d, pugi::xml_node rev);
+// Mark everything in paragraph p as inserted by the current author: runs are
+// wrapped in w:ins (inside hyperlinks, fields, content controls too), the
+// paragraph mark gets w:ins, old revisions are resolved to their result.
+void mark_paragraph_inserted(Document& d, pugi::xml_node p);
 // Track a math run as inserted/deleted: wraps the m:r in w:ins/w:del
 // (the schema-valid form; Word's own form puts the marker inside m:r).
 void wrap_math_run(Document& d, pugi::xml_node mr, const char* q);

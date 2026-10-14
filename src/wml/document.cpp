@@ -109,6 +109,8 @@ util::Bytes Document::to_bytes() {
     return pkg_.to_bytes();
 }
 
+util::Bytes Document::snapshot() { return pkg_.to_bytes(0); }
+
 void Document::save(const std::string& path) {
     finalize();
     pkg_.save(path);
@@ -448,6 +450,22 @@ void Document::dedupe_ids() {
                 }
             }
         }
+        // comment anchors are owned by one comment: a copied range or
+        // reference is dropped, the original stays
+        for (auto q : {"w:commentRangeStart", "w:commentRangeEnd", "w:commentReference"}) {
+            std::set<std::string> seen;
+            for (auto n : xml::descendants(root, q)) {
+                if (seen.insert(xml::attr(n, "w:id")).second) continue;
+                auto owner = n;
+                if (std::string_view(q) == "w:commentReference") {
+                    int other = 0;
+                    for (auto k : n.parent().children())
+                        if (k.type() == pugi::node_element && k != n && std::string_view(k.name()) != "w:rPr") other++;
+                    if (!other) owner = n.parent();
+                }
+                owner.parent().remove_child(owner);
+            }
+        }
         // bookmarks: a duplicated start/end pair gets a fresh id together
         std::map<std::string, int> starts;
         for (auto b : xml::descendants(root, "w:bookmarkStart")) starts[xml::attr(b, "w:id")]++;
@@ -473,6 +491,20 @@ void Document::dedupe_ids() {
             }
         }
     }
+    // drawing ids (wp:docPr) are unique across every story, not per part;
+    // a copied picture gets the next free one
+    std::set<long> used;
+    std::vector<pugi::xml_attribute> dup;
+    long mx = 0;
+    for (auto& part : story_parts()) {
+        if (!pkg_.has(part)) continue;
+        for (auto n : pkg_.xml(part).select_nodes("//wp:docPr/@id")) {
+            long v = n.attribute().as_llong();
+            mx = std::max(mx, v);
+            if (!used.insert(v).second) dup.push_back(n.attribute());
+        }
+    }
+    for (auto a : dup) a.set_value(std::to_string(++mx).c_str());
 }
 
 void Document::finalize() {

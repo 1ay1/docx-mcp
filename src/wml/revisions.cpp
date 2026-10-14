@@ -88,6 +88,35 @@ bool any_left(pugi::xml_node root, std::initializer_list<const char*> qs) {
     return false;
 }
 
+// Removing rows, tables and paragraph marks can empty a container Word needs
+// a paragraph in: the body, a cell (which must also end with one), a
+// comment, note, header or footer, a text box.
+void ensure_block_paragraphs(pugi::xml_node root) {
+    auto needs = [](pugi::xml_node n) {
+        std::string_view q = n.name();
+        // w:footnote in settings' footnotePr is only an id reference
+        if (q == "w:footnote" || q == "w:endnote")
+            return std::string_view(n.parent().name()) == (q == "w:footnote" ? "w:footnotes" : "w:endnotes");
+        return q == "w:body" || q == "w:tc" || q == "w:comment" || q == "w:hdr" || q == "w:ftr" || q == "w:txbxContent";
+    };
+    std::vector<pugi::xml_node> conts;
+    if (needs(root)) conts.push_back(root);
+    for (auto n : root.select_nodes(".//*"))
+        if (needs(n.node())) conts.push_back(n.node());
+    for (auto c : conts) {
+        pugi::xml_node last;
+        for (auto k : c.children()) {
+            std::string_view q = k.name();
+            if (q == "w:p" || q == "w:tbl" || q == "w:sdt" || q == "w:customXml") last = k;
+        }
+        bool cell = name_is(c, "w:tc");
+        if (last && (!cell || name_is(last, "w:p"))) continue;
+        // body: before the final sectPr; others: at the end
+        if (auto sp = c.child("w:sectPr"); sp && name_is(c, "w:body")) c.insert_child_before("w:p", sp);
+        else c.append_child("w:p");
+    }
+}
+
 // ── paragraph marks ──────────────────────────────────────────────────────
 
 pugi::xml_node mark_rev(pugi::xml_node p, const char* q) { return p.child("w:pPr").child("w:rPr").child(q); }
@@ -391,10 +420,12 @@ void run_pass(Ctx& c, pugi::xml_node root) {
     resolve_customxml_ranges(c, root);
     resolve_math(c, root);
 
-    // 1. table rows and cells (before their content is touched)
-    for (auto tr : xml::descendants(root, "w:tr")) {
+    // 1. table rows and cells (before their content is touched). Removing a
+    // row frees its nested tables, so each pass re-collects rather than
+    // holding a list of nodes that may be gone.
+    auto row_rev = [&](pugi::xml_node tr) -> bool {
         auto trpr = tr.child("w:trPr");
-        if (!trpr) continue;
+        if (!trpr) return false;
         // a row can be both inserted and deleted (by another author): the
         // deletion decides on accept, the insertion on reject
         auto ins = trpr.child("w:ins"), del = trpr.child("w:del");
@@ -403,21 +434,32 @@ void run_pass(Ctx& c, pugi::xml_node root) {
             if (c.want(first)) {
                 if (c.want(second)) c.hit(second);
                 resolve_row(c, tr, first, false);
-                continue;
+                return true;
             }
             if (c.want(second)) { c.hit(second); trpr.remove_child(second); }
-            continue;
+            return false;
         }
-        if (ins && c.want(ins)) { resolve_row(c, tr, ins, c.accept); continue; }
-        if (del && c.want(del)) { resolve_row(c, tr, del, !c.accept); continue; }
+        if (ins && c.want(ins)) { bool gone = !c.accept; resolve_row(c, tr, ins, c.accept); return gone; }
+        if (del && c.want(del)) { bool gone = c.accept; resolve_row(c, tr, del, !c.accept); return gone; }
+        return false;
+    };
+    // Deepest first: removing a nested row can't free one still to visit,
+    // and removing an outer row frees only rows already handled.
+    {
+        auto trs = xml::descendants(root, "w:tr");
+        for (auto it = trs.rbegin(); it != trs.rend(); ++it) row_rev(*it);
     }
-    for (auto tc : xml::descendants(root, "w:tc")) {
-        if (!tc.parent()) continue;
-        auto tcpr = tc.child("w:tcPr");
-        if (!tcpr) continue;
-        if (auto ins = tcpr.child("w:cellIns"); ins && c.want(ins)) { resolve_cell(c, tc, ins, c.accept); continue; }
-        if (auto del = tcpr.child("w:cellDel"); del && c.want(del)) { resolve_cell(c, tc, del, !c.accept); continue; }
-        if (auto cm = tcpr.child("w:cellMerge"); cm && c.want(cm)) resolve_cell_merge(c, cm);
+    {
+        // a cell is removed alone (never its row), so deepest-first is safe too
+        auto tcs = xml::descendants(root, "w:tc");
+        for (auto it = tcs.rbegin(); it != tcs.rend(); ++it) {
+            auto tc = *it;
+            auto tcpr = tc.child("w:tcPr");
+            if (!tcpr) continue;
+            if (auto ins = tcpr.child("w:cellIns"); ins && c.want(ins)) { resolve_cell(c, tc, ins, c.accept); continue; }
+            if (auto del = tcpr.child("w:cellDel"); del && c.want(del)) { resolve_cell(c, tc, del, !c.accept); continue; }
+            if (auto cm = tcpr.child("w:cellMerge"); cm && c.want(cm)) resolve_cell_merge(c, cm);
+        }
     }
 
     // 2. run-level containers; innermost first so nested del-in-ins resolves right
@@ -487,6 +529,7 @@ void run_pass(Ctx& c, pugi::xml_node root) {
 
     if (!any_left(root, {"w:moveFrom", "w:moveTo"})) drop_move_ranges(root);
     for (auto p : xml::descendants(root, "w:p")) tidy(p);
+    ensure_block_paragraphs(root);
 }
 
 }  // namespace

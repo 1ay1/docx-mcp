@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(docx_mcp VERSION 0.1.0 LANGUAGES C CXX)
+project(docx_mcp VERSION 0.2.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -86,6 +86,7 @@ target_compile_options(docx_core PRIVATE ${DOCX_WARNINGS})
 add_executable(docx-mcp src/mcp/main.cpp)
 target_link_libraries(docx-mcp PRIVATE docx_core mcp::mcp)
 target_compile_options(docx-mcp PRIVATE ${DOCX_WARNINGS})
+target_compile_definitions(docx-mcp PRIVATE DOCX_MCP_VERSION="${PROJECT_VERSION}")
 target_link_libraries(docx_core PUBLIC mcp::mcp)
 
 if(DOCX_BUILD_TESTS)

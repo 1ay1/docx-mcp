@@ -300,4 +300,22 @@ TEST(cell_format_text_and_margins) {
     save(d, "cell_format_text_and_margins");
 }
 
+// rejecting an inserted row that holds an inserted nested table must not
+// touch the nested rows after they're freed (was a use-after-free)
+TEST(reject_nested_inserted_rows) {
+    auto d = sample(false);
+    auto t = insert_table(d, paragraphs(d.body())[0], true, {{"a", "b"}}, Json::object(), {});
+    d.set_track_changes(true);
+    auto row = insert_row(d, t, 0, true, {"x", "y"}, {});
+    auto inner_p = xml::children(xml::children(row, "w:tc")[0], "w:p")[0];
+    insert_table(d, inner_p, true, {{"n1"}, {"n2"}}, Json::object(), {});
+    for (bool acc : {false, true}) {
+        auto x = Document::from_bytes(d.to_bytes());
+        if (acc) accept_revisions(x, {}); else reject_revisions(x, {});
+        CHECK_EQ((int)list_revisions(x).size(), 0);
+        CHECK_EQ(schema_issues(x), 0);
+        CHECK_EQ((int)xml::descendants(x.body(), "w:tbl").size(), acc ? 2 : 1);
+    }
+}
+
 int main(int argc, char** argv) { return t::run(argc, argv); }

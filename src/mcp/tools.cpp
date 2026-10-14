@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <map>
 #include <cmath>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
@@ -175,8 +176,14 @@ thread_local bool g_txn_snap = false;
 // leaves the document as it was.
 Session& mut(Sessions& S, const Json& a) {
     auto& s = sess(S, a);
-    s.undo.push_back(s.doc.to_bytes());
-    if (s.undo.size() > 30) s.undo.erase(s.undo.begin());
+    s.undo.push_back(s.doc.snapshot());
+    // 30 steps, and at most ~512 MB of snapshots (always keep the newest)
+    std::size_t total = 0;
+    for (auto& u : s.undo) total += u.size();
+    while (s.undo.size() > 1 && (s.undo.size() > 30 || total > (512u << 20))) {
+        total -= s.undo.front().size();
+        s.undo.erase(s.undo.begin());
+    }
     if (!g_txn) { g_txn = &s; g_txn_snap = true; }
     s.dirty = true;
     return s;
@@ -188,6 +195,14 @@ int vlen(pugi::xml_node p) { return (int)analyze(p).vis.size(); }
 
 // Resolve a target range inside a paragraph: either offsets, or the n-th
 // occurrence of `match` text. Returns {start, end}.
+// The block to append after when no paragraph is given: the body's last
+// paragraph or table (an empty body gets a paragraph, as Word keeps one).
+pugi::xml_node last_block(Document& d) {
+    auto bs = blocks(d.body());
+    if (!bs.empty()) return bs.back();
+    return d.body().insert_child_before("w:p", d.body().child("w:sectPr"));
+}
+
 std::pair<int, int> range_in(pugi::xml_node p, const Json& a) {
     int n = vlen(p);
     if (a.contains("match") && !a["match"].is_null()) {
@@ -347,6 +362,8 @@ std::vector<ToolDef> make_tools() {
             g_txn_snap = false;
             try {
                 Json out = run(S, a);
+                // splitting a revision copies its id; Word gives each piece its own
+                if (g_txn && g_txn_snap && alive(g_txn)) g_txn->doc.dedupe_ids();
                 if (target && alive(target) && !sets_author) target->doc.author = author;
                 g_txn = nullptr;
                 return out;
@@ -581,10 +598,7 @@ std::vector<ToolDef> make_tools() {
              pugi::xml_node ref;
              if (a.contains("table")) ref = table_at(s.doc, iarg(a, "table", 1));
              else if (a.contains("paragraph")) ref = para(s, a).p;
-             else {
-                 auto ps = paragraphs(s.doc.body(), false);
-                 ref = ps.back();
-             }
+             else ref = last_block(s.doc);
              auto np = insert_paragraph(s.doc, ref, sarg(a, "where", "after") == "after", util::to_u32(sarg(a, "text")),
                                         sarg(a, "style"), obj_arg(a, "format"), track(a));
              Json made = Json::array();
@@ -647,18 +661,13 @@ std::vector<ToolDef> make_tools() {
              } else {
                  pugi::xml_node anchor = tgt;
                  for (auto p : ps) {
+                     if (p == tgt) continue;
                      pugi::xml_document copy;
                      copy.append_copy(p);
                      auto np = after ? anchor.parent().insert_copy_after(copy.first_child(), anchor) : tgt.parent().insert_copy_before(copy.first_child(), tgt);
                      xml::set_attr(np, "w14:paraId", s.doc.new_hex_id());
                      // the copy is an insertion; the original a deletion
-                     auto pp = schema::ensure_child(np, "w:pPr");
-                     auto rpr = schema::ensure_child(pp, "w:rPr");
-                     rpr.remove_child("w:del");
-                     stamp(s.doc, schema::ensure_child(rpr, "w:ins"));
-                     std::vector<pugi::xml_node> runs;
-                     for (auto c : np.children()) if (std::string_view(c.name()) == "w:r" || std::string_view(c.name()) == "w:hyperlink") runs.push_back(c);
-                     for (auto c : runs) { auto ins = np.insert_child_before("w:ins", c); stamp(s.doc, ins); ins.append_move(c); }
+                     mark_paragraph_inserted(s.doc, np);
                      delete_paragraph(s.doc, p, {true});
                      if (after) anchor = np;
                  }
@@ -966,7 +975,7 @@ std::vector<ToolDef> make_tools() {
              {"doc", "rows"}),
          false, false, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
-             pugi::xml_node ref = a.contains("paragraph") ? para(s, a).p : paragraphs(s.doc.body(), false).back();
+             pugi::xml_node ref = a.contains("paragraph") ? para(s, a).p : last_block(s.doc);
              std::vector<std::vector<std::string>> rows;
              auto cell_text = [](const Json& c) { return c.is_string() ? c.get<std::string>() : c.is_null() ? std::string() : c.dump(); };
              Json in = a["rows"];

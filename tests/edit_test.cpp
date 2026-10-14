@@ -263,6 +263,66 @@ TEST(accept_by_author) {
     CHECK(only_a);
 }
 
+// a copy of a paragraph with a hyperlink, a comment and old revisions becomes
+// one clean insertion (w:ins inside w:hyperlink, never around it)
+TEST(mark_paragraph_inserted_copy) {
+    auto d = sample(true);
+    auto p = paragraphs(d.body())[0];
+    delete_text(d, p, 0, 4, {});  // an old deletion
+    pugi::xml_document frag;
+    xml::parse_fragment("<w:hyperlink w:anchor=\"x\"><w:r><w:t>link</w:t></w:r></w:hyperlink>"
+                        "<w:commentRangeStart w:id=\"7\"/><w:r><w:t>c</w:t></w:r><w:commentRangeEnd w:id=\"7\"/>"
+                        "<w:r><w:commentReference w:id=\"7\"/></w:r>", frag);
+    for (auto c : frag.children()) p.append_copy(c);
+    auto np = p.parent().insert_copy_after(p, p);
+    xml::set_attr(np, "w14:paraId", d.new_hex_id());
+    mark_paragraph_inserted(d, np);
+    CHECK(!xml::first_descendant(np, "w:del"));
+    CHECK(!xml::first_descendant(np, "w:commentRangeStart"));
+    CHECK(!xml::first_descendant(np, "w:commentReference"));
+    CHECK(xml::first_descendant(np.child("w:hyperlink"), "w:ins"));
+    std::string why;
+    CHECK_EQ(schema_issues(d, &why), 0);
+    if (!why.empty()) std::printf("    %s\n", why.c_str());
+    reject_revisions(d, {});
+    CHECK_EQ((int)paragraphs(d.body()).size(), 2);
+}
+
+// rejecting everything a tracked session added to an empty document keeps
+// the paragraph Word requires (was an empty body, then a crash)
+TEST(reject_keeps_required_paragraphs) {
+    // a body whose only block is a tracked-inserted table: rejecting removes
+    // the table, and the body must still end with a paragraph
+    auto d = Document::from_bytes(Document::create().to_bytes());
+    auto body = d.body();
+    pugi::xml_document frag;
+    xml::parse_fragment("<w:tbl><w:tblPr><w:tblW w:w=\"0\" w:type=\"auto\"/></w:tblPr><w:tblGrid><w:gridCol w:w=\"100\"/>"
+                        "</w:tblGrid><w:tr><w:trPr><w:ins w:id=\"1\" w:author=\"A\"/></w:trPr><w:tc><w:p/></w:tc></w:tr></w:tbl>",
+                        frag);
+    for (auto p : paragraphs(body)) body.remove_child(p);
+    body.insert_copy_before(frag.first_child(), body.child("w:sectPr"));
+    reject_revisions(d, {});
+    CHECK(!body.child("w:tbl"));
+    CHECK_EQ((int)paragraphs(d.body()).size(), 1);
+    CHECK_EQ(schema_issues(d), 0);
+}
+
+// copies of comment anchors (from edits that copy a paragraph) are dropped
+TEST(dedupe_comment_anchors) {
+    auto d = sample(false);
+    auto p = paragraphs(d.body())[0];
+    pugi::xml_document frag;
+    xml::parse_fragment("<w:commentRangeStart w:id=\"3\"/><w:r><w:t>x</w:t></w:r><w:commentRangeEnd w:id=\"3\"/>"
+                        "<w:r><w:commentReference w:id=\"3\"/></w:r>", frag);
+    for (auto c : frag.children()) p.append_copy(c);
+    auto q = paragraphs(d.body())[1];
+    for (auto c : frag.children()) q.append_copy(c);
+    d.dedupe_ids();
+    CHECK_EQ((int)xml::descendants(d.body(), "w:commentRangeStart").size(), 1);
+    CHECK_EQ((int)xml::descendants(d.body(), "w:commentReference").size(), 1);
+    CHECK(xml::first_descendant(p, "w:commentReference"));
+}
+
 TEST(sha_vectors) {
     auto h = [](util::HashAlg a, const char* s) { return util::hex(util::hash(a, (const std::uint8_t*)s, std::strlen(s))); };
     CHECK_EQ(h(util::HashAlg::SHA1, "abc"), std::string("a9993e364706816aba3e25717850c26c9cd0d89d"));

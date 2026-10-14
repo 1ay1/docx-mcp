@@ -30,3 +30,6 @@ add_test(NAME robustness COMMAND robustness ${CMAKE_SOURCE_DIR}/tests/corpus/oxp
 add_executable(revisions_corpus revisions_corpus.cpp)
 target_link_libraries(revisions_corpus PRIVATE docx_core)
 add_test(NAME revisions_corpus COMMAND revisions_corpus ${CMAKE_SOURCE_DIR}/tests/corpus/oxpt/RP)
+
+add_executable(probe_perf probe_perf.cpp)
+target_link_libraries(probe_perf PRIVATE docx_core)

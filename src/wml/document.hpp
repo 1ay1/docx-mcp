@@ -27,6 +27,8 @@ public:
     static Document from_bytes(const util::Bytes& b);
     void save(const std::string& path);
     util::Bytes to_bytes();
+    // Uncompressed copy for undo / rollback (much faster than to_bytes).
+    util::Bytes snapshot();
 
     opc::Package& pkg() { return pkg_; }
     const std::string& main() const { return main_; }
@@ -84,6 +86,8 @@ public:
 
     // Run every pending fix-up (ids, declarations, ordering) — called by save.
     void finalize();
+    // Renumber repeated revision / bookmark ids (copies made by edits).
+    void dedupe_ids();
 
 private:
     opc::Package pkg_;
@@ -95,7 +99,6 @@ private:
     bool ids_scanned_ = false;
     void scan_ids();
     void scan_hex_ids();
-    void dedupe_ids();
     pugi::xml_node part_root(const char* rel_type, const char* ctype, const std::string& stem,
                              const char* root_xml, bool create);
 };

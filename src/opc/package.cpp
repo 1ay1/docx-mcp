@@ -284,7 +284,7 @@ Package Package::from_bytes(const util::Bytes& zip) {
     return p;
 }
 
-util::Bytes Package::to_bytes() const {
+util::Bytes Package::to_bytes(int level) const {
     mz_zip_archive za{};
     if (!mz_zip_writer_init_heap(&za, 0, 1 << 16)) throw std::runtime_error("zip init failed");
     // ends the writer on every path (including throws below)
@@ -292,9 +292,9 @@ util::Bytes Package::to_bytes() const {
         mz_zip_archive* z;
         ~Guard() { mz_zip_writer_end(z); }
     } guard{&za};
-    auto add = [&](const std::string& name, const std::string& data) {
+    auto add = [&, level](const std::string& name, const std::string& data) {
         std::string zn = name[0] == '/' ? name.substr(1) : name;
-        if (!mz_zip_writer_add_mem(&za, zn.c_str(), data.data(), data.size(), MZ_DEFAULT_LEVEL))
+        if (!mz_zip_writer_add_mem(&za, zn.c_str(), data.data(), data.size(), (mz_uint)level))
             throw std::runtime_error("zip write failed for " + zn);
     };
 

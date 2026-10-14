@@ -22,11 +22,14 @@
 
 namespace {
 
-constexpr const char* kVersion = "0.2.0";
+#ifndef DOCX_MCP_VERSION
+#define DOCX_MCP_VERSION "dev"
+#endif
+constexpr const char* kVersion = DOCX_MCP_VERSION;
 
 void usage() {
     std::fputs(
-        "docx-mcp " "0.2.0" " - edit Word documents over the Model Context Protocol (stdio)\n"
+        "docx-mcp " DOCX_MCP_VERSION " - edit Word documents over the Model Context Protocol (stdio)\n"
         "\n"
         "usage: docx-mcp [--author NAME] [--tools PROFILE] [--root DIR] [--list-tools] [--version]\n"
         "\n"
