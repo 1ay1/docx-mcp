@@ -19,29 +19,9 @@ const char* const kRootPrefixes[] = {"wpc", "cx", "cx1", "cx2", "cx3", "cx4", "c
                                      "mc", "aink", "am3d", "o", "oel", "r", "m", "v", "wp14", "wp", "w10",
                                      "w", "w14", "w15", "w16cex", "w16cid", "w16", "w16du", "w16sdtdh",
                                      "w16sdtfl", "w16se", "wpg", "wpi", "wne", "wps"};
-// Prefixes the SDK data doesn't list but Word declares.
-const std::map<std::string, std::string>& extra_ns() {
-    static const std::map<std::string, std::string> m = {
-        {"cx1", "http://schemas.microsoft.com/office/drawing/2015/9/8/chartex"},
-        {"cx2", "http://schemas.microsoft.com/office/drawing/2015/10/21/chartex"},
-        {"cx3", "http://schemas.microsoft.com/office/drawing/2016/5/9/chartex"},
-        {"cx4", "http://schemas.microsoft.com/office/drawing/2016/5/10/chartex"},
-        {"cx5", "http://schemas.microsoft.com/office/drawing/2016/5/11/chartex"},
-        {"cx6", "http://schemas.microsoft.com/office/drawing/2016/5/12/chartex"},
-        {"cx7", "http://schemas.microsoft.com/office/drawing/2016/5/13/chartex"},
-        {"cx8", "http://schemas.microsoft.com/office/drawing/2016/5/14/chartex"},
-        {"w16", "http://schemas.microsoft.com/office/word/2018/wordml"},
-        {"mc", "http://schemas.openxmlformats.org/markup-compatibility/2006"},
-    };
-    return m;
-}
 const char* kIgnorable = "w14 w15 w16se w16cid w16 w16cex w16sdtdh w16sdtfl w16du wp14";
 
-std::string uri(const char* p) {
-    auto& ex = extra_ns();
-    if (auto it = ex.find(p); it != ex.end()) return it->second;
-    return std::string(schema::uri_of_prefix(p));
-}
+std::string uri(const char* p) { return xml::uri_of(p); }
 
 constexpr const char* kXmlDecl = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\r\n";
 
@@ -58,7 +38,11 @@ std::string blank_document_xml() {
 std::string wml_root_open(const char* qname) {
     std::string s = "<";
     s += qname;
-    for (auto p : kRootPrefixes) s += " xmlns:" + std::string(p) + "=\"" + uri(p) + "\"";
+    for (auto p : kRootPrefixes) {
+        std::string u = uri(p);
+        if (u.empty()) throw std::logic_error(std::string("no namespace URI for prefix ") + p);
+        s += " xmlns:" + std::string(p) + "=\"" + u + "\"";
+    }
     s += " mc:Ignorable=\"" + std::string(kIgnorable) + "\">";
     return s;
 }

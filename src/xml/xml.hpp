@@ -17,6 +17,8 @@ void normalize(pugi::xml_document& doc);
 // Declare a canonical prefix on the root (no-op if present). If ignorable,
 // also add it to mc:Ignorable (declaring mc as needed).
 void declare(pugi::xml_node root, std::string_view prefix, bool ignorable = false);
+// Namespace URI for a canonical prefix (SDK table plus Word's extras), or "".
+std::string uri_of(std::string_view prefix);
 // Ensure every prefix used in the tree and every prefix in mc:Ignorable is
 // declared on the root; drop Ignorable entries we can't declare.
 void fix_declarations(pugi::xml_node root);

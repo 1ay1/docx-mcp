@@ -103,7 +103,11 @@ std::string key_of(std::string_view name) { return util::lower(pct_decode(name))
 
 std::string xml_to_string(const pugi::xml_document& d) {
     StringWriter w;
-    d.save(w, "", pugi::format_raw | pugi::format_no_declaration, pugi::encoding_utf8);
+    // we write our own declaration; skip any parsed one
+    for (auto c : d.children()) {
+        if (c.type() == pugi::node_declaration) continue;
+        c.print(w, "", pugi::format_raw, pugi::encoding_utf8);
+    }
     return XML_DECL + w.out;
 }
 

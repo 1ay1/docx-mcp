@@ -34,6 +34,24 @@ const std::map<std::string, std::string>& strict_map() {
 
 constexpr const char* MC = "http://schemas.openxmlformats.org/markup-compatibility/2006";
 
+// Prefixes Word declares that the SDK's namespace table lacks.
+const std::map<std::string, std::string>& extra_ns() {
+    static const std::map<std::string, std::string> m = {
+        {"cx1", "http://schemas.microsoft.com/office/drawing/2015/9/8/chartex"},
+        {"cx2", "http://schemas.microsoft.com/office/drawing/2015/10/21/chartex"},
+        {"cx3", "http://schemas.microsoft.com/office/drawing/2016/5/9/chartex"},
+        {"cx4", "http://schemas.microsoft.com/office/drawing/2016/5/10/chartex"},
+        {"cx5", "http://schemas.microsoft.com/office/drawing/2016/5/11/chartex"},
+        {"cx6", "http://schemas.microsoft.com/office/drawing/2016/5/12/chartex"},
+        {"cx7", "http://schemas.microsoft.com/office/drawing/2016/5/13/chartex"},
+        {"cx8", "http://schemas.microsoft.com/office/drawing/2016/5/14/chartex"},
+        {"w16", "http://schemas.microsoft.com/office/word/2018/wordml"},
+        {"wpi", "http://schemas.microsoft.com/office/word/2010/wordprocessingInk"},
+        {"mc", MC},
+    };
+    return m;
+}
+
 struct Scope {
     std::map<std::string, std::string> map;  // prefix -> uri
 };
@@ -51,11 +69,13 @@ struct Normalizer {
     std::string prefix_for(const std::string& uri, const std::string& hint) {
         if (auto it = uri_to_prefix.find(uri); it != uri_to_prefix.end()) return it->second;
         std::string p(schema::prefix_of_uri(uri));
+        if (p.empty())
+            for (auto& [ep, eu] : extra_ns()) if (eu == uri) p = ep;
         if (uri == MC) p = "mc";
         if (p.empty() || used_prefixes.count(p)) {
             p = hint.empty() ? "ns" : hint;
             std::string base = p;
-            for (int i = 1; used_prefixes.count(p) || !schema::uri_of_prefix(p).empty(); i++)
+            for (int i = 1; used_prefixes.count(p) || !uri_of(p).empty(); i++)
                 p = base + std::to_string(i);
         }
         uri_to_prefix[uri] = p;
@@ -140,6 +160,12 @@ void collect_prefixes(pugi::xml_node n, std::set<std::string>& out) {
 
 }  // namespace
 
+std::string uri_of(std::string_view prefix) {
+    auto& ex = extra_ns();
+    if (auto it = ex.find(std::string(prefix)); it != ex.end()) return it->second;
+    return std::string(schema::uri_of_prefix(prefix));
+}
+
 void normalize(pugi::xml_document& doc) {
     auto root = doc.document_element();
     if (!root) return;
@@ -165,14 +191,14 @@ void normalize(pugi::xml_document& doc) {
 void declare(pugi::xml_node root, std::string_view prefix, bool ignorable) {
     std::string an = "xmlns:" + std::string(prefix);
     if (!root.attribute(an.c_str())) {
-        std::string_view uri = prefix == "mc" ? std::string_view(MC) : schema::uri_of_prefix(prefix);
+        std::string uri = uri_of(prefix);
         if (uri.empty()) return;
         // keep declarations before other attributes
         pugi::xml_attribute last_decl;
         for (auto a : root.attributes())
             if (util::starts_with(a.name(), "xmlns")) last_decl = a;
         auto na = last_decl ? root.insert_attribute_after(an.c_str(), last_decl) : root.prepend_attribute(an.c_str());
-        na = std::string(uri).c_str();
+        na = uri.c_str();
     }
     if (ignorable) {
         declare(root, "mc");
@@ -282,9 +308,9 @@ bool parse_fragment(std::string_view frag, pugi::xml_document& holder, std::stri
                                      "w16se", "w16", "m", "mc", "v", "o", "w10", "wps", "wpg", "wpc", "a14", "wne", "c", "dgm", "sl", "cx", "aink", "am3d", "w16sdtdh", "w16sdtfl"};
     std::string wrap = "<docx-fragment";
     for (auto p : prefixes) {
-        std::string_view uri = std::string_view(p) == "mc" ? std::string_view(MC) : schema::uri_of_prefix(p);
+        std::string uri = uri_of(p);
         if (uri.empty()) continue;
-        wrap += " xmlns:" + std::string(p) + "=\"" + std::string(uri) + "\"";
+        wrap += " xmlns:" + std::string(p) + "=\"" + uri + "\"";
     }
     wrap += ">" + std::string(frag) + "</docx-fragment>";
     pugi::xml_document tmp;
