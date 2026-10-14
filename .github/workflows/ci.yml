@@ -46,7 +46,7 @@ jobs:
 
       - name: Toolchain (linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y ninja-build g++-14
+        run: sudo apt-get update && sudo apt-get install -y ninja-build g++-14 gdb
       - name: Toolchain (macos)
         if: runner.os == 'macOS'
         run: brew install ninja
@@ -80,6 +80,17 @@ jobs:
         run: |
           python3 tests/e2e.py ${{ matrix.exe }} "$RUNNER_TEMP/e2e"
           python3 tests/sloppy.py ${{ matrix.exe }} "$RUNNER_TEMP/sloppy"
+      - name: Crash details
+        if: failure()
+        shell: bash
+        run: |
+          cat "$RUNNER_TEMP/docx-mcp-stderr.txt" || true
+          if command -v gdb >/dev/null; then
+            printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"x","version":"1"}}}' \
+              '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"create_document","arguments":{"path":"/tmp/c.docx"}}}' \
+              '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"apply_style","arguments":{"doc":"doc1","paragraphs":["1"],"style":"Heading 1"}}}' > /tmp/in.txt
+            gdb -batch -ex run -ex bt --args ${{ matrix.exe }} < /tmp/in.txt 2>&1 | tail -40
+          fi
 
       - name: Package
         shell: bash

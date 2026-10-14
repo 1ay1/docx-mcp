@@ -10,7 +10,9 @@
 #include <new>
 #include <string>
 
-#include <mcp/mcp.hpp>
+// only the protocol + server headers: the capability layer needs std::stop_token,
+// which Apple's libc++ hides behind -fexperimental-library
+#include <mcp/server.hpp>
 
 #include "mcp/session.hpp"
 #include "mcp/tools.hpp"

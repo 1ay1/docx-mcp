@@ -13,7 +13,9 @@ import sys
 
 class Client:
     def __init__(self, exe):
-        self.p = subprocess.Popen([exe, "--author", "Alice Author"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+        self.err = open(os.path.join(os.environ.get("RUNNER_TEMP", "/tmp"), "docx-mcp-stderr.txt"), "w")
+        self.p = subprocess.Popen([exe, "--author", "Alice Author"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                  stderr=self.err, text=True, encoding="utf-8")
         self.id = 0
 
     def rpc(self, method, params=None):
@@ -26,7 +28,9 @@ class Client:
         while True:
             line = self.p.stdout.readline()
             if not line:
-                raise SystemExit("server closed")
+                self.p.wait(timeout=10)
+                self.err.flush()
+                raise SystemExit("server closed (exit code %s, last request %s)" % (self.p.returncode, method))
             r = json.loads(line)
             if r.get("id") == self.id:
                 return r
