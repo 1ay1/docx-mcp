@@ -16,6 +16,7 @@
 
 #include "mcp/session.hpp"
 #include "mcp/tools.hpp"
+#include "util/crash.hpp"
 #include "util/fsio.hpp"
 #include "util/util.hpp"
 
@@ -51,6 +52,7 @@ std::string error_frame(const nlohmann::json& id, int code, const std::string& m
 }  // namespace
 
 int main(int argc, char** argv) {
+    docx::util::install_crash_handler();
     docx::util::set_binary_stdio();
     std::ios::sync_with_stdio(false);
 
