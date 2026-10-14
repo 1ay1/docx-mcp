@@ -124,6 +124,12 @@ std::vector<const ToolDef*> match_topic(const std::vector<ToolDef>& all, const s
     };
     std::vector<const ToolDef*> hits;
     if (auto t = find(topic)) return {t};
+    // "insert paragraph" / "insert-paragraph" mean insert_paragraph
+    {
+        std::string u = topic;
+        for (auto& c : u) if (c == ' ' || c == '-') c = '_';
+        if (auto t = find(u)) return {t};
+    }
     for (auto& g : task_groups())
         if (util::lower(g.area) == topic) {
             for (auto n : g.tools)
@@ -208,9 +214,10 @@ std::string help_result(const std::vector<ToolDef>& all, const std::string& topi
     std::set<std::string> seen;
     for (auto& t : topics) {
         auto hits = match_topic(all, t);
-        bool is_exact = hits.size() == 1 && hits[0]->name == t;
-        for (auto h : hits)
-            if (seen.insert(h->name).second) (is_exact ? exact : other).push_back(h);
+        // the best hit for each topic gets its full arguments, so one help
+        // call is enough to start working
+        for (std::size_t i = 0; i < hits.size(); i++)
+            if (seen.insert(hits[i]->name).second) (i == 0 ? exact : other).push_back(hits[i]);
         if (hits.empty()) out += "nothing matched '" + t + "'.\n";
     }
     // exact tools: everything needed to call them
@@ -226,6 +233,7 @@ std::string help_result(const std::vector<ToolDef>& all, const std::string& topi
         out += "help {topic: \"<tool name>\"} for a tool's arguments.\n";
     }
     if (exact.empty() && other.empty()) out += "help with no topic lists every area.\n";
+    while (!out.empty() && out.back() == '\n') out.pop_back();
     return out;
 }
 

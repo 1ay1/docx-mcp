@@ -79,7 +79,41 @@ pugi::xml_node find_style(Document& d, const std::string& key) {
 std::string ensure_style(Document& d, const std::string& key) {
     if (auto s = find_style(d, key)) return xml::attr(s, "w:styleId");
     auto b = builtin(key);
-    if (!b) throw std::runtime_error("style '" + key + "' not found (and not a Word built-in)");
+    if (!b) {
+        // the names a caller could have meant, best match first
+        std::vector<std::string> names;
+        auto add = [&](pugi::xml_node s) {
+            std::string n = xml::attr(s.child("w:name"), "w:val", xml::attr(s, "w:styleId"));
+            if (!n.empty() && std::find(names.begin(), names.end(), n) == names.end()) names.push_back(n);
+        };
+        if (auto st = d.styles()) for (auto s : st.children("w:style")) add(s);
+        for (auto s : builtins().document_element().children("w:style")) add(s);
+        // rank by words in common with what was asked ("Light Grid Accent 1"
+        // is close to "Grid Table 1 Light Accent 1"), then by length
+        auto words = [](const std::string& s) {
+            std::vector<std::string> w;
+            std::string cur;
+            for (char c : s + " ") {
+                if (std::isalnum((unsigned char)c)) cur += char(std::tolower((unsigned char)c));
+                else if (!cur.empty()) { w.push_back(cur); cur.clear(); }
+            }
+            return w;
+        };
+        auto want = words(key);
+        auto score = [&](const std::string& n) {
+            int sc = 0;
+            for (auto& w : words(n)) sc += std::find(want.begin(), want.end(), w) != want.end();
+            return sc;
+        };
+        std::stable_sort(names.begin(), names.end(), [&](auto& a, auto& b) {
+            int sa = score(a), sb = score(b);
+            return sa != sb ? sa > sb : a.size() < b.size();
+        });
+        std::string m = "style '" + key + "' not found. Closest: ";
+        for (std::size_t i = 0; i < names.size() && i < 6; i++) m += (i ? ", " : "") + names[i];
+        m += ". list_styles {include_builtin: true} shows them all.";
+        throw std::runtime_error(m);
+    }
     auto st = d.styles();
     // add it first so link cycles (Heading1 <-> Heading1Char) terminate
     auto n = st.append_copy(b);

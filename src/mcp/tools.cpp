@@ -812,13 +812,17 @@ std::vector<ToolDef> make_tools() {
          obj({{"doc", kDoc}, {"paragraphs", arr(str(""), "")}, {"level", integer("0-8")}, {"track", kTrack}}, {"doc", "paragraphs", "level"}), false, false,
          [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
+             Json out = Json::array();
              for (auto& id : strs(a, "paragraphs")) {
                  auto p = find_para(s.doc, id).p;
                  auto np = p.child("w:pPr").child("w:numPr");
                  if (!np) throw std::runtime_error("paragraph " + id + " is not in a list");
                  format_paragraph(s.doc, p, {{"numbering", {{"num_id", util::to_int(xml::attr(np.child("w:numId"), "w:val"))}, {"level", iarg(a, "level", 0)}}}}, track(a));
+                 Json j = para_brief(s.doc, p);
+                 j["label"] = list_label(s.doc, p);
+                 out.push_back(j);
              }
-             return Json{{"ok", true}};
+             return Json{{"level", iarg(a, "level", 0)}, {"paragraphs", out}};
          }});
     add({"remove_list", "Remove bullets / numbering", "Remove bullets or numbering from paragraphs, keeping the text.", obj({{"doc", kDoc}, {"paragraphs", arr(str(""), "")}, {"track", kTrack}}, {"doc", "paragraphs"}),
          false, false, [](Sessions& S, const Json& a) {
@@ -826,7 +830,9 @@ std::vector<ToolDef> make_tools() {
              std::vector<pugi::xml_node> ps;
              for (auto& id : strs(a, "paragraphs")) ps.push_back(find_para(s.doc, id).p);
              remove_list(s.doc, ps, track(a));
-             return Json{{"ok", true}};
+             Json out = Json::array();
+             for (auto p : ps) out.push_back(para_brief(s.doc, p));
+             return Json{{"paragraphs", out}};
          }});
     add({"restart_numbering", "Restart numbering", "Restart a numbered list at a paragraph, from 1 or any number (Set Numbering Value).",
          obj({{"doc", kDoc}, {"paragraph", kPara}, {"start", integer("Default 1.")}}, {"doc", "paragraph"}), false, false,
@@ -938,13 +944,13 @@ std::vector<ToolDef> make_tools() {
          [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
              resolve_comment(s.doc, need(a, "comment_id"), barg(a, "resolved", true));
-             return Json{{"ok", true}};
+             return Json{{"comment_id", need(a, "comment_id")}, {"resolved", barg(a, "resolved", true)}};
          }});
     add({"edit_comment", "Edit comment", "Change a comment's text.", obj({{"doc", kDoc}, {"comment_id", str("")}, {"text", str("")}}, {"doc", "comment_id", "text"}),
          false, false, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
              edit_comment(s.doc, need(a, "comment_id"), need(a, "text"));
-             return Json{{"ok", true}};
+             return Json{{"comment_id", need(a, "comment_id")}, {"text", need(a, "text")}};
          }});
     add({"delete_comment", "Delete comment", "Delete a comment and its replies; or all comments (optionally by author).",
          obj({{"doc", kDoc}, {"comment_id", str("Omit with all=true to delete every comment.")}, {"all", boolean("")}, {"by_author", str("")}}, {"doc"}),
@@ -1015,7 +1021,9 @@ std::vector<ToolDef> make_tools() {
              auto tc = cell(table_at(s.doc, iarg(a, "table", 1)), iarg(a, "row", 1) - 1, iarg(a, "col", 1) - 1);
              if (a.contains("text")) set_cell_text(s.doc, tc, sarg(a, "text"), track(a));
              if (a.contains("format")) format_cell(s.doc, tc, obj_arg(a, "format"), track(a));
-             return Json{{"ok", true}};
+             std::string text;
+             for (auto p : paragraphs(tc)) text += (text.empty() ? "" : "\n") + analyze(p).utf8();
+             return Json{{"table", iarg(a, "table", 1)}, {"row", iarg(a, "row", 1)}, {"col", iarg(a, "col", 1)}, {"text", text}};
          }});
     add({"table_rows", "Insert / delete rows", "Add a row above or below, or delete rows, in a table. row is 1-based.",
          obj({{"doc", kDoc}, {"table", integer("")}, {"action", enm({"insert_above", "insert_below", "delete"}, "")}, {"row", integer("")},
@@ -1071,14 +1079,19 @@ std::vector<ToolDef> make_tools() {
          obj({{"doc", kDoc}, {"table", integer("")}, {"format", anyobj("")}, {"track", kTrack}}, {"doc", "table", "format"}), false, false,
          [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
-             format_table(s.doc, table_at(s.doc, iarg(a, "table", 1)), obj_arg(a, "format"), track(a));
-             return Json{{"ok", true}};
+             auto tbl = table_at(s.doc, iarg(a, "table", 1));
+             format_table(s.doc, tbl, obj_arg(a, "format"), track(a));
+             Json out = {{"table", iarg(a, "table", 1)}, {"applied", Json::array()}};
+             for (auto& [k, _] : obj_arg(a, "format").items()) out["applied"].push_back(k);
+             std::string sty = xml::attr(tbl.child("w:tblPr").child("w:tblStyle"), "w:val");
+             if (!sty.empty()) out["style"] = sty;
+             return out;
          }});
     add({"delete_table", "Delete table", "Delete a whole table from the document.", obj({{"doc", kDoc}, {"table", integer("")}, {"track", kTrack}, {"author", str("Author of this change.")}}, {"doc", "table"}), false, true,
          [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
              delete_table(s.doc, table_at(s.doc, iarg(a, "table", 1)), track(a));
-             return Json{{"ok", true}};
+             return Json{{"deleted", iarg(a, "table", 1)}, {"tables", tables(s.doc).size()}};
          }});
 
     // ── insert: pictures, breaks, links, notes, fields, TOC, equations ──
@@ -1165,7 +1178,7 @@ std::vector<ToolDef> make_tools() {
                  return Json{{"sections", sections(s.doc).size()}};
              }
              insert_break(s.doc, r.p, pos_in(r.p, a), t, track(a));
-             return Json{{"ok", true}};
+             return Json{{"type", t}, {"paragraph", para_brief(s.doc, r.p)}};
          }});
     add({"insert_hyperlink", "Insert link", "Link text to a URL or to a bookmark (\"#name\"). Wrap existing text (match) or insert new link text.",
          obj({{"doc", kDoc}, {"paragraph", kPara}, {"url", str("https://..., mailto:..., or #bookmark")}, {"match", str("Existing text to link.")},
@@ -1199,7 +1212,9 @@ std::vector<ToolDef> make_tools() {
              auto r = para(s, a);
              auto [b, e] = a.contains("match") || a.contains("start") ? range_in(r.p, a) : std::pair<int, int>{0, vlen(r.p)};
              add_bookmark(s.doc, r.p, b, r.p, e, need(a, "name"));
-             return Json{{"ok", true}};
+             auto pt = analyze(r.p);
+             std::u32string sub = pt.text.substr(std::min<size_t>(b, pt.text.size()), std::max(0, e - b));
+             return Json{{"name", need(a, "name")}, {"paragraph", para_id(r.p)}, {"text", util::to_utf8(sub)}};
          }});
     add({"list_bookmarks", "Bookmarks", "List bookmarks with the text they mark. include_hidden adds Word's hidden _Toc/_Ref ones.", obj({{"doc", kDoc}, {"include_hidden", boolean("Include _Toc/_Ref/_GoBack bookmarks.")}}, {"doc"}), true, false,
          [](Sessions& S, const Json& a) {
@@ -1212,7 +1227,7 @@ std::vector<ToolDef> make_tools() {
          }});
     add({"delete_bookmark", "Delete bookmark", "Remove a bookmark (the text stays).", obj({{"doc", kDoc}, {"name", str("")}}, {"doc", "name"}), false, false, [](Sessions& S, const Json& a) {
         delete_bookmark(mut(S, a).doc, need(a, "name"));
-        return Json{{"ok", true}};
+        return Json{{"deleted", need(a, "name")}};
     }});
     add({"insert_note", "Footnote / endnote", "Insert a footnote or endnote reference at a position with the note text.",
          obj({{"doc", kDoc}, {"paragraph", kPara}, {"kind", enm({"footnote", "endnote"}, "")}, {"text", str("")}, {"position", integer("")},
@@ -1231,7 +1246,7 @@ std::vector<ToolDef> make_tools() {
     add({"delete_note", "Delete note", "Delete a footnote or endnote and its reference mark.", obj({{"doc", kDoc}, {"kind", enm({"footnote", "endnote"}, "")}, {"id", str("")}, {"track", kTrack}}, {"doc", "kind", "id"}),
          false, true, [](Sessions& S, const Json& a) {
              delete_note(mut(S, a).doc, need(a, "kind"), need(a, "id"), track(a));
-             return Json{{"ok", true}};
+             return Json{{"deleted", need(a, "kind") + " " + need(a, "id")}};
          }});
     add({"insert_field", "Insert field",
          "Insert a Word field: PAGE, NUMPAGES, DATE \\@ \"MMMM d, yyyy\", TIME, AUTHOR, TITLE, FILENAME, REF bookmark \\h, "
@@ -1243,7 +1258,7 @@ std::vector<ToolDef> make_tools() {
              auto& s = mut(S, a);
              auto r = para(s, a);
              insert_field(s.doc, r.p, pos_in(r.p, a), need(a, "code"), sarg(a, "result"), obj_arg(a, "format"), track(a));
-             return Json{{"ok", true}};
+             return Json{{"code", need(a, "code")}, {"paragraph", para_brief(s.doc, r.p)}};
          }});
     add({"list_fields", "Fields", "List fields (PAGE, DATE, TOC, REF, MERGEFIELD...) with their codes and current results.", obj({{"doc", kDoc}}, {"doc"}), true, false, [](Sessions& S, const Json& a) {
         Json v = Json::array();
@@ -1262,7 +1277,8 @@ std::vector<ToolDef> make_tools() {
              Json o = Json::object();
              for (auto k : {"from_level", "to_level", "title", "hyperlinks"}) if (a.contains(k)) o[k] = a[k];
              insert_toc(s.doc, para(s, a).p, o, track(a));
-             return Json{{"ok", true}};
+             return Json{{"inserted", "table of contents"},
+                         {"note", "entries fill in when the document is opened in Word or rendered (render_pages, export_pdf)"}};
          }});
     add({"insert_caption", "Caption",
          "Add a numbered caption (References > Insert Caption): \"Figure 1: text\", \"Table 2: text\". Numbers are "
@@ -1326,7 +1342,7 @@ std::vector<ToolDef> make_tools() {
              auto& s = mut(S, a);
              auto r = para(s, a);
              insert_equation(s.doc, r.p, pos_in(r.p, a), need(a, "equation"), barg(a, "display", false), track(a));
-             return Json{{"ok", true}};
+             return Json{{"equation", need(a, "equation")}, {"display", barg(a, "display", false)}, {"paragraph", para_id(r.p)}};
          }});
     add({"add_content_control", "Content control",
          "Wrap text in (or insert) a content control: richText, text, checkbox, dropDown, comboBox, date, picture. "
@@ -1364,7 +1380,13 @@ std::vector<ToolDef> make_tools() {
          obj({{"doc", kDoc}, {"control", str("id, tag or title")}, {"value", {{"description", "string or boolean"}}}}, {"doc", "control", "value"}), false, false,
          [](Sessions& S, const Json& a) {
              set_content_control(mut(S, a).doc, need(a, "control"), a["value"]);
-             return Json{{"ok", true}};
+             for (auto& c : list_content_controls(sess(S, a).doc))
+                 if (c.id == need(a, "control") || c.tag == need(a, "control") || c.alias == need(a, "control")) {
+                     Json j = {{"id", c.id}, {"type", c.type}, {"text", c.text}};
+                     if (c.type == "checkbox") j["checked"] = c.checked;
+                     return j;
+                 }
+             return Json{{"control", need(a, "control")}};
          }});
 
     // ── layout: sections, headers/footers ────────────────────────────────
@@ -1380,7 +1402,18 @@ std::vector<ToolDef> make_tools() {
          "Set page layout of a section (1-based, default all): orientation, paper (letter|a4|legal|a3|a5|b5|executive|tabloid), "
          "page_width/page_height, margins {top,bottom,left,right,header,footer,gutter} (pt or \"1in\"), columns, column_space, "
          "vertical_align, line_numbers, page_numbers {start, format}, title_page (different first page), type (section start).",
-         obj({{"doc", kDoc}, {"section", integer("Omit for all sections.")}, {"setup", anyobj("")}, {"even_odd_headers", boolean("")}, {"track", kTrack}},
+         obj({{"doc", kDoc}, {"section", integer("Omit for all sections.")},
+              {"setup", {{"type", "object"}, {"description", "Lengths in pt or with units (\"1in\", \"2cm\")."},
+                         {"properties", {{"orientation", enm({"portrait", "landscape"}, "")},
+                                         {"paper", enm({"letter", "a4", "legal", "a3", "a5", "b5", "executive", "tabloid"}, "")},
+                                         {"page_width", str("")}, {"page_height", str("")},
+                                         {"margins", anyobj("{top,bottom,left,right,header,footer,gutter}")},
+                                         {"columns", integer("")}, {"column_space", str("")},
+                                         {"vertical_align", enm({"top", "center", "both", "bottom"}, "")},
+                                         {"line_numbers", anyobj("")}, {"page_numbers", anyobj("{start, format}")},
+                                         {"title_page", boolean("Different first page.")},
+                                         {"type", enm({"nextPage", "continuous", "evenPage", "oddPage"}, "Section start.")}}}}},
+              {"even_odd_headers", boolean("")}, {"track", kTrack}},
              {"doc", "setup"}),
          false, false, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
@@ -1389,7 +1422,12 @@ std::vector<ToolDef> make_tools() {
              int n = (int)sections(s.doc).size();
              if (a.contains("section")) format_section(s.doc, iarg(a, "section", 1), props, track(a));
              else for (int i = 1; i <= n; i++) format_section(s.doc, i, props, track(a));
-             return Json{{"ok", true}};
+             // the resulting layout, so the model sees units and values took
+             auto secs = sections(s.doc);
+             Json j = section_json(s.doc, secs[a.contains("section") ? std::clamp(iarg(a, "section", 1), 1, (int)secs.size()) - 1 : 0]);
+             j.erase("headers_footers");
+             j["sections_changed"] = a.contains("section") ? 1 : n;
+             return j;
          }});
     add({"set_header_footer", "Header / footer",
          "Set a header or footer's text for a section. Use {PAGE}, {NUMPAGES}, {DATE}, {SECTIONPAGES} placeholders for fields. "
@@ -1411,7 +1449,7 @@ std::vector<ToolDef> make_tools() {
          obj({{"doc", kDoc}, {"section", integer("")}, {"kind", enm({"header", "footer"}, "")}, {"which", enm({"default", "first", "even"}, "")}}, {"doc", "kind"}),
          false, true, [](Sessions& S, const Json& a) {
              remove_header_footer(mut(S, a).doc, iarg(a, "section", 1), need(a, "kind"), sarg(a, "which", "default"));
-             return Json{{"ok", true}};
+             return Json{{"removed", sarg(a, "which", "default") + " " + need(a, "kind")}, {"section", iarg(a, "section", 1)}};
          }});
     add({"read_header_footer", "Read header / footer", "Read a header or footer: its paragraphs with ids you can edit (paragraph = \"part#id\").", obj({{"doc", kDoc}, {"section", integer("")}, {"kind", enm({"header", "footer"}, "")},
                                                                 {"which", enm({"default", "first", "even"}, "")}},

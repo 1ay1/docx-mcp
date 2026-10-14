@@ -222,7 +222,11 @@ std::vector<std::string> normalize_args(const ToolDef& t, Json& args) {
     // 1. rename unknown keys: exact alias, snake_case form, or a close name
     Json out = Json::object();
     for (auto& [k, v] : args.items()) {
-        if (props.contains(k)) { out[k] = v; continue; }
+        if (props.contains(k)) {
+            if (out.contains(k) && out[k].is_object() && v.is_object()) out[k].update(v);  // folded keys came first
+            else out[k] = v;
+            continue;
+        }
         std::string target;
         std::string sk = snake(k);
         if (props.contains(sk)) target = sk;
@@ -236,6 +240,21 @@ std::vector<std::string> normalize_args(const ToolDef& t, Json& args) {
             if (best > std::max<std::size_t>(1, sk.size() / 4)) target.clear();
         }
         if (target.empty()) {
+            // a key that belongs inside an object argument ("margins" given
+            // flat instead of inside setup): move it there
+            std::string owner;
+            for (auto& [p, ps] : props.items())
+                if (ps.value("type", "") == "object" && ps.contains("properties") && ps["properties"].contains(sk)) {
+                    owner = p;
+                    break;
+                }
+            if (!owner.empty()) {
+                Json& o = out[owner];
+                if (!o.is_object()) o = Json::object();
+                if (!o.contains(sk)) o[sk] = v;
+                notes.push_back("moved '" + k + "' into " + owner);
+                continue;
+            }
             std::string names;
             for (auto& [p, _] : props.items()) names += (names.empty() ? "" : ", ") + p;
             // A read tool loses nothing by dropping a guess ("xml_hint" on
