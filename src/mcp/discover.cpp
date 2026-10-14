@@ -48,6 +48,11 @@ const std::vector<TaskGroup>& task_groups() {
 
 namespace {
 
+std::string first_sentence(const std::string& s) {
+    auto p = s.find(". ");
+    return p == std::string::npos ? s : s.substr(0, p + 1);
+}
+
 // "doc, paragraph, text, [position], [track]": required first, optional in brackets
 std::string arg_line(const ToolDef& t) {
     std::set<std::string> req;
@@ -60,96 +65,155 @@ std::string arg_line(const ToolDef& t) {
     return out;
 }
 
-std::string first_sentence(const std::string& s) {
-    auto p = s.find(". ");
-    return p == std::string::npos ? s : s.substr(0, p + 1);
+// One short line per argument: "  text (string, required): what it is".
+// What a model needs to call the tool, without JSON Schema noise.
+std::string arg_lines(const ToolDef& t) {
+    std::set<std::string> req;
+    for (auto& r : t.schema.value("required", Json::array())) req.insert(r.get<std::string>());
+    auto type_of = [](const Json& p) -> std::string {
+        if (p.contains("enum")) {
+            std::string s;
+            for (auto& e : p["enum"]) s += (s.empty() ? "" : "|") + e.get<std::string>();
+            return s;
+        }
+        if (!p.contains("type")) return "string or object";
+        auto& ty = p["type"];
+        if (ty.is_array()) {
+            std::string s;
+            for (auto& e : ty) s += (s.empty() ? "" : " or ") + e.get<std::string>();
+            return s;
+        }
+        std::string s = ty.get<std::string>();
+        if (s == "array" && p.contains("items") && p["items"].contains("type") && p["items"]["type"].is_string())
+            return "list of " + p["items"]["type"].get<std::string>();
+        if (s == "object" && p.contains("properties")) {
+            std::string keys;
+            for (auto& [k, _] : p["properties"].items()) keys += (keys.empty() ? "" : ", ") + k;
+            return "object: " + keys;
+        }
+        return s;
+    };
+    std::string out;
+    if (!t.schema.contains("properties")) return out;
+    // required first, then the rest in schema order
+    std::vector<std::string> order;
+    for (auto& r : t.schema.value("required", Json::array())) order.push_back(r.get<std::string>());
+    for (auto& [k, _] : t.schema["properties"].items())
+        if (!req.count(k) && k != "author") order.push_back(k);
+    for (auto& k : order) {
+        auto& p = t.schema["properties"][k];
+        std::string d = p.value("description", "");
+        if (d.size() > 160) d = first_sentence(d);
+        out += "  " + k + " (" + type_of(p) + (req.count(k) ? ", required" : "") + ")" + (d.empty() ? "" : ": " + d) + "\n";
+    }
+    return out;
 }
+
 
 }  // namespace
 
-Json help_result(const std::vector<ToolDef>& all, const std::string& topic_in) {
+namespace {
+// Tools matching one topic: an exact tool name, an area, or words.
+std::vector<const ToolDef*> match_topic(const std::vector<ToolDef>& all, const std::string& topic) {
     auto find = [&](const std::string& n) -> const ToolDef* {
         for (auto& t : all)
             if (t.name == n) return &t;
         return nullptr;
     };
-    std::string topic = util::lower(util::trim(topic_in));
-    Json out;
-    if (topic.empty()) {
-        Json areas = Json::array();
-        for (auto& g : task_groups()) {
-            Json tools = Json::array();
-            for (auto n : g.tools)
-                if (find(n)) tools.push_back(n);
-            areas.push_back({{"area", g.area}, {"for", g.says}, {"tools", tools}});
-        }
-        out["areas"] = areas;
-        out["next"] = "help {topic} shows a tool's arguments, e.g. help {\"topic\": \"tables\"} or {\"topic\": \"insert_table\"}. "
-                      "If a tool isn't in your list, call it with run_tool {\"tool\": name, \"arguments\": {...}}.";
-        return out;
-    }
-    // exact tool, an area, or words matched against what each tool is for
     std::vector<const ToolDef*> hits;
-    if (auto t = find(topic)) hits.push_back(t);
-    for (auto& g : task_groups()) {
-        if (!hits.empty()) break;
-        if (util::lower(g.area) == topic)
+    if (auto t = find(topic)) return {t};
+    for (auto& g : task_groups())
+        if (util::lower(g.area) == topic) {
             for (auto n : g.tools)
                 if (auto t = find(n)) hits.push_back(t);
-    }
-    if (hits.empty()) {
-        // what people say -> the words our tools use
-        static const std::vector<std::pair<const char*, const char*>> syn = {
-            {"new", "create"}, {"blank", "create"}, {"bold", "format_text"}, {"italic", "format_text"}, {"center", "format_paragraph"}, {"align", "format_paragraph"},
-            {"indent", "format_paragraph"}, {"spacing", "format_paragraph"}, {"shade", "format_table"}, {"border", "format_table"},
-            {"heading", "outline"}, {"size", "format_text"},
-            {"underline", "format_text"}, {"font", "format_text"}, {"color", "format_text"},
-            {"bullet", "list"}, {"numbering", "list"}, {"row", "table_rows"}, {"column", "table_columns"},
-            {"cell", "set_cell"}, {"image", "picture"}, {"photo", "picture"}, {"logo", "picture"}, {"wrap", "format_picture"},
-            {"resize", "format_picture"},
-            {"link", "hyperlink"}, {"url", "hyperlink"}, {"footnote", "note"}, {"endnote", "note"},
-            {"redline", "revision"}, {"change", "revision"}, {"margin", "page_setup"}, {"landscape", "page_setup"},
-            {"orientation", "page_setup"}, {"paper", "page_setup"}, {"page number", "header_footer"},
-            {"header", "header_footer"}, {"footer", "header_footer"}, {"contents", "toc"}, {"password", "protect"},
-            {"lock", "protect"}, {"title", "properties"}, {"metadata", "properties"}, {"read", "read_document"},
-            {"word count", "statistics"}, {"search", "find_text"}, {"replace", "replace"}, {"equation", "equation"},
-            {"formula", "equation"}, {"checkbox", "content_control"}, {"dropdown", "content_control"}};
-        std::string expanded = topic;
-        for (auto& [k, v] : syn)
-            if (topic.find(k) != std::string::npos) expanded += std::string(" ") + v;
-        std::vector<std::string> words;
-        for (auto& w : util::split(expanded, ' '))
-            if (w.size() >= 3) words.push_back(w.back() == 's' && w.size() > 3 ? w.substr(0, w.size() - 1) : w);
-        std::vector<std::pair<int, const ToolDef*>> scored;
-        for (auto& g : task_groups())
-            for (auto n : g.tools) {
-                auto t = find(n);
-                if (!t) continue;
-                std::string own = util::lower(t->title + " " + t->description);
-                std::string grp = util::lower(std::string(g.area) + " " + g.says);
-                int s = 0;
-                for (auto& w : words) {
-                    if (t->name.find(w) != std::string::npos) s += 6;
-                    else if (own.find(w) != std::string::npos) s += 2;
-                    else if (grp.find(w) != std::string::npos) s += 1;
-                }
-                if (s > 1) scored.push_back({s, t});
+            return hits;
+        }
+    // what people say -> the words our tools use
+    static const std::vector<std::pair<const char*, const char*>> syn = {
+        {"new", "create"}, {"blank", "create"}, {"bold", "format_text"}, {"italic", "format_text"},
+        {"center", "format_paragraph"}, {"align", "format_paragraph"}, {"indent", "format_paragraph"},
+        {"spacing", "format_paragraph"}, {"shade", "format_table"}, {"border", "format_table"}, {"heading", "outline"},
+        {"size", "format_text"}, {"underline", "format_text"}, {"font", "format_text"}, {"color", "format_text"},
+        {"bullet", "list"}, {"numbering", "list"}, {"row", "table_rows"}, {"column", "table_columns"},
+        {"cell", "set_cell"}, {"image", "picture"}, {"photo", "picture"}, {"logo", "picture"},
+        {"wrap", "format_picture"}, {"resize", "format_picture"}, {"link", "hyperlink"}, {"url", "hyperlink"},
+        {"footnote", "note"}, {"endnote", "note"}, {"redline", "revision"}, {"change", "revision"},
+        {"margin", "page_setup"}, {"landscape", "page_setup"}, {"orientation", "page_setup"}, {"paper", "page_setup"},
+        {"page number", "header_footer"}, {"header", "header_footer"}, {"footer", "header_footer"},
+        {"contents", "toc"}, {"password", "protect"}, {"lock", "protect"}, {"title", "properties"},
+        {"metadata", "properties"}, {"read", "read_document"}, {"word count", "statistics"}, {"search", "find_text"},
+        {"replace", "replace"}, {"equation", "equation"}, {"formula", "equation"}, {"checkbox", "content_control"},
+        {"dropdown", "content_control"}, {"pdf", "export_pdf"}, {"render", "render_pages"}, {"look", "render_pages"},
+        {"preview", "render_pages"}, {"caption", "caption"}, {"cross", "cross_reference"}};
+    std::string expanded = topic;
+    for (auto& [k, v] : syn)
+        if (topic.find(k) != std::string::npos) expanded += std::string(" ") + v;
+    std::vector<std::string> words;
+    for (auto& w : util::split(expanded, ' '))
+        if (w.size() >= 3) words.push_back(w.back() == 's' && w.size() > 3 ? w.substr(0, w.size() - 1) : w);
+    std::vector<std::pair<int, const ToolDef*>> scored;
+    for (auto& g : task_groups())
+        for (auto n : g.tools) {
+            auto t = find(n);
+            if (!t) continue;
+            std::string own = util::lower(t->title + " " + t->description);
+            std::string grp = util::lower(std::string(g.area) + " " + g.says);
+            int sc = 0;
+            for (auto& w : words) {
+                if (t->name.find(w) != std::string::npos) sc += 6;
+                else if (own.find(w) != std::string::npos) sc += 2;
+                else if (grp.find(w) != std::string::npos) sc += 1;
             }
-        std::stable_sort(scored.begin(), scored.end(), [](auto& a, auto& b) { return a.first > b.first; });
-        for (std::size_t i = 0; i < scored.size() && i < 8; i++) hits.push_back(scored[i].second);
-    }
-    if (hits.empty()) {
-        out["tools"] = Json::array();
-        out["next"] = "nothing matched '" + topic_in + "'; call help with no topic to see every area";
+            if (sc > 1) scored.push_back({sc, t});
+        }
+    std::stable_sort(scored.begin(), scored.end(), [](auto& a, auto& b) { return a.first > b.first; });
+    for (std::size_t i = 0; i < scored.size() && i < 6; i++) hits.push_back(scored[i].second);
+    return hits;
+}
+}  // namespace
+
+std::string help_result(const std::vector<ToolDef>& all, const std::string& topic_in) {
+    std::string topic = util::lower(util::trim(topic_in));
+    std::string out;
+    if (topic.empty()) {
+        out = "docx-mcp: Word documents by task. Call a tool directly, or through run_tool if it isn't in your list.\n"
+              "help {topic: \"insert_table, format_text\"} shows how to call tools (several at once, comma-separated).\n\n";
+        for (auto& g : task_groups()) {
+            out += std::string(g.area) + " (" + g.says + "):\n  ";
+            bool first = true;
+            for (auto n : g.tools)
+                for (auto& t : all)
+                    if (t.name == n) { out += (first ? "" : ", ") + t.name; first = false; }
+            out += "\n";
+        }
         return out;
     }
-    Json tools = Json::array();
-    for (auto t : hits)
-        tools.push_back({{"tool", t->name}, {"does", first_sentence(t->description.empty() ? t->title : t->description)},
-                         {"args", arg_line(*t)}});
-    out["tools"] = tools;
-    if (hits.size() == 1) out["schema"] = hits[0]->schema;
-    out["next"] = "call a tool directly, or through run_tool {\"tool\": name, \"arguments\": {...}} if it isn't in your list";
+    // several topics at once: "insert_table, format_text, add a comment"
+    std::vector<std::string> topics;
+    for (auto& part : util::split(topic, ','))
+        if (auto t = util::trim(part); !t.empty()) topics.push_back(t);
+    std::vector<const ToolDef*> exact, other;
+    std::set<std::string> seen;
+    for (auto& t : topics) {
+        auto hits = match_topic(all, t);
+        bool is_exact = hits.size() == 1 && hits[0]->name == t;
+        for (auto h : hits)
+            if (seen.insert(h->name).second) (is_exact ? exact : other).push_back(h);
+        if (hits.empty()) out += "nothing matched '" + t + "'.\n";
+    }
+    // exact tools: everything needed to call them
+    for (auto t : exact) {
+        out += t->name + ": " + (t->description.empty() ? t->title : t->description) + "\n" + arg_lines(*t) + "\n";
+    }
+    // searches: one line each
+    if (!other.empty()) {
+        if (!exact.empty()) out += "Related:\n";
+        for (auto t : other)
+            out += "  " + t->name + "(" + arg_line(*t) + "): " +
+                   first_sentence(t->description.empty() ? t->title : t->description) + "\n";
+        out += "help {topic: \"<tool name>\"} for a tool's arguments.\n";
+    }
+    if (exact.empty() && other.empty()) out += "help with no topic lists every area.\n";
     return out;
 }
 

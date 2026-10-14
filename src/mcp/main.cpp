@@ -188,7 +188,16 @@ int main(int argc, char** argv) {
             try {
                 std::lock_guard lk(sessions.mu);
                 nlohmann::json out = docx::server::call_tool(*def, sessions, in);
-                r.content = {mcp::text(out.dump(2))};
+                // pictures (rendered pages) go out as image blocks, not inside the JSON text
+                std::vector<mcp::ContentBlock> images;
+                if (out.contains("_images")) {
+                    for (auto& im : out["_images"])
+                        images.push_back(mcp::image(im.value("data", ""), im.value("mime", "image/png")));
+                    out.erase("_images");
+                }
+                r.content = {mcp::text(out.contains("_text") && out.size() == 1 ? out["_text"].get<std::string>()
+                                                                                 : out.dump(2))};
+                for (auto& b : images) r.content.push_back(std::move(b));
                 r.structuredContent = out;
             } catch (const std::bad_alloc&) {
                 r.content = {mcp::text("error: out of memory while running " + def->name)};

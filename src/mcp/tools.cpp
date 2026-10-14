@@ -13,6 +13,8 @@
 #include "util/util.hpp"
 #include "wml/comments.hpp"
 #include "wml/docops.hpp"
+#include "wml/document.hpp"
+#include "wml/render.hpp"
 #include "wml/edit.hpp"
 #include "wml/structure.hpp"
 #include "wml/styles.hpp"
@@ -1506,6 +1508,43 @@ std::vector<ToolDef> make_tools() {
              return Json{{"ok", true}};
          }});
 
+    // ── seeing the page ──
+    add({"render_pages", "See pages",
+         "Render pages of the document as images so you can see the layout: where pictures, tables and page breaks "
+         "fall, how a heading looks. Returns PNG images (and the page count). Uses LibreOffice; unsaved edits are "
+         "included.",
+         obj({{"doc", kDoc}, {"page", integer("First page (1-based, default 1).")}, {"to_page", integer("Last page (default = page; at most 20).")},
+              {"dpi", integer("Resolution, 30-300 (default 80; 150 to read small text).")}},
+             {"doc"}),
+         true, false, [](Sessions& S, const Json& a) {
+             auto& s = sess(S, a);
+             int total = 0;
+             int first = iarg(a, "page", 1);
+             auto pages = render_pages(s.doc, first, iarg(a, "to_page", first), iarg(a, "dpi", 80), total);
+             Json out = {{"pages", total}, {"rendered", Json::array()}, {"_images", Json::array()}};
+             for (auto& p : pages) {
+                 out["rendered"].push_back(p.page);
+                 out["_images"].push_back({{"data", util::base64_encode(p.png)}, {"mime", "image/png"}});
+             }
+             return out;
+         }});
+    add({"export_pdf", "Save as PDF",
+         "Export the document to PDF (File > Save As > PDF), with the current unsaved edits. Uses LibreOffice.",
+         obj({{"doc", kDoc}, {"path", str("Where to write the .pdf (default: next to the document).")}}, {"doc"}),
+         false, false, [](Sessions& S, const Json& a) {
+             auto& s = sess(S, a);
+             std::string path = sarg(a, "path");
+             if (path.empty()) {
+                 auto p = util::u8path(s.path);
+                 p.replace_extension(".pdf");
+                 path = util::path_utf8(p);
+             }
+             path = util::normalize_path(path);
+             auto pdf = export_pdf(s.doc);
+             util::write_file_atomic(path, pdf);
+             return Json{{"saved", path}, {"bytes", pdf.size()}};
+         }});
+
     // ── discovery ──────────────────────────────────────────────────────────
     // Clients that rank or cap tools show a model only a few of these. help
     // maps every task to its tool; run_tool runs one the client didn't show.
@@ -1515,10 +1554,10 @@ std::vector<ToolDef> make_tools() {
          "Help for Word documents (docx files): lists everything this can do, by task, and which tool does it. "
          "Open, create, read, write and edit text and paragraphs; format font, size, bold, headings, styles; "
          "tables, rows, cells; pictures; lists and bullets; headers, footers, page numbers, margins; comments; "
-         "track changes; footnotes; links; table of contents. Give a topic or tool name to see its arguments. "
-         "Call this first when the Word tool you need isn't in your list, then use run_tool.",
-         obj({{"topic", str("A task (\"tables\", \"add a comment\") or a tool name. Omit for everything.")}}), true, false,
-         [catalog](Sessions&, const Json& a) { return help_result(*catalog, sarg(a, "topic")); }});
+         "track changes; footnotes; links; table of contents. Give tool names or tasks (comma-separated) to see how to "
+         "call them. Only needed when a Word tool isn't in your list; tools you can see, call directly.",
+         obj({{"topic", str("Tool names or tasks, comma-separated (\"insert_table, format_text\", \"add a comment\"). Omit for everything.")}}), true, false,
+         [catalog](Sessions&, const Json& a) { return Json{{"_text", help_result(*catalog, sarg(a, "topic"))}}; }});
     add({"run_tool", "Run any docx tool",
          "Run any Word document tool by name, including ones your client didn't list (find them with help). Same "
          "arguments as calling the tool directly: edit, format, tables, comments, track changes, headers, anything.",

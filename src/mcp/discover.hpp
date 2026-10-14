@@ -21,7 +21,7 @@ const std::vector<TaskGroup>& task_groups();
 
 // help {topic?}: the catalog by task, or the tools matching a topic/word,
 // with their argument lists. `all` is the full catalog (not the profile).
-nlohmann::json help_result(const std::vector<ToolDef>& all, const std::string& topic);
+std::string help_result(const std::vector<ToolDef>& all, const std::string& topic);
 
 // Ready-made workflows offered as MCP prompts.
 struct Workflow {

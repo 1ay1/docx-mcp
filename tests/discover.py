@@ -109,7 +109,9 @@ def main():
     c = Client(exe)
     c.rpc("initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "d", "version": "1"}})
     for task, want in TASKS:
-        got = [t["tool"] for t in c.call("help", topic=task)["tools"]][:3]
+        txt = c.rpc("tools/call", {"name": "help", "arguments": {"topic": task}})["result"]["content"][0]["text"]
+        # tool names as listed: "name(" for search hits, "name:" for an exact tool
+        got = re.findall(r"^\s*([a-z_]+)[(:]", txt, re.M)[:3]
         if want not in got:
             fails.append("help %r -> %s, want %s" % (task, got, want))
     tools = json.loads(subprocess.run([exe, "--list-tools"], capture_output=True, text=True).stdout)
