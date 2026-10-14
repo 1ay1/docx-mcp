@@ -1,0 +1,1047 @@
+// Fields, table of contents, content controls, lists, equations.
+#include <algorithm>
+#include <cmath>
+#include <functional>
+#include <set>
+#include <stdexcept>
+
+#include "schema/schema.hpp"
+#include "util/util.hpp"
+#include "wml/structure.hpp"
+#include "wml/styles.hpp"
+#include "wml/text.hpp"
+#include "xml/xml.hpp"
+
+namespace docx::wml {
+
+namespace {
+
+bool tracking(Document& d, const EditOpts& o) { return o.track ? *o.track : d.track_changes(); }
+
+// Container + insert-before node for visible pos (like place_run in content.cpp).
+std::pair<pugi::xml_node, pugi::xml_node> insert_spot(pugi::xml_node p, int pos) {
+    split_at(p, pos);
+    ParaText pt = analyze(p);
+    int n = (int)pt.vis.size();
+    if (pos < n) {
+        auto node = pt.atoms[pt.vis[pos]].run;
+        while (is_revision_container(node.parent())) node = node.parent();
+        return {node.parent(), node};
+    }
+    if (n > 0) {
+        auto node = pt.atoms[pt.vis[n - 1]].run;
+        while (is_revision_container(node.parent())) node = node.parent();
+        return {node.parent(), node.next_sibling()};
+    }
+    return {p, {}};
+}
+
+pugi::xml_node add_run(pugi::xml_node parent, pugi::xml_node before) {
+    return before ? parent.insert_child_before("w:r", before) : parent.append_child("w:r");
+}
+
+std::string roman(int n, bool upper) {
+    static const std::pair<int, const char*> t[] = {{1000, "m"}, {900, "cm"}, {500, "d"}, {400, "cd"}, {100, "c"}, {90, "xc"},
+                                                    {50, "l"}, {40, "xl"}, {10, "x"}, {9, "ix"}, {5, "v"}, {4, "iv"}, {1, "i"}};
+    std::string s;
+    for (auto& [v, r] : t) while (n >= v) { s += r; n -= v; }
+    if (upper) for (auto& c : s) c = char(std::toupper((unsigned char)c));
+    return s;
+}
+
+std::string letters(int n, bool upper) {
+    // Word repeats the letter: a..z, aa..zz, aaa..
+    if (n < 1) return "";
+    int rep = (n - 1) / 26 + 1;
+    char c = char('a' + (n - 1) % 26);
+    if (upper) c = char(std::toupper((unsigned char)c));
+    return std::string(rep, c);
+}
+
+std::string ordinal_suffix(int n) {
+    int m = n % 100;
+    if (m >= 11 && m <= 13) return "th";
+    switch (n % 10) { case 1: return "st"; case 2: return "nd"; case 3: return "rd"; default: return "th"; }
+}
+
+std::string cardinal(int n) {
+    static const char* ones[] = {"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+                                 "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"};
+    static const char* tens[] = {"", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"};
+    if (n < 20) return ones[n];
+    if (n < 100) return std::string(tens[n / 10]) + (n % 10 ? "-" + std::string(ones[n % 10]) : "");
+    if (n < 1000) return std::string(ones[n / 100]) + " hundred" + (n % 100 ? " " + cardinal(n % 100) : "");
+    return std::to_string(n);
+}
+
+}  // namespace
+
+std::string format_number(int n, const std::string& fmt) {
+    if (fmt == "decimal" || fmt.empty()) return std::to_string(n);
+    if (fmt == "decimalZero") return (n < 10 ? "0" : "") + std::to_string(n);
+    if (fmt == "lowerRoman") return roman(n, false);
+    if (fmt == "upperRoman") return roman(n, true);
+    if (fmt == "lowerLetter") return letters(n, false);
+    if (fmt == "upperLetter") return letters(n, true);
+    if (fmt == "ordinal") return std::to_string(n) + ordinal_suffix(n);
+    if (fmt == "cardinalText") { auto s = cardinal(n); s[0] = char(std::toupper((unsigned char)s[0])); return s; }
+    if (fmt == "ordinalText") {
+        static const char* o[] = {"Zeroth", "First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth", "Ninth", "Tenth"};
+        return n <= 10 ? o[n] : std::to_string(n) + ordinal_suffix(n);
+    }
+    if (fmt == "decimalEnclosedParen") return "(" + std::to_string(n) + ")";
+    if (fmt == "bullet" || fmt == "none") return "";
+    return std::to_string(n);
+}
+
+// ── fields ───────────────────────────────────────────────────────────────
+
+void insert_field(Document& d, pugi::xml_node p, int pos, const std::string& instr, const std::string& result,
+                  const Json& rpr, const EditOpts& o) {
+    if (util::trim(instr).empty()) throw std::runtime_error("field instruction is empty");
+    auto [parent, before] = insert_spot(p, pos);
+    pugi::xml_node wrap_parent = parent, wrap_before = before;
+    if (tracking(d, o)) {
+        auto ins = before ? parent.insert_child_before("w:ins", before) : parent.append_child("w:ins");
+        stamp(d, ins);
+        wrap_parent = ins;
+        wrap_before = {};
+    }
+    auto mk = [&](auto fill) {
+        auto r = add_run(wrap_parent, wrap_before);
+        if (rpr.is_object() && !rpr.empty()) apply_rpr_json(d, r.append_child("w:rPr"), rpr);
+        fill(r);
+        return r;
+    };
+    mk([](pugi::xml_node r) { xml::set_attr(r.append_child("w:fldChar"), "w:fldCharType", "begin"); });
+    mk([&](pugi::xml_node r) {
+        auto t = r.append_child("w:instrText");
+        xml::set_attr(t, "xml:space", "preserve");
+        t.text().set((" " + util::trim(instr) + " ").c_str());
+    });
+    mk([](pugi::xml_node r) { xml::set_attr(r.append_child("w:fldChar"), "w:fldCharType", "separate"); });
+    if (!result.empty()) mk([&](pugi::xml_node r) { append_text(r, util::to_u32(result)); });
+    mk([](pugi::xml_node r) { xml::set_attr(r.append_child("w:fldChar"), "w:fldCharType", "end"); });
+}
+
+std::vector<FieldInfo> list_fields(Document& d) {
+    std::vector<FieldInfo> v;
+    for (auto& part : d.story_parts()) {
+        if (!d.pkg().has(part)) continue;
+        auto root = d.pkg().xml(part).document_element();
+        for (auto fs : xml::descendants(root, "w:fldSimple")) {
+            FieldInfo f;
+            f.instr = util::trim(xml::attr(fs, "w:instr"));
+            for (auto t : xml::descendants(fs, "w:t")) f.result += t.text().get();
+            if (auto p = xml::ancestor(fs, "w:p")) f.para = xml::attr(p, "w14:paraId");
+            v.push_back(f);
+        }
+        // complex fields: walk in document order
+        struct Open { FieldInfo f; bool code = true; };
+        std::vector<Open> stack;
+        std::function<void(pugi::xml_node, pugi::xml_node)> walk = [&](pugi::xml_node n, pugi::xml_node para) {
+            for (auto k : n.children()) {
+                if (k.type() != pugi::node_element) continue;
+                std::string_view q = k.name();
+                if (q == "w:p") { walk(k, k); continue; }
+                if (q == "mc:Fallback" || q == "w:del" || q == "w:moveFrom") continue;
+                if (q == "w:fldChar") {
+                    std::string t = xml::attr(k, "w:fldCharType");
+                    if (t == "begin") { stack.push_back({}); stack.back().f.para = xml::attr(para, "w14:paraId"); }
+                    else if (t == "separate" && !stack.empty()) stack.back().code = false;
+                    else if (t == "end" && !stack.empty()) {
+                        auto f = stack.back().f;
+                        f.instr = util::trim(f.instr);
+                        stack.pop_back();
+                        v.push_back(f);
+                        if (!stack.empty() && !stack.back().code) stack.back().f.result += f.result;
+                    }
+                    continue;
+                }
+                if (q == "w:instrText" && !stack.empty() && stack.back().code) { stack.back().f.instr += k.text().get(); continue; }
+                if (q == "w:t" && !stack.empty() && !stack.back().code) { stack.back().f.result += k.text().get(); continue; }
+                if (q == "w:tab" && !stack.empty() && !stack.back().code) { stack.back().f.result += "\t"; continue; }
+                walk(k, para);
+            }
+        };
+        walk(root, {});
+    }
+    return v;
+}
+
+namespace {
+
+struct Heading { pugi::xml_node p; int level; std::string text; };
+
+int heading_level(Document& d, pugi::xml_node p) {
+    // outline level from direct pPr or the style chain (Heading 1..9 carry outlineLvl)
+    std::function<int(pugi::xml_node)> from = [&](pugi::xml_node ppr) -> int {
+        if (auto o = ppr.child("w:outlineLvl")) {
+            int v = std::stoi(xml::attr(o, "w:val", "9"));
+            return v < 9 ? v + 1 : 0;
+        }
+        return -1;
+    };
+    int v = from(p.child("w:pPr"));
+    if (v >= 0) return v;
+    std::string sid = xml::attr(p.child("w:pPr").child("w:pStyle"), "w:val");
+    std::set<std::string> seen;
+    while (!sid.empty() && !seen.count(sid)) {
+        seen.insert(sid);
+        auto s = find_style(d, sid);
+        if (!s) break;
+        int lv = from(s.child("w:pPr"));
+        if (lv >= 0) return lv;
+        sid = xml::attr(s.child("w:basedOn"), "w:val");
+    }
+    return 0;
+}
+
+std::vector<Heading> headings(Document& d, int lo, int hi) {
+    std::vector<Heading> v;
+    for (auto p : paragraphs(d.body(), false)) {
+        if (xml::ancestor(p, "w:sdt") && xml::first_descendant(xml::ancestor(p, "w:sdt").child("w:sdtPr"), "w:docPartGallery")) {
+            std::string g = xml::attr(xml::first_descendant(xml::ancestor(p, "w:sdt").child("w:sdtPr"), "w:docPartGallery"), "w:val");
+            if (g == "Table of Contents") continue;
+        }
+        int lv = heading_level(d, p);
+        if (lv < lo || lv > hi || lv == 0) continue;
+        std::string t = util::trim(analyze(p).utf8());
+        if (t.empty()) continue;
+        v.push_back({p, lv, t});
+    }
+    return v;
+}
+
+// Bookmark name Word gives a heading for TOC links (_Toc + 9 digits).
+std::string toc_bookmark(Document& d, pugi::xml_node p) {
+    for (auto b : xml::children(p, "w:bookmarkStart")) {
+        std::string n = xml::attr(b, "w:name");
+        if (util::starts_with(n, "_Toc")) return n;
+    }
+    std::string name;
+    std::set<std::string> have;
+    for (auto& b : list_bookmarks(d)) have.insert(b.name);
+    do { name = "_Toc" + std::to_string(100000000 + util::random_u32() % 900000000); } while (have.count(name));
+    std::string id = std::to_string(d.next_bookmark_id());
+    auto ppr = p.child("w:pPr");
+    auto bs = ppr ? p.insert_child_after("w:bookmarkStart", ppr) : p.prepend_child("w:bookmarkStart");
+    xml::set_attr(bs, "w:id", id);
+    xml::set_attr(bs, "w:name", name);
+    auto be = p.append_child("w:bookmarkEnd");
+    xml::set_attr(be, "w:id", id);
+    return name;
+}
+
+long right_tab(Document& d) {
+    auto sp = d.body().child("w:sectPr");
+    long w = std::stol(xml::attr(sp.child("w:pgSz"), "w:w", "12240"));
+    long l = std::stol(xml::attr(sp.child("w:pgMar"), "w:left", "1440"));
+    long r = std::stol(xml::attr(sp.child("w:pgMar"), "w:right", "1440"));
+    return w - l - r;
+}
+
+// Build the TOC entry paragraphs (between the field's separate and end).
+void build_toc_entries(Document& d, pugi::xml_node sdt_content, int lo, int hi, bool links, const std::string& instr) {
+    auto hs = headings(d, lo, hi);
+    long tab = right_tab(d);
+    std::vector<pugi::xml_node> made;
+    for (std::size_t i = 0; i < hs.size(); i++) {
+        auto& h = hs[i];
+        std::string bm = toc_bookmark(d, h.p);
+        std::string sty = ensure_style(d, "TOC" + std::to_string(h.level));
+        auto p = sdt_content.append_child("w:p");
+        p.append_attribute("w14:paraId") = d.new_hex_id().c_str();
+        p.append_attribute("w14:textId") = "77777777";
+        auto ppr = p.append_child("w:pPr");
+        xml::set_attr(ppr.append_child("w:pStyle"), "w:val", sty);
+        auto tabs = ppr.append_child("w:tabs");
+        auto t = tabs.append_child("w:tab");
+        xml::set_attr(t, "w:val", "right");
+        xml::set_attr(t, "w:leader", "dot");
+        xml::set_attr(t, "w:pos", std::to_string(tab));
+        ppr.append_child("w:rPr").append_child("w:noProof");
+        if (i == 0) {
+            auto r1 = p.append_child("w:r");
+            xml::set_attr(r1.append_child("w:fldChar"), "w:fldCharType", "begin");
+            auto r2 = p.append_child("w:r");
+            auto it = r2.append_child("w:instrText");
+            xml::set_attr(it, "xml:space", "preserve");
+            it.text().set((" " + instr + " ").c_str());
+            auto r3 = p.append_child("w:r");
+            xml::set_attr(r3.append_child("w:fldChar"), "w:fldCharType", "separate");
+        }
+        pugi::xml_node holder = p;
+        if (links) {
+            holder = p.append_child("w:hyperlink");
+            xml::set_attr(holder, "w:anchor", bm);
+            xml::set_attr(holder, "w:history", "1");
+        }
+        auto tr = holder.append_child("w:r");
+        auto trp = tr.append_child("w:rPr");
+        if (links) xml::set_attr(trp.append_child("w:rStyle"), "w:val", ensure_style(d, "Hyperlink"));
+        trp.append_child("w:noProof");
+        append_text(tr, util::to_u32(h.text));
+        auto webr = [&](auto fill) {
+            auto r = holder.append_child("w:r");
+            auto rp = r.append_child("w:rPr");
+            rp.append_child("w:noProof");
+            rp.append_child("w:webHidden");
+            fill(r);
+        };
+        webr([](pugi::xml_node r) { r.append_child("w:tab"); });
+        webr([](pugi::xml_node r) { xml::set_attr(r.append_child("w:fldChar"), "w:fldCharType", "begin"); });
+        webr([&](pugi::xml_node r) {
+            auto x = r.append_child("w:instrText");
+            xml::set_attr(x, "xml:space", "preserve");
+            x.text().set((" PAGEREF " + bm + " \\h ").c_str());
+        });
+        webr([](pugi::xml_node r) { xml::set_attr(r.append_child("w:fldChar"), "w:fldCharType", "separate"); });
+        // page numbers need layout; Word refreshes them on open (updateFields)
+        webr([](pugi::xml_node r) { append_text(r, U"1"); });
+        webr([](pugi::xml_node r) { xml::set_attr(r.append_child("w:fldChar"), "w:fldCharType", "end"); });
+        made.push_back(p);
+    }
+    // closing paragraph with the field end
+    auto pe = sdt_content.append_child("w:p");
+    pe.append_attribute("w14:paraId") = d.new_hex_id().c_str();
+    pe.append_attribute("w14:textId") = "77777777";
+    if (hs.empty()) {
+        // empty TOC: Word shows its "No table of contents entries found." result
+        auto r1 = pe.append_child("w:r");
+        xml::set_attr(r1.append_child("w:fldChar"), "w:fldCharType", "begin");
+        auto r2 = pe.append_child("w:r");
+        auto it = r2.append_child("w:instrText");
+        xml::set_attr(it, "xml:space", "preserve");
+        it.text().set((" " + instr + " ").c_str());
+        auto r3 = pe.append_child("w:r");
+        xml::set_attr(r3.append_child("w:fldChar"), "w:fldCharType", "separate");
+        auto r4 = pe.append_child("w:r");
+        r4.append_child("w:rPr").append_child("w:noProof");
+        append_text(r4, U"No table of contents entries found.");
+    }
+    auto re = pe.append_child("w:r");
+    auto rp = re.append_child("w:rPr");
+    rp.append_child("w:b");
+    rp.append_child("w:bCs");
+    rp.append_child("w:noProof");
+    xml::set_attr(re.append_child("w:fldChar"), "w:fldCharType", "end");
+}
+
+void set_update_fields(Document& d) {
+    auto st = d.settings();
+    auto u = schema::ensure_child(st, "w:updateFields");
+    xml::set_attr(u, "w:val", "true");
+}
+
+}  // namespace
+
+void insert_toc(Document& d, pugi::xml_node p, const Json& opts_in, const EditOpts& o) {
+    const Json opts = opts_in.is_object() ? opts_in : Json::object();
+    int lo = opts.value("from_level", 1), hi = opts.value("to_level", 3);
+    bool links = opts.value("hyperlinks", true);
+    std::string title = opts.value("title", std::string("Contents"));
+    std::string instr = "TOC \\o \"" + std::to_string(lo) + "-" + std::to_string(hi) + "\"" + (links ? " \\h" : "") + " \\z \\u";
+    auto sdt = p.parent().insert_child_before("w:sdt", p);
+    auto pr = sdt.append_child("w:sdtPr");
+    xml::set_attr(pr.append_child("w:id"), "w:val", std::to_string((std::int32_t)util::random_u32()));
+    auto dpo = pr.append_child("w:docPartObj");
+    xml::set_attr(dpo.append_child("w:docPartGallery"), "w:val", "Table of Contents");
+    dpo.append_child("w:docPartUnique");
+    auto epr = sdt.append_child("w:sdtEndPr").append_child("w:rPr");
+    epr.append_child("w:b");
+    epr.append_child("w:bCs");
+    epr.append_child("w:noProof");
+    auto content = sdt.append_child("w:sdtContent");
+    if (!title.empty()) {
+        auto tp = content.append_child("w:p");
+        tp.append_attribute("w14:paraId") = d.new_hex_id().c_str();
+        tp.append_attribute("w14:textId") = "77777777";
+        xml::set_attr(tp.append_child("w:pPr").append_child("w:pStyle"), "w:val", ensure_style(d, "TOCHeading"));
+        append_text(tp.append_child("w:r"), util::to_u32(title));
+    }
+    build_toc_entries(d, content, lo, hi, links, instr);
+    if (tracking(d, o)) {
+        for (auto tp : xml::descendants(content, "w:p")) {
+            stamp(d, schema::ensure_child(schema::ensure_child(schema::ensure_child(tp, "w:pPr"), "w:rPr"), "w:ins"));
+            std::vector<pugi::xml_node> kids;
+            for (auto k : tp.children()) if (std::string_view(k.name()) == "w:r" || std::string_view(k.name()) == "w:hyperlink") kids.push_back(k);
+            for (auto k : kids) {
+                auto ins = tp.insert_child_before("w:ins", k);
+                stamp(d, ins);
+                ins.append_move(k);
+            }
+        }
+    }
+    set_update_fields(d);
+    xml::declare(xml::root_of(p), "w14", true);
+}
+
+int update_fields(Document& d) {
+    int n = 0;
+    // TOCs: rebuild entries from headings
+    for (auto sdt : xml::descendants(d.body(), "w:sdt")) {
+        auto g = xml::first_descendant(sdt.child("w:sdtPr"), "w:docPartGallery");
+        if (!g || xml::attr(g, "w:val") != "Table of Contents") continue;
+        auto content = sdt.child("w:sdtContent");
+        std::string instr;
+        for (auto it : xml::descendants(content, "w:instrText")) {
+            std::string s = util::trim(it.text().get());
+            if (util::starts_with(s, "TOC")) { instr = s; break; }
+        }
+        if (instr.empty()) continue;
+        int lo = 1, hi = 3;
+        auto q = instr.find("\\o \"");
+        if (q != std::string::npos) std::sscanf(instr.c_str() + q + 4, "%d-%d", &lo, &hi);
+        bool links = instr.find("\\h") != std::string::npos;
+        // keep the heading paragraph (first non-entry paragraph with TOCHeading style)
+        std::vector<pugi::xml_node> drop;
+        for (auto c : content.children()) {
+            if (std::string_view(c.name()) == "w:p" && xml::attr(c.child("w:pPr").child("w:pStyle"), "w:val") == "TOCHeading") continue;
+            drop.push_back(c);
+        }
+        for (auto c : drop) content.remove_child(c);
+        build_toc_entries(d, content, lo, hi, links, instr);
+        n++;
+    }
+    // SEQ fields: renumber per identifier; REF/STYLEREF results from targets
+    std::map<std::string, int> seq;
+    auto bms = list_bookmarks(d);
+    for (auto p : paragraphs(d.body())) {
+        // complex fields in this paragraph
+        std::vector<pugi::xml_node> runs;
+        for (auto r : xml::descendants(p, "w:r")) runs.push_back(r);
+        for (std::size_t i = 0; i < runs.size(); i++) {
+            auto fc = runs[i].child("w:fldChar");
+            if (!fc || xml::attr(fc, "w:fldCharType") != "begin") continue;
+            std::string instr;
+            std::size_t j = i + 1, sep = 0, end = 0;
+            int depth = 0;
+            for (; j < runs.size(); j++) {
+                auto f2 = runs[j].child("w:fldChar");
+                std::string t = f2 ? xml::attr(f2, "w:fldCharType") : "";
+                if (t == "begin") depth++;
+                if (t == "end") { if (depth == 0) { end = j; break; } depth--; }
+                if (t == "separate" && depth == 0) sep = j;
+                if (depth == 0 && !sep) if (auto it = runs[j].child("w:instrText")) instr += it.text().get();
+            }
+            if (!end || !sep) continue;
+            instr = util::trim(instr);
+            std::string result;
+            bool have = false;
+            auto words = util::split(instr, ' ');
+            std::string kind = words.empty() ? "" : util::lower(words[0]);
+            if (kind == "seq" && words.size() > 1) {
+                std::string id = words[1];
+                if (instr.find("\\r") != std::string::npos) {
+                    auto k = instr.find("\\r");
+                    seq[id] = std::atoi(instr.c_str() + k + 2) - 1;
+                }
+                if (instr.find("\\c") == std::string::npos) seq[id]++;
+                std::string fmt = "decimal";
+                if (instr.find("ROMAN") != std::string::npos) fmt = instr.find("roman") != std::string::npos ? "lowerRoman" : "upperRoman";
+                if (instr.find("ALPHABETIC") != std::string::npos) fmt = "upperLetter";
+                if (instr.find("alphabetic") != std::string::npos) fmt = "lowerLetter";
+                result = format_number(seq[id], fmt);
+                have = true;
+            } else if (kind == "ref" && words.size() > 1) {
+                for (auto& b : bms) if (b.name == words[1]) { result = b.text; have = true; }
+            }
+            if (!have) continue;
+            // replace the cached result runs between sep and end
+            for (std::size_t k = sep + 1; k < end; k++) {
+                for (auto t : xml::children(runs[k], "w:t")) runs[k].remove_child(t);
+            }
+            if (sep + 1 < end) append_text(runs[sep + 1], util::to_u32(result));
+            else {
+                auto nr = runs[end].parent().insert_child_before("w:r", runs[end]);
+                if (auto rp = runs[sep].child("w:rPr")) nr.append_copy(rp);
+                append_text(nr, util::to_u32(result));
+            }
+            n++;
+            i = end;
+        }
+    }
+    set_update_fields(d);  // page-dependent results (PAGE, PAGEREF, NUMPAGES) refresh on open
+    return n;
+}
+
+// ── content controls ─────────────────────────────────────────────────────
+
+pugi::xml_node add_content_control(Document& d, pugi::xml_node p, int s, int e, const Json& opts_in) {
+    const Json opts = opts_in.is_object() ? opts_in : Json::object();
+    std::string type = opts.value("type", std::string("richText"));
+    auto runs = isolate(p, s, e);
+    auto top = [&](pugi::xml_node x) { while (std::string_view(x.parent().name()) != "w:p") x = x.parent(); return x; };
+    pugi::xml_node before;
+    if (!runs.empty()) before = top(runs.front());
+    else {
+        auto spot = insert_spot(p, s);
+        before = spot.second;
+    }
+    auto sdt = before ? p.insert_child_before("w:sdt", before) : p.append_child("w:sdt");
+    auto pr = sdt.append_child("w:sdtPr");
+    if (opts.contains("alias")) xml::set_attr(pr.append_child("w:alias"), "w:val", opts["alias"].get<std::string>());
+    if (opts.contains("tag")) xml::set_attr(pr.append_child("w:tag"), "w:val", opts["tag"].get<std::string>());
+    xml::set_attr(pr.append_child("w:id"), "w:val", std::to_string((std::int32_t)util::random_u32()));
+    if (opts.value("lock_delete", false) || opts.value("lock_content", false)) {
+        std::string lk = opts.value("lock_delete", false) && opts.value("lock_content", false) ? "sdtContentLocked"
+                       : opts.value("lock_delete", false) ? "sdtLocked" : "contentLocked";
+        xml::set_attr(schema::ensure_child(pr, "w:lock"), "w:val", lk);
+    }
+    bool placeholder = runs.empty();
+    if (placeholder) {
+        xml::set_attr(schema::ensure_child(schema::ensure_child(pr, "w:placeholder"), "w:docPart"), "w:val", "DefaultPlaceholder_-1854013440");
+        schema::ensure_child(pr, "w:showingPlcHdr");
+    }
+    if (type == "text") schema::ensure_child(pr, "w:text");
+    else if (type == "checkbox") {
+        auto cb = pr.append_child("w14:checkbox");
+        bool on = opts.value("checked", false);
+        xml::set_attr(cb.append_child("w14:checked"), "w14:val", on ? "1" : "0");
+        auto cs = cb.append_child("w14:checkedState");
+        xml::set_attr(cs, "w14:val", "2612");
+        xml::set_attr(cs, "w14:font", "MS Gothic");
+        auto us = cb.append_child("w14:uncheckedState");
+        xml::set_attr(us, "w14:val", "2610");
+        xml::set_attr(us, "w14:font", "MS Gothic");
+        xml::declare(xml::root_of(p), "w14", true);
+    } else if (type == "dropDown" || type == "comboBox") {
+        auto dd = pr.append_child(type == "dropDown" ? "w:dropDownList" : "w:comboBox");
+        for (auto& it : opts.value("items", Json::array())) {
+            auto li = dd.append_child("w:listItem");
+            std::string disp = it.is_string() ? it.get<std::string>() : it.value("text", std::string());
+            std::string val = it.is_string() ? it.get<std::string>() : it.value("value", disp);
+            xml::set_attr(li, "w:displayText", disp);
+            xml::set_attr(li, "w:value", val);
+        }
+    } else if (type == "date") {
+        auto dt = pr.append_child("w:date");
+        xml::set_attr(dt.append_child("w:dateFormat"), "w:val", opts.value("format", std::string("M/d/yyyy")));
+        xml::set_attr(dt.append_child("w:lid"), "w:val", "en-US");
+        xml::set_attr(dt.append_child("w:storeMappedDataAs"), "w:val", "dateTime");
+        xml::set_attr(dt.append_child("w:calendar"), "w:val", "gregorian");
+    } else if (type == "picture") pr.append_child("w:picture");
+    else if (type != "richText") throw std::runtime_error("unknown content control type " + type);
+    // keep schema order inside sdtPr
+    schema::sort_children(pr);
+    auto content = sdt.append_child("w:sdtContent");
+    if (placeholder) {
+        std::string ph = opts.value("placeholder", std::string(type == "checkbox" ? "" : "Click or tap here to enter text."));
+        auto r = content.append_child("w:r");
+        if (type == "checkbox") {
+            r.append_child("w:rPr").append_child("w:rFonts");
+            auto f = r.child("w:rPr").child("w:rFonts");
+            xml::set_attr(f, "w:ascii", "MS Gothic");
+            xml::set_attr(f, "w:eastAsia", "MS Gothic");
+            xml::set_attr(f, "w:hAnsi", "MS Gothic");
+            pr.remove_child("w:showingPlcHdr");
+            append_text(r, opts.value("checked", false) ? U"\u2612" : U"\u2610");
+        } else {
+            xml::set_attr(r.append_child("w:rPr").append_child("w:rStyle"), "w:val", ensure_style(d, "PlaceholderText"));
+            append_text(r, util::to_u32(ph));
+        }
+    } else {
+        std::vector<pugi::xml_node> mv;
+        for (auto n = top(runs.front()); n; n = n.next_sibling()) {
+            mv.push_back(n);
+            if (n == top(runs.back())) break;
+        }
+        for (auto n : mv) content.append_move(n);
+    }
+    return sdt;
+}
+
+std::vector<ControlInfo> list_content_controls(Document& d) {
+    std::vector<ControlInfo> v;
+    for (auto& part : d.story_parts()) {
+        if (!d.pkg().has(part)) continue;
+        for (auto sdt : xml::descendants(d.pkg().xml(part).document_element(), "w:sdt")) {
+            auto pr = sdt.child("w:sdtPr");
+            ControlInfo c;
+            c.id = xml::attr(pr.child("w:id"), "w:val");
+            c.tag = xml::attr(pr.child("w:tag"), "w:val");
+            c.alias = xml::attr(pr.child("w:alias"), "w:val");
+            c.type = pr.child("w:text") ? "text" : pr.child("w14:checkbox") ? "checkbox" : pr.child("w:dropDownList") ? "dropDown"
+                   : pr.child("w:comboBox") ? "comboBox" : pr.child("w:date") ? "date" : pr.child("w:picture") ? "picture"
+                   : pr.child("w:docPartObj") ? "docPart" : pr.child("w:richText") ? "richText" : pr.child("w:group") ? "group"
+                   : pr.child("w15:repeatingSection") ? "repeatingSection" : "richText";
+            if (auto cb = pr.child("w14:checkbox")) c.checked = xml::attr(cb.child("w14:checked"), "w14:val") == "1";
+            for (auto t : xml::descendants(sdt.child("w:sdtContent"), "w:t")) c.text += t.text().get();
+            if (pr.child("w:showingPlcHdr")) c.text = "";
+            v.push_back(c);
+        }
+    }
+    return v;
+}
+
+void set_content_control(Document& d, const std::string& key, const Json& value) {
+    for (auto& part : d.story_parts()) {
+        if (!d.pkg().has(part)) continue;
+        for (auto sdt : xml::descendants(d.pkg().xml(part).document_element(), "w:sdt")) {
+            auto pr = sdt.child("w:sdtPr");
+            if (xml::attr(pr.child("w:id"), "w:val") != key && xml::attr(pr.child("w:tag"), "w:val") != key &&
+                xml::attr(pr.child("w:alias"), "w:val") != key)
+                continue;
+            auto content = sdt.child("w:sdtContent");
+            if (auto cb = pr.child("w14:checkbox")) {
+                bool on = value.is_boolean() ? value.get<bool>() : value.is_string() && value.get<std::string>() == "true";
+                xml::set_attr(cb.child("w14:checked"), "w14:val", on ? "1" : "0");
+                for (auto t : xml::descendants(content, "w:t")) { t.text().set(on ? "\u2612" : "\u2610"); break; }
+                return;
+            }
+            std::string text = value.is_string() ? value.get<std::string>() : value.dump();
+            if (auto dd = pr.child("w:dropDownList")) {
+                bool ok = false;
+                for (auto li : dd.children("w:listItem"))
+                    if (xml::attr(li, "w:displayText") == text || xml::attr(li, "w:value") == text) { text = xml::attr(li, "w:displayText"); ok = true; }
+                if (!ok) throw std::runtime_error("'" + text + "' is not one of the drop-down items");
+            }
+            if (auto dt = pr.child("w:date")) xml::set_attr(dt, "w:fullDate", text.size() == 10 ? text + "T00:00:00Z" : text);
+            pr.remove_child("w:showingPlcHdr");
+            // replace content text, keeping the first run's formatting (minus placeholder style)
+            bool block = std::string_view(sdt.parent().name()) != "w:p";
+            pugi::xml_node fmt;
+            if (auto r = xml::first_descendant(content, "w:r")) fmt = r.child("w:rPr");
+            pugi::xml_document keep;
+            if (fmt) { auto c = keep.append_copy(fmt); c.remove_child("w:rStyle"); }
+            if (block) {
+                auto p0 = content.child("w:p");
+                pugi::xml_document kp;
+                if (p0 && p0.child("w:pPr")) kp.append_copy(p0.child("w:pPr"));
+                std::vector<pugi::xml_node> all;
+                for (auto c : content.children()) all.push_back(c);
+                for (auto c : all) content.remove_child(c);
+                for (auto& line : util::split(text, '\n')) {
+                    auto p = content.append_child("w:p");
+                    if (kp.first_child()) p.append_copy(kp.first_child());
+                    auto r = p.append_child("w:r");
+                    if (keep.first_child() && keep.first_child().first_child()) r.append_copy(keep.first_child());
+                    append_text(r, util::to_u32(line));
+                }
+            } else {
+                std::vector<pugi::xml_node> all;
+                for (auto c : content.children()) all.push_back(c);
+                for (auto c : all) content.remove_child(c);
+                auto r = content.append_child("w:r");
+                if (keep.first_child() && keep.first_child().first_child()) r.append_copy(keep.first_child());
+                append_text(r, util::to_u32(text));
+            }
+            return;
+        }
+    }
+    throw std::runtime_error("content control '" + key + "' not found (use id, tag or title)");
+}
+
+// ── lists ────────────────────────────────────────────────────────────────
+
+namespace {
+
+const char* kBulletChars[3] = {"\xEF\x82\xB7", "o", "\xEF\x82\xA7"};  // U+F0B7 (Symbol), o, U+F0A7 (Wingdings)
+const char* kBulletFonts[3] = {"Symbol", "Courier New", "Wingdings"};
+
+std::string hex8() {
+    char b[16];
+    std::snprintf(b, sizeof b, "%08X", util::random_u32());
+    return b;
+}
+
+// Word's default list definitions (Home > Bullets / Numbering).
+pugi::xml_node add_abstract(Document& d, const std::string& kind, const Json& opts) {
+    auto num = d.numbering();
+    int aid = 0;
+    for (auto a : num.children("w:abstractNum")) aid = std::max(aid, a.attribute("w:abstractNumId").as_int() + 1);
+    // abstractNums must precede nums
+    auto first_num = num.child("w:num");
+    auto a = first_num ? num.insert_child_before("w:abstractNum", first_num) : num.append_child("w:abstractNum");
+    xml::set_attr(a, "w:abstractNumId", std::to_string(aid));
+    xml::set_attr(a, "w15:restartNumberingAfterBreak", "0");
+    xml::set_attr(a.append_child("w:nsid"), "w:val", hex8());
+    xml::set_attr(a.append_child("w:multiLevelType"), "w:val", "hybridMultilevel");
+    xml::set_attr(a.append_child("w:tmpl"), "w:val", hex8());
+    std::string fmt0 = kind == "bullet" ? "bullet" : kind == "number" ? "decimal" : kind;
+    static const char* numfmts[3] = {"decimal", "lowerLetter", "lowerRoman"};
+    static const char* tplc_num[3] = {"0409000F", "04090019", "0409001B"};
+    static const char* tplc_bul[3] = {"04090001", "04090003", "04090005"};
+    for (int l = 0; l < 9; l++) {
+        auto lvl = a.append_child("w:lvl");
+        xml::set_attr(lvl, "w:ilvl", std::to_string(l));
+        xml::set_attr(lvl, "w:tplc", fmt0 == "bullet" ? tplc_bul[l % 3] : tplc_num[l % 3]);
+        if (l > 0) xml::set_attr(lvl, "w:tentative", "1");
+        xml::set_attr(lvl.append_child("w:start"), "w:val", std::to_string(l == 0 ? opts.value("start", 1) : 1));
+        std::string fmt = fmt0 == "bullet" ? "bullet" : l == 0 ? fmt0 : numfmts[l % 3];
+        xml::set_attr(lvl.append_child("w:numFmt"), "w:val", fmt);
+        std::string text = fmt == "bullet" ? kBulletChars[l % 3] : "%" + std::to_string(l + 1) + ".";
+        if (l == 0 && opts.contains("text")) text = opts["text"].get<std::string>();
+        if (l == 0 && fmt == "bullet" && opts.contains("bullet")) text = opts["bullet"].get<std::string>();
+        xml::set_attr(lvl.append_child("w:lvlText"), "w:val", text);
+        bool right = fmt == "lowerRoman" || fmt == "upperRoman";
+        xml::set_attr(lvl.append_child("w:lvlJc"), "w:val", right ? "right" : "left");
+        auto ind = lvl.append_child("w:pPr").append_child("w:ind");
+        xml::set_attr(ind, "w:left", std::to_string(720 * (l + 1)));
+        xml::set_attr(ind, "w:hanging", right ? "180" : "360");
+        if (fmt == "bullet") {
+            auto rf = lvl.append_child("w:rPr").append_child("w:rFonts");
+            std::string font = (l == 0 && opts.contains("bullet")) ? opts.value("bullet_font", std::string("Symbol")) : kBulletFonts[l % 3];
+            xml::set_attr(rf, "w:ascii", font);
+            xml::set_attr(rf, "w:hAnsi", font);
+            if (font == "Courier New") xml::set_attr(rf, "w:cs", font);
+            xml::set_attr(rf, "w:hint", "default");
+        }
+    }
+    xml::declare(xml::root_of(num), "w15", true);
+    return a;
+}
+
+int add_num(Document& d, int abstract_id, int restart_level = -1, int start = 1) {
+    auto num = d.numbering();
+    int nid = 1;
+    for (auto n : num.children("w:num")) nid = std::max(nid, n.attribute("w:numId").as_int() + 1);
+    auto n = num.append_child("w:num");
+    xml::set_attr(n, "w:numId", std::to_string(nid));
+    xml::set_attr(n.append_child("w:abstractNumId"), "w:val", std::to_string(abstract_id));
+    if (restart_level >= 0) {
+        auto ov = n.append_child("w:lvlOverride");
+        xml::set_attr(ov, "w:ilvl", std::to_string(restart_level));
+        xml::set_attr(ov.append_child("w:startOverride"), "w:val", std::to_string(start));
+    }
+    return nid;
+}
+
+pugi::xml_node abstract_of(Document& d, int num_id) {
+    auto num = d.numbering(false);
+    if (!num) return {};
+    std::string aid;
+    for (auto n : num.children("w:num"))
+        if (n.attribute("w:numId").as_int() == num_id) aid = xml::attr(n.child("w:abstractNumId"), "w:val");
+    if (aid.empty()) return {};
+    for (auto a : num.children("w:abstractNum"))
+        if (xml::attr(a, "w:abstractNumId") == aid) return a;
+    return {};
+}
+
+std::pair<int, int> num_of(Document& d, pugi::xml_node p) {
+    auto np = p.child("w:pPr").child("w:numPr");
+    if (np) return {std::stoi(xml::attr(np.child("w:numId"), "w:val", "0")), std::stoi(xml::attr(np.child("w:ilvl"), "w:val", "0"))};
+    // from the paragraph style
+    std::string sid = xml::attr(p.child("w:pPr").child("w:pStyle"), "w:val");
+    std::set<std::string> seen;
+    while (!sid.empty() && !seen.count(sid)) {
+        seen.insert(sid);
+        auto s = find_style(d, sid);
+        if (!s) break;
+        if (auto snp = s.child("w:pPr").child("w:numPr"))
+            return {std::stoi(xml::attr(snp.child("w:numId"), "w:val", "0")), std::stoi(xml::attr(snp.child("w:ilvl"), "w:val", "0"))};
+        sid = xml::attr(s.child("w:basedOn"), "w:val");
+    }
+    return {0, 0};
+}
+
+}  // namespace
+
+int apply_list(Document& d, const std::vector<pugi::xml_node>& ps, const std::string& kind, int level, const Json& opts_in,
+               const EditOpts& o) {
+    const Json opts = opts_in.is_object() ? opts_in : Json::object();
+    if (ps.empty()) throw std::runtime_error("no paragraphs given");
+    int num_id = opts.value("num_id", 0);
+    if (!num_id) {
+        // continue the list of the paragraph just before, like Word does when the kind matches
+        if (opts.value("continue_previous", true)) {
+            auto prev = ps.front().previous_sibling("w:p");
+            if (prev) {
+                auto [pn, pl] = num_of(d, prev);
+                if (pn) {
+                    auto a = abstract_of(d, pn);
+                    std::string f = a ? xml::attr(a.child("w:lvl").child("w:numFmt"), "w:val") : "";
+                    bool want_bullet = kind == "bullet";
+                    if ((f == "bullet") == want_bullet) num_id = pn;
+                }
+            }
+        }
+        if (!num_id) {
+            auto a = add_abstract(d, kind, opts);
+            num_id = add_num(d, a.attribute("w:abstractNumId").as_int());
+        }
+    }
+    std::string lp = ensure_style(d, "ListParagraph");
+    for (auto p : ps) {
+        Json props = {{"numbering", {{"num_id", num_id}, {"level", level}}}};
+        std::string cur = xml::attr(p.child("w:pPr").child("w:pStyle"), "w:val");
+        if (cur.empty() || cur == "Normal") props["style"] = lp;
+        format_paragraph(d, p, props, o);
+        if (tracking(d, o)) {
+            // Word records new numbering as w:ins inside numPr
+            auto np = p.child("w:pPr").child("w:numPr");
+            if (np && !np.child("w:ins")) stamp(d, schema::ensure_child(np, "w:ins"));
+        }
+    }
+    return num_id;
+}
+
+void remove_list(Document& d, const std::vector<pugi::xml_node>& ps, const EditOpts& o) {
+    for (auto p : ps) {
+        Json props = Json::object();
+        auto [n, l] = num_of(d, p);
+        if (!n) continue;
+        if (p.child("w:pPr").child("w:numPr")) props["numbering"] = nullptr;
+        if (xml::attr(p.child("w:pPr").child("w:pStyle"), "w:val") == "ListParagraph") props["style"] = nullptr;
+        format_paragraph(d, p, props, o);
+        // numbering coming from the style: override with numId 0 (Word does)
+        if (num_of(d, p).first) {
+            auto np = schema::ensure_child(schema::ensure_child(p, "w:pPr"), "w:numPr");
+            xml::set_attr(schema::ensure_child(np, "w:numId"), "w:val", "0");
+        }
+    }
+}
+
+std::string list_label(Document& d, pugi::xml_node p) {
+    auto [num_id, ilvl] = num_of(d, p);
+    if (!num_id) return "";
+    auto a = abstract_of(d, num_id);
+    if (!a) return "";
+    // count prior paragraphs in the same list (num shares abstract counters per numId)
+    std::vector<int> counters(9, 0);
+    auto start_of = [&](int lvl) {
+        // lvlOverride/startOverride on the num wins
+        auto num = d.numbering(false);
+        for (auto n : num.children("w:num")) {
+            if (n.attribute("w:numId").as_int() != num_id) continue;
+            for (auto ov : n.children("w:lvlOverride"))
+                if (ov.attribute("w:ilvl").as_int() == lvl)
+                    if (auto so = ov.child("w:startOverride")) return so.attribute("w:val").as_int();
+        }
+        for (auto l : a.children("w:lvl"))
+            if (l.attribute("w:ilvl").as_int() == lvl) return std::stoi(xml::attr(l.child("w:start"), "w:val", "1"));
+        return 1;
+    };
+    // Word keeps counters per num instance; a deeper level resets when a
+    // shallower one advances.
+    for (auto q : paragraphs(d.body(), false)) {
+        auto [qn, ql] = num_of(d, q);
+        if (qn == num_id) {
+            if (counters[ql] == 0) counters[ql] = start_of(ql) - 1;
+            counters[ql]++;
+            for (int k = ql + 1; k < 9; k++) counters[k] = 0;
+        }
+        if (q == p) break;
+    }
+    pugi::xml_node lvl;
+    for (auto l : a.children("w:lvl")) if (l.attribute("w:ilvl").as_int() == ilvl) lvl = l;
+    if (!lvl) return "";
+    std::string fmt = xml::attr(lvl.child("w:numFmt"), "w:val", "decimal");
+    std::string text = xml::attr(lvl.child("w:lvlText"), "w:val");
+    if (fmt == "bullet") {
+        // map private-use symbol chars to their Unicode look
+        if (text == "\xEF\x82\xB7") return "\u2022";
+        if (text == "\xEF\x82\xA7") return "\u25AA";
+        return text;
+    }
+    std::string out;
+    for (std::size_t i = 0; i < text.size(); i++) {
+        if (text[i] == '%' && i + 1 < text.size() && text[i + 1] >= '1' && text[i + 1] <= '9') {
+            int k = text[i + 1] - '1';
+            std::string kfmt = fmt;
+            for (auto l : a.children("w:lvl"))
+                if (l.attribute("w:ilvl").as_int() == k) kfmt = xml::attr(l.child("w:numFmt"), "w:val", "decimal");
+            if (lvl.child("w:isLgl")) kfmt = "decimal";
+            out += format_number(std::max(1, counters[k]), kfmt);
+            i++;
+        } else {
+            out += text[i];
+        }
+    }
+    return out;
+}
+
+void restart_numbering(Document& d, pugi::xml_node p, int start) {
+    auto [num_id, ilvl] = num_of(d, p);
+    if (!num_id) throw std::runtime_error("paragraph is not in a list");
+    auto a = abstract_of(d, num_id);
+    int nid = add_num(d, a.attribute("w:abstractNumId").as_int(), ilvl, start);
+    // this paragraph and the rest of the same list move to the new num;
+    // paragraphs outside any list don't end it, another list does
+    bool on = false;
+    for (auto q : paragraphs(d.body(), false)) {
+        if (q == p) on = true;
+        if (!on) continue;
+        auto [qn, ql] = num_of(d, q);
+        if (qn == 0) continue;
+        if (qn != num_id) break;
+        auto np = schema::ensure_child(schema::ensure_child(q, "w:pPr"), "w:numPr");
+        xml::set_attr(schema::ensure_child(np, "w:ilvl"), "w:val", std::to_string(ql));
+        xml::set_attr(schema::ensure_child(np, "w:numId"), "w:val", std::to_string(nid));
+    }
+}
+
+// ── math ─────────────────────────────────────────────────────────────────
+
+namespace {
+
+struct MathParser {
+    std::u32string s;
+    std::size_t i = 0;
+
+    bool eof() const { return i >= s.size(); }
+    char32_t peek() const { return eof() ? 0 : s[i]; }
+
+    static void text_run(pugi::xml_node parent, const std::u32string& t) {
+        if (t.empty()) return;
+        auto r = parent.append_child("m:r");
+        auto rpr = r.append_child("w:rPr").append_child("w:rFonts");
+        xml::set_attr(rpr, "w:ascii", "Cambria Math");
+        xml::set_attr(rpr, "w:hAnsi", "Cambria Math");
+        auto mt = r.append_child("m:t");
+        std::string u = util::to_utf8(t);
+        if (u.front() == ' ' || u.back() == ' ') xml::set_attr(mt, "xml:space", "preserve");
+        mt.text().set(u.c_str());
+    }
+
+    static void ctrl(pugi::xml_node pr) {
+        auto c = pr.append_child("m:ctrlPr").append_child("w:rPr").append_child("w:rFonts");
+        xml::set_attr(c, "w:ascii", "Cambria Math");
+        xml::set_attr(c, "w:hAnsi", "Cambria Math");
+    }
+
+    // {...} group or a single atom
+    void arg(pugi::xml_node into) {
+        if (peek() == '{') {
+            i++;
+            seq(into, '}');
+            if (peek() == '}') i++;
+        } else {
+            atom(into);
+        }
+    }
+
+    std::u32string command() {
+        std::u32string c;
+        while (!eof() && ((s[i] >= 'a' && s[i] <= 'z') || (s[i] >= 'A' && s[i] <= 'Z'))) c.push_back(s[i++]);
+        return c;
+    }
+
+    void atom(pugi::xml_node into) {
+        if (eof()) return;
+        char32_t c = s[i];
+        if (c == '\\') {
+            i++;
+            auto cmd = util::to_utf8(command());
+            static const std::map<std::string, std::string> sym = {
+                {"alpha", "α"}, {"beta", "β"}, {"gamma", "γ"}, {"delta", "δ"}, {"epsilon", "ε"}, {"theta", "θ"},
+                {"lambda", "λ"}, {"mu", "μ"}, {"pi", "π"}, {"sigma", "σ"}, {"phi", "φ"}, {"omega", "ω"},
+                {"Delta", "Δ"}, {"Sigma", "Σ"}, {"Omega", "Ω"}, {"infty", "∞"}, {"pm", "±"}, {"times", "×"},
+                {"cdot", "⋅"}, {"leq", "≤"}, {"geq", "≥"}, {"neq", "≠"}, {"approx", "≈"}, {"to", "→"},
+                {"rightarrow", "→"}, {"partial", "∂"}, {"nabla", "∇"}, {"in", "∈"}, {"forall", "∀"}, {"exists", "∃"}};
+            if (cmd == "frac") {
+                auto f = into.append_child("m:f");
+                ctrl(f.append_child("m:fPr"));
+                arg(f.append_child("m:num"));
+                arg(f.append_child("m:den"));
+                return;
+            }
+            if (cmd == "sqrt") {
+                auto r = into.append_child("m:rad");
+                auto pr = r.append_child("m:radPr");
+                xml::set_attr(pr.append_child("m:degHide"), "m:val", "1");
+                ctrl(pr);
+                r.append_child("m:deg");
+                arg(r.append_child("m:e"));
+                return;
+            }
+            if (cmd == "sum" || cmd == "int" || cmd == "prod") {
+                auto n = into.append_child("m:nary");
+                auto pr = n.append_child("m:naryPr");
+                std::string chr = cmd == "sum" ? "∑" : cmd == "int" ? "∫" : "∏";
+                xml::set_attr(pr.append_child("m:chr"), "m:val", chr);
+                ctrl(pr);
+                auto sub = n.append_child("m:sub");
+                auto sup = n.append_child("m:sup");
+                for (int k = 0; k < 2; k++) {
+                    if (peek() == '_') { i++; arg(sub); }
+                    else if (peek() == '^') { i++; arg(sup); }
+                }
+                if (!sub.first_child()) xml::set_attr(pr.prepend_child("m:subHide"), "m:val", "1");
+                if (!sup.first_child()) xml::set_attr(pr.prepend_child("m:supHide"), "m:val", "1");
+                schema::sort_children(pr);
+                auto e = n.append_child("m:e");
+                atom(e);
+                return;
+            }
+            if (auto it = sym.find(cmd); it != sym.end()) { text_run(into, util::to_u32(it->second)); return; }
+            text_run(into, util::to_u32(cmd));
+            return;
+        }
+        if (c == '(' ) {
+            i++;
+            auto dd = into.append_child("m:d");
+            ctrl(dd.append_child("m:dPr"));
+            seq(dd.append_child("m:e"), ')');
+            if (peek() == ')') i++;
+            return;
+        }
+        if (c == '{') { arg(into); return; }
+        std::u32string t;
+        bool word = std::isalnum((int)(c < 128 ? c : 'a'));
+        if (word) {
+            while (!eof() && s[i] < 128 && std::isalnum((int)s[i])) t.push_back(s[i++]);
+        } else {
+            t.push_back(s[i++]);
+        }
+        text_run(into, t);
+    }
+
+    void seq(pugi::xml_node into, char32_t close) {
+        while (!eof() && peek() != close) {
+            if (peek() == ' ') { i++; continue; }
+            // base followed by ^ or _
+            pugi::xml_document tmp;
+            auto holder = tmp.append_child("h");
+            atom(holder);
+            bool sub = false, sup = false;
+            pugi::xml_document subd, supd;
+            auto subn = subd.append_child("m:sub"), supn = supd.append_child("m:sup");
+            for (int k = 0; k < 2; k++) {
+                if (peek() == '_') { i++; arg(subn); sub = true; }
+                else if (peek() == '^') { i++; arg(supn); sup = true; }
+            }
+            if (!sub && !sup) {
+                for (auto c : holder.children()) into.append_copy(c);
+                continue;
+            }
+            const char* q = sub && sup ? "m:sSubSup" : sub ? "m:sSub" : "m:sSup";
+            auto e = into.append_child(q);
+            ctrl(e.append_child((std::string(q) + "Pr").c_str()));
+            auto base = e.append_child("m:e");
+            for (auto c : holder.children()) base.append_copy(c);
+            if (sub) e.append_copy(subn);
+            if (sup) e.append_copy(supn);
+        }
+    }
+};
+
+}  // namespace
+
+pugi::xml_node insert_equation(Document& d, pugi::xml_node p, int pos, const std::string& linear, bool display, const EditOpts& o) {
+    MathParser mp;
+    mp.s = util::to_u32(linear);
+    pugi::xml_document tmp;
+    auto math = tmp.append_child("m:oMath");
+    mp.seq(math, 0);
+    auto [parent, before] = insert_spot(p, pos);
+    pugi::xml_node out;
+    if (display) {
+        auto para = before ? parent.insert_child_before("m:oMathPara", before) : parent.append_child("m:oMathPara");
+        out = para.append_copy(math);
+    } else {
+        out = before ? parent.insert_copy_before(math, before) : parent.append_copy(math);
+    }
+    if (tracking(d, o)) {
+        for (auto r : xml::descendants(out, "m:r")) {
+            auto rpr = schema::ensure_child(r, "w:rPr");
+            stamp(d, schema::ensure_child(rpr, "w:ins"));
+        }
+    }
+    xml::declare(xml::root_of(p), "m");
+    return out;
+}
+
+}  // namespace docx::wml

@@ -12,6 +12,10 @@ add_executable(comments_test comments_test.cpp)
 target_link_libraries(comments_test PRIVATE docx_core)
 add_test(NAME comments_test COMMAND comments_test WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 
+add_executable(structure_test structure_test.cpp)
+target_link_libraries(structure_test PRIVATE docx_core)
+add_test(NAME structure_test COMMAND structure_test WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+
 add_executable(revisions_corpus revisions_corpus.cpp)
 target_link_libraries(revisions_corpus PRIVATE docx_core)
 add_test(NAME revisions_corpus COMMAND revisions_corpus ${CMAKE_SOURCE_DIR}/tests/corpus/oxpt/RP)

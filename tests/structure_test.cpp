@@ -1,0 +1,249 @@
+// Structure tests: tables, pictures, sections, headers/footers, notes,
+// bookmarks, hyperlinks, fields, TOC, content controls, lists, equations.
+#include <filesystem>
+
+#include "schema/schema.hpp"
+#include "t.hpp"
+#include "util/util.hpp"
+#include "wml/document.hpp"
+#include "wml/edit.hpp"
+#include "wml/structure.hpp"
+#include "wml/styles.hpp"
+#include "wml/text.hpp"
+#include "xml/xml.hpp"
+
+using namespace docx;
+using namespace docx::wml;
+
+namespace {
+int schema_issues(Document& d, std::string* first = nullptr) {
+    int n = 0;
+    for (auto& part : d.pkg().part_names()) {
+        if (schema::part_root_type(d.pkg().content_type_of(part)) < 0) continue;
+        auto& x = d.pkg().xml(part);
+        xml::normalize(x);
+        auto issues = schema::validate(x.document_element());
+        if (!issues.empty() && first && first->empty()) *first = part + " " + issues[0].path + " :: " + issues[0].message;
+        n += (int)issues.size();
+    }
+    return n;
+}
+void save(Document& d, const std::string& name) {
+    std::filesystem::create_directories("out");
+    auto b = d.to_bytes();
+    std::FILE* f = std::fopen(("out/" + name + ".docx").c_str(), "wb");
+    std::fwrite(b.data(), 1, b.size(), f);
+    std::fclose(f);
+    auto re = Document::from_bytes(b);
+    std::string why;
+    if (schema_issues(re, &why)) t::fail(name.c_str(), 0, "schema: " + why);
+    // accept/reject must stay valid too
+    for (bool acc : {true, false}) {
+        auto x = Document::from_bytes(b);
+        if (acc) accept_revisions(x, {}); else reject_revisions(x, {});
+        std::string w2;
+        if (schema_issues(x, &w2)) t::fail(name.c_str(), 0, std::string(acc ? "after accept: " : "after reject: ") + w2);
+    }
+}
+Document sample(bool track = false) {
+    auto d = Document::create();
+    d.author.name = "Tess Tables";
+    auto p = paragraphs(d.body())[0];
+    insert_text(d, p, 0, U"Intro paragraph.", nullptr, {false});
+    insert_paragraph(d, p, true, U"Closing paragraph.", "", nullptr, {false});
+    d.set_track_changes(track);
+    return d;
+}
+// 1x1 red PNG
+util::Bytes png() {
+    auto b = util::base64_decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==");
+    return *b;
+}
+}  // namespace
+
+TEST(table_insert_and_edit) {
+    auto d = sample();
+    auto p = paragraphs(d.body())[0];
+    auto tbl = insert_table(d, p, true, {{"Name", "Qty"}, {"Apples", "3"}, {"Pears", "5"}}, {{"style", "TableGrid"}}, {});
+    CHECK_EQ(table_json(tbl)["rows"][1][0].get<std::string>(), std::string("Apples"));
+    insert_row(d, tbl, 2, true, {"Plums", "7"}, {});
+    insert_column(d, tbl, 1, true, {});
+    set_cell_text(d, cell(tbl, 0, 2), "Price", {});
+    format_cell(d, cell(tbl, 0, 0), {{"shading", "D9E2F3"}}, {});
+    format_table(d, tbl, {{"alignment", "center"}, {"repeat_header", true}}, {});
+    auto j = table_json(tbl);
+    CHECK_EQ(j["rows"].size(), std::size_t(4));
+    CHECK_EQ(j["rows"][0].size(), std::size_t(3));
+    CHECK_EQ(j["rows"][3][0].get<std::string>(), std::string("Plums"));
+    merge_cells(d, tbl, 1, 0, 2, 0);
+    delete_row(d, tbl, 3, {});
+    CHECK_EQ(table_json(tbl)["rows"].size(), std::size_t(3));
+    save(d, "table_edit");
+}
+
+TEST(table_tracked) {
+    auto d = sample(true);
+    auto p = paragraphs(d.body())[0];
+    auto tbl = insert_table(d, p, true, {{"a", "b"}, {"c", "d"}}, {}, {});
+    CHECK(xml::first_descendant(tbl, "w:trPr").child("w:ins"));
+    save(d, "table_tracked_insert");
+    // reject removes the table entirely
+    auto r = Document::from_bytes(d.to_bytes());
+    reject_revisions(r, {});
+    CHECK(tables(r).empty());
+    auto d2 = sample(false);
+    auto t2 = insert_table(d2, paragraphs(d2.body())[0], true, {{"a", "b"}, {"c", "d"}}, {}, {});
+    d2.set_track_changes(true);
+    delete_row(d2, t2, 1, {});
+    insert_row(d2, t2, 0, true, {"x", "y"}, {});
+    save(d2, "table_tracked_rows");
+    auto a = Document::from_bytes(d2.to_bytes());
+    accept_revisions(a, {});
+    auto ja = table_json(tables(a)[0]);
+    CHECK_EQ(ja["rows"].size(), std::size_t(2));
+    CHECK_EQ(ja["rows"][1][0].get<std::string>(), std::string("x"));
+}
+
+TEST(picture_inline) {
+    auto d = sample();
+    auto p = paragraphs(d.body())[0];
+    insert_picture(d, p, 5, png(), 72, 0, "A red dot", "", {});
+    auto pt = analyze(p);
+    CHECK_EQ(pt.text.size(), std::size_t(17));
+    CHECK(xml::first_descendant(p, "pic:pic"));
+    bool media = false;
+    for (auto& n : d.pkg().part_names()) if (n.find("/word/media/") == 0) media = true;
+    CHECK(media);
+    save(d, "picture");
+}
+
+TEST(sections_headers_footers) {
+    auto d = sample();
+    auto ps = paragraphs(d.body());
+    insert_section_break(d, ps[0], "nextPage", {});
+    CHECK_EQ(sections(d).size(), std::size_t(2));
+    format_section(d, 2, {{"orientation", "landscape"}, {"margins", {{"top", "0.5in"}}}}, {});
+    auto sj = section_json(d, sections(d)[1]);
+    CHECK_EQ(sj["orientation"].get<std::string>(), std::string("landscape"));
+    set_header_footer_text(d, 1, "header", "default", "Company Confidential", {{"alignment", "center"}});
+    set_header_footer_text(d, 1, "footer", "default", "Page {PAGE} of {NUMPAGES}", {{"alignment", "right"}});
+    set_header_footer_text(d, 2, "header", "first", "First page header", {});
+    auto hp = header_footer(d, 1, "footer", "default", false);
+    CHECK(!hp.empty());
+    std::string fx = xml::to_string(d.pkg().xml(hp).document_element());
+    CHECK(fx.find("PAGE") != std::string::npos);
+    save(d, "sections_hf");
+}
+
+TEST(notes_bookmarks_links) {
+    auto d = sample(true);
+    auto p = paragraphs(d.body())[0];
+    add_note(d, p, 5, "footnote", "A footnote.", {});
+    add_note(d, p, 16, "endnote", "An endnote.", {});
+    auto ns = list_notes(d);
+    CHECK_EQ(ns.size(), std::size_t(2));
+    CHECK_EQ(ns[0].text, std::string("A footnote."));
+    d.set_track_changes(false);
+    auto p2 = paragraphs(d.body())[1];
+    add_bookmark(d, p2, 0, p2, 7, "closing");
+    auto bs = list_bookmarks(d);
+    bool found = false;
+    for (auto& b : bs) if (b.name == "closing") { found = true; CHECK_EQ(b.text, std::string("Closing")); }
+    CHECK(found);
+    add_hyperlink(d, p2, 8, 17, "https://example.com/", "", "Example", {});
+    add_hyperlink(d, p2, 0, 0, "#closing", "jump ", "", {});
+    auto ls = list_hyperlinks(d);
+    CHECK_EQ(ls.size(), std::size_t(2));
+    save(d, "notes_links");
+}
+
+TEST(fields_and_toc) {
+    auto d = sample();
+    auto ps = paragraphs(d.body());
+    auto h1 = insert_paragraph(d, ps[0], true, U"Chapter One", "Heading1", nullptr, {});
+    ensure_style(d, "Heading1");
+    auto h2 = insert_paragraph(d, h1, true, U"Section A", "Heading2", nullptr, {});
+    ensure_style(d, "Heading2");
+    (void)h2;
+    insert_toc(d, paragraphs(d.body())[0], {{"to_level", 3}}, {});
+    auto fs = list_fields(d);
+    bool toc = false;
+    for (auto& f : fs) if (util::starts_with(f.instr, "TOC")) toc = true;
+    CHECK(toc);
+    auto cap = insert_paragraph(d, paragraphs(d.body()).back(), true, U"Figure ", "Caption", nullptr, {});
+    ensure_style(d, "Caption");
+    insert_field(d, cap, 7, "SEQ Figure \\* ARABIC", "9", nullptr, {});
+    auto cap2 = insert_paragraph(d, cap, true, U"Figure ", "Caption", nullptr, {});
+    insert_field(d, cap2, 7, "SEQ Figure \\* ARABIC", "9", nullptr, {});
+    update_fields(d);
+    CHECK_EQ(analyze(cap).utf8(), std::string("Figure 1"));
+    CHECK_EQ(analyze(cap2).utf8(), std::string("Figure 2"));
+    CHECK(d.settings().child("w:updateFields"));
+    save(d, "fields_toc");
+}
+
+TEST(content_controls) {
+    auto d = sample();
+    auto p = paragraphs(d.body())[0];
+    add_content_control(d, p, 0, 5, {{"type", "text"}, {"tag", "intro"}, {"alias", "Intro"}});
+    auto p2 = paragraphs(d.body())[1];
+    add_content_control(d, p2, (int)analyze(p2).vis.size(), (int)analyze(p2).vis.size(), {{"type", "checkbox"}, {"tag", "agree"}});
+    add_content_control(d, p2, 0, 0, {{"type", "dropDown"}, {"tag", "pick"}, {"items", {"Red", "Green"}}});
+    set_content_control(d, "intro", "Hello");
+    set_content_control(d, "agree", true);
+    set_content_control(d, "pick", "Green");
+    auto cs = list_content_controls(d);
+    CHECK_EQ(cs.size(), std::size_t(3));
+    for (auto& c : cs) {
+        if (c.tag == "intro") CHECK_EQ(c.text, std::string("Hello"));
+        if (c.tag == "agree") CHECK(c.checked);
+        if (c.tag == "pick") CHECK_EQ(c.text, std::string("Green"));
+    }
+    save(d, "content_controls");
+}
+
+TEST(lists) {
+    auto d = sample();
+    auto p = paragraphs(d.body())[0];
+    auto a = insert_paragraph(d, p, true, U"one\ntwo\nthree", "", nullptr, {});
+    std::vector<pugi::xml_node> items;
+    for (auto n = a; items.size() < 3; n = n.next_sibling("w:p")) items.push_back(n);
+    apply_list(d, items, "number", 0, {}, {});
+    CHECK_EQ(list_label(d, items[0]), std::string("1."));
+    CHECK_EQ(list_label(d, items[2]), std::string("3."));
+    format_paragraph(d, items[1], {{"numbering", {{"num_id", std::stoi(xml::attr(items[0].child("w:pPr").child("w:numPr").child("w:numId"), "w:val"))}, {"level", 1}}}}, {});
+    CHECK_EQ(list_label(d, items[1]), std::string("a."));
+    CHECK_EQ(list_label(d, items[2]), std::string("2."));
+    restart_numbering(d, items[2], 5);
+    CHECK_EQ(list_label(d, items[2]), std::string("5."));
+    auto b = insert_paragraph(d, paragraphs(d.body()).back(), true, U"dot", "", nullptr, {});
+    apply_list(d, {b}, "bullet", 0, {}, {});
+    CHECK_EQ(list_label(d, b), std::string("\u2022"));
+    save(d, "lists");
+    remove_list(d, {b}, {});
+    CHECK_EQ(list_label(d, b), std::string(""));
+}
+
+TEST(lists_tracked) {
+    auto d = sample(true);
+    auto p = paragraphs(d.body())[0];
+    apply_list(d, {p}, "bullet", 0, {}, {});
+    CHECK(xml::first_descendant(p, "w:numPr").child("w:ins"));
+    save(d, "lists_tracked");
+    auto r = Document::from_bytes(d.to_bytes());
+    reject_revisions(r, {});
+    CHECK(!xml::first_descendant(r.body(), "w:numPr"));
+}
+
+TEST(equation) {
+    auto d = sample();
+    auto p = paragraphs(d.body())[1];
+    insert_equation(d, p, 0, "x^2+y_1=\\frac{a}{b}", false, {});
+    auto q = insert_paragraph(d, p, true, U"", "", nullptr, {});
+    insert_equation(d, q, 0, "\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}", true, {});
+    CHECK(xml::first_descendant(p, "m:f"));
+    CHECK(xml::first_descendant(q, "m:nary"));
+    save(d, "equation");
+}
+
+int main(int argc, char** argv) { return t::run(argc, argv); }
