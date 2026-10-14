@@ -1,0 +1,654 @@
+a:CT_Blip/a:blip	RelationshipExistConstraint	builder.CreateQName("r:embed")	
+a:CT_Blip/a:blip	RelationshipExistConstraint	builder.CreateQName("r:link")	
+a:CT_DashStop/a:ds	AttributeValueRangeConstraint	builder.CreateQName("a:d"), true, 1, true, double.PositiveInfinity, true	
+a:CT_DashStop/a:ds	AttributeValueRangeConstraint	builder.CreateQName("a:sp"), true, 1, true, double.PositiveInfinity, true	
+a:CT_Hyperlink/a:hlinkClick	AttributeCannotOmitConstraint	builder.CreateQName("@a:id")	
+a:CT_Hyperlink/a:hlinkClick	RelationshipExistConstraint	builder.CreateQName("r:id")	
+a:CT_Hyperlink/a:hlinkHover	AttributeCannotOmitConstraint	builder.CreateQName("@a:id")	
+a:CT_Hyperlink/a:hlinkMouseOver	AttributeCannotOmitConstraint	builder.CreateQName("@a:id")	
+a:CT_Hyperlink/a:hlinkMouseOver	RelationshipExistConstraint	builder.CreateQName("r:id")	
+a:CT_LuminanceEffect/a:lum	AttributeValueRangeConstraint	builder.CreateQName("a:val"), true, 0, true, 100000, true	
+a:CT_NonVisualDrawingProps/cdr:cNvPr	UniqueAttributeValueConstraint	builder.CreateQName(":id"), true, null	
+a:CT_NonVisualDrawingProps/pic:cNvPr	UniqueAttributeValueConstraint	builder.CreateQName("pic:id"), true, builder.CreateQName("a:graphicData")	
+a:CT_NonVisualDrawingProps/wp:docPr	UniqueAttributeValueConstraint	builder.CreateQName("wp:id"), true, null	
+a:CT_Percentage/a:lum	AttributeValueRangeConstraint	builder.CreateQName("a:val"), true, 0, true, 100000, true	
+a:CT_SpreadSheetNonVisualDrawingProps/xdr:cNvPr	UniqueAttributeValueConstraint	builder.CreateQName("xdr:id"), true, null	
+a:CT_TableCell/a:tc	AttributeValueRangeConstraint	builder.CreateQName("a:gridSpan"), true, 1, true, double.PositiveInfinity, true	
+a:CT_TableCell/a:tc	AttributeValueRangeConstraint	builder.CreateQName("a:rowSpan"), true, 1, true, double.PositiveInfinity, true	
+a:CT_TableStyle/a:tableStyle	UniqueAttributeValueConstraint	builder.CreateQName("a:styleId"), true, null	
+a:CT_TableStyle/a:tblStyle	UniqueAttributeValueConstraint	builder.CreateQName("a:styleId"), true, null	
+c:CT_Chart/c:chart	RelationshipExistConstraint	builder.CreateQName("r:id")	
+c:CT_Double/c:backward	AttributeValueRangeConstraint	builder.CreateQName("c:val"), true, 0, true, double.PositiveInfinity, true	
+c:CT_Double/c:crossesAt	AttributeValueSetConstraint	builder.CreateQName("c:val"), false, new string[] { "INF", "-INF", "NaN" }	
+c:CT_Double/c:custUnit	AttributeValueSetConstraint	builder.CreateQName("c:val"), false, new string[] { "INF", "-INF", "NaN" }	
+c:CT_Double/c:forward	AttributeValueRangeConstraint	builder.CreateQName("c:val"), true, 0, true, double.PositiveInfinity, true	
+c:CT_Double/c:forward	AttributeValueSetConstraint	builder.CreateQName("c:val"), false, new string[] { "INF", "-INF", "NaN" }	
+c:CT_Double/c:splitPos	AttributeValueSetConstraint	builder.CreateQName("c:val"), false, new string[] { "INF", "-INF", "NaN" }	
+c:CT_ExternalData/c:externalData	RelationshipExistConstraint	builder.CreateQName("r:id")	
+c:CT_NumVal/c:pt	AttributeValueRangeConstraint	builder.CreateQName("c:idx"), true, 0, true, 2147483647, true	
+c:CT_NumVal/c:pt	AttributeValueRangeConstraint	builder.CreateQName("c:idx"), true, double.NegativeInfinity, true, 2147483647, true	
+c:CT_Order/c:order	AttributeValueRangeConstraint	builder.CreateQName("c:val"), true, double.NegativeInfinity, true, 2147483647, true	
+c:CT_PageMargins/c:pageMargins	AttributeValueRangeConstraint	builder.CreateQName("c:b"), true, 0, true, 49, false	
+c:CT_PageMargins/c:pageMargins	AttributeValueRangeConstraint	builder.CreateQName("c:footer"), true, 0, true, 49, false	
+c:CT_PageMargins/c:pageMargins	AttributeValueRangeConstraint	builder.CreateQName("c:header"), true, 0, true, 49, false	
+c:CT_PageMargins/c:pageMargins	AttributeValueRangeConstraint	builder.CreateQName("c:l"), true, 0, true, 49, false	
+c:CT_PageMargins/c:pageMargins	AttributeValueRangeConstraint	builder.CreateQName("c:r"), true, 0, true, 49, false	
+c:CT_PageMargins/c:pageMargins	AttributeValueRangeConstraint	builder.CreateQName("c:t"), true, 0, true, 49, false	
+c:CT_PageSetup/c:pageSetup	AttributeValueRangeConstraint	builder.CreateQName("c:copies"), true, double.NegativeInfinity, true, 2147483647, true	
+c:CT_RelId/c:chart	RelationshipExistConstraint	builder.CreateQName("r:id")	
+c:CT_StrVal/c:pt	AttributeValueRangeConstraint	builder.CreateQName("c:idx"), true, 0, true, 2147483647, true	
+c:CT_StrVal/c:pt	AttributeValueRangeConstraint	builder.CreateQName("c:idx"), true, double.NegativeInfinity, true, 2147483647, true	
+c:CT_UnsignedInt/c:axId	AttributeValueRangeConstraint	builder.CreateQName("c:val"), true, double.NegativeInfinity, true, 2147483647, true	
+c:CT_UnsignedInt/c:crossAx	AttributeValueRangeConstraint	builder.CreateQName("c:val"), true, double.NegativeInfinity, true, 2147483647, true	
+c:CT_UnsignedInt/c:explosion	AttributeValueRangeConstraint	builder.CreateQName("c:val"), true, double.NegativeInfinity, true, 2147483647, true	
+c:CT_UnsignedInt/c:fmtId	AttributeValueRangeConstraint	builder.CreateQName("c:val"), true, double.NegativeInfinity, true, 2147483647, true	
+c:CT_UnsignedInt/c:idx	AttributeValueRangeConstraint	builder.CreateQName("c:val"), true, double.NegativeInfinity, true, 2147483647, true	
+c:CT_UnsignedInt/c:order	AttributeValueRangeConstraint	builder.CreateQName("c:val"), true, double.NegativeInfinity, true, 2147483647, true	
+c:CT_UnsignedInt/c:ptCount	AttributeValueRangeConstraint	builder.CreateQName("c:val"), true, double.NegativeInfinity, true, 2147483647, true	
+c:CT_UnsignedInt/c:secondPiePt	AttributeValueRangeConstraint	builder.CreateQName("c:val"), true, double.NegativeInfinity, true, 2147483647, true	
+cdr:CT_Connector/cdr:cxnSp	AttributeValueLengthConstraint	builder.CreateQName("cdr:macro"), 0, 256	
+cdr:CT_GraphicFrame/cdr:graphicFrame	AttributeValueLengthConstraint	builder.CreateQName("cdr:macro"), 0, 256	
+cdr:CT_Picture/cdr:pic	AttributeValueLengthConstraint	builder.CreateQName("cdr:macro"), 0, 256	
+cdr:CT_Shape/cdr:sp	AttributeValueLengthConstraint	builder.CreateQName("cdr:macro"), 0, 256	
+comp:CT_Compat/comp:legacyDrawing	UniqueAttributeValueConstraint	builder.CreateQName("comp:spid"), true, null	
+dgm:CT_Choose/dgm:choose	UniqueAttributeValueConstraint	builder.CreateQName("dgm:name"), true, null	
+dgm:CT_ColorTransform/dgm:colorsDef	AttributeValueSetConstraint	builder.CreateQName("dgm:minVer"), true, new string[] { "12.0" }	
+dgm:CT_Cxn/dgm:cxn	UniqueAttributeValueConstraint	builder.CreateQName("dgm:modelId"), true, builder.CreateQName("dgm:cxnLst")	
+dgm:CT_Cxn/dgm:cxn	UniqueAttributeValueConstraint	builder.CreateQName("dgm:parTransId"), true, null	
+dgm:CT_ForEach/dgm:forEach	UniqueAttributeValueConstraint	builder.CreateQName("dgm:name"), true, null	
+dgm:CT_LayoutNode/dgm:layoutNode	UniqueAttributeValueConstraint	builder.CreateQName("dgm:name"), true, null	
+dgm:CT_Otherwise/dgm:else	UniqueAttributeValueConstraint	builder.CreateQName("dgm:name"), true, null	
+dgm:CT_RelIds/dgm:relIds	RelationshipExistConstraint	builder.CreateQName("r:dm")	
+dgm:CT_RelIds/dgm:relIds	RelationshipTypeConstraint	builder.CreateQName("dgm:cs"), "http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramColors"	
+dgm:CT_RelIds/dgm:relIds	RelationshipTypeConstraint	builder.CreateQName("dgm:dm"), "http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramData"	
+dgm:CT_RelIds/dgm:relIds	RelationshipTypeConstraint	builder.CreateQName("dgm:lo"), "http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramLayout"	
+dgm:CT_RelIds/dgm:relIds	RelationshipTypeConstraint	builder.CreateQName("dgm:qs"), "http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramQuickStyle"	
+dgm:CT_Shape/dgm:shape	RelationshipExistConstraint	builder.CreateQName("r:blip")	
+dgm:CT_Shape/dgm:shape	RelationshipTypeConstraint	builder.CreateQName("dgm:blip"), "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"	
+dgm:CT_When/dgm:if	UniqueAttributeValueConstraint	builder.CreateQName("dgm:name"), true, null	
+o:CT_Callout/o:callout	AttributeValueSetConstraint	builder.CreateQName("ovml:type"), true, new string[] { "rightAngle", "oneSegment", "twoSegment", "threeSegment" }	
+o:CT_Extrusion/o:extrusion	AttributeValuePatternConstraint	builder.CreateQName("ovml:edge"), @"(\d{1,5}|1[0-6][0-8]\d{3}|1690[0-8]\d|16909[0-3])pt"	
+o:CT_Extrusion/o:extrusion	AttributeValueRangeConstraint	builder.CreateQName("ovml:facet"), true, 1, true, 65536, true	
+o:CT_Extrusion/o:extrusion	AttributeValueRangeConstraint	builder.CreateQName("ovml:orientationangle"), true, -32767, true, 32767, true	
+o:CT_Extrusion/o:extrusion	AttributeValueRangeConstraint	builder.CreateQName("ovml:skewangle"), true, -32767, true, 32767, true	
+o:CT_OLEObject/o:OLEObject	AttributeValuePatternConstraint	builder.CreateQName("ovml:ObjectID"), @"_(\d{1,9}|1\d{9}|20\d{8}|21[0-3]\d{7}|214[0-6]\d{6}|2147[0-3]\d{5}|21474[0-7]\d{4}|214748[0-2]\d{3}|2147483[0-5]\d{2}|21474836[0-3]\d|214748364[0-7])"	
+o:CT_OLEObject/o:OLEObject	ReferenceExistConstraint	builder.CreateQName(":ShapeID"), ".", builder.CreateQName("v:shape"), "v:shape", builder.CreateQName(":id")	
+o:CT_SignatureLine/o:signatureline	UniqueAttributeValueConstraint	builder.CreateQName("ovml:id"), true, null	
+o:CT_StrokeChild/o:bottom	AttributeValueRangeConstraint	builder.CreateQName("ovml:miterlimit"), true, double.NegativeInfinity, true, 32767, true	
+o:CT_StrokeChild/o:bottom	AttributeValueRangeConstraint	builder.CreateQName("ovml:weight"), true, 0, true, 20116800, true	
+o:CT_StrokeChild/o:column	AttributeValueSetConstraint	builder.CreateQName("ovml:dashstyle"), true, new string[] { "solid", "shortdash", "shortdot", "shortdashdot", "shortdashdotdot", "dot", "dash", "longdash", "longdashdotdot", "dashdot" }	
+op:CT_Property/op:property	AttributeValueRangeConstraint	builder.CreateQName("op:pid"), true, 2, true, double.PositiveInfinity, true	
+op:CT_Property/op:property	UniqueAttributeValueConstraint	builder.CreateQName("op:name"), false, null	
+p:CT_CommentAuthor/p:cmAuthor	AttributeValueRangeConstraint	builder.CreateQName("p:id"), true, 0, true, double.PositiveInfinity, true	
+p:CT_CommentAuthor/p:cmAuthor	UniqueAttributeValueConstraint	builder.CreateQName("p:clrIdx"), true, builder.CreateQName("p:cmAuthorLst")	
+p:CT_CommentAuthor/p:cmAuthor	UniqueAttributeValueConstraint	builder.CreateQName("p:id"), false, null	
+p:CT_HandoutMasterIdListEntry/p:handoutMasterId	RelationshipExistConstraint	builder.CreateQName("r:id")	
+p:CT_IndexRange/p:sldRg	AttributeValueLessEqualToAnother	builder.CreateQName("p:st"), builder.CreateQName("p:end"), true	
+p:CT_NotesMasterIdListEntry/p:notesMasterId	RelationshipExistConstraint	builder.CreateQName("r:id")	
+p:CT_OleObject/p:oleObj	RelationshipExistConstraint	builder.CreateQName("r:id")	
+p:CT_OutlineViewSlideEntry/p:sld	RelationshipExistConstraint	builder.CreateQName("r:id")	
+p:CT_Slide/p:sld	RelationshipExistConstraint	builder.CreateQName("r:id")	
+p:CT_SlideIdListEntry/p:sldId	RelationshipExistConstraint	builder.CreateQName("r:id")	
+p:CT_SlideIdListEntry/p:sldId	UniqueAttributeValueConstraint	builder.CreateQName(":id"), true, null	
+p:CT_SlideLayoutIdListEntry/p:sldLayoutId	RelationshipExistConstraint	builder.CreateQName("r:id")	
+p:CT_SlideLayoutIdListEntry/p:sldLayoutId	UniqueAttributeValueConstraint	builder.CreateQName(":id"), true, null	
+p:CT_SlideMasterIdListEntry/p:sldMasterId	RelationshipExistConstraint	builder.CreateQName("r:id")	
+p:CT_SlideMasterIdListEntry/p:sldMasterId	UniqueAttributeValueConstraint	builder.CreateQName(":id"), false, null	
+p:CT_SlideRelationshipListEntry/p:sld	RelationshipExistConstraint	builder.CreateQName("r:id")	
+v:CT_Arc/v:arc	AttributeValueRangeConstraint	builder.CreateQName("ovml:dgmnodekind"), true, 0, true, 6, true	
+v:CT_Arc/v:arc	AttributeValueRangeConstraint	builder.CreateQName("v:hrpct"), true, 0, true, 1000, true	
+v:CT_Arc/v:arc	AttributeValueSetConstraint	builder.CreateQName("v:dgmlayout"), true, new string[] { "0", "1", "2", "3" }	
+v:CT_Arc/v:arc	AttributeValueSetConstraint	builder.CreateQName("v:dgmlayoutmru"), true, new string[] { "0", "1", "2", "3" }	
+v:CT_Arc/v:arc	AttributeValueSetConstraint	builder.CreateQName("v:spt"), true, new string[] { "19" }	
+v:CT_Arc/v:arc	UniqueAttributeValueConstraint	builder.CreateQName("v:id"), true, null	
+v:CT_Background/v:background	UniqueAttributeValueConstraint	builder.CreateQName("v:id"), true, null	
+v:CT_Curve/v:curve	AttributeValueSetConstraint	builder.CreateQName("v:dgmlayout"), true, new string[] { "0", "1", "2", "3" }	
+v:CT_Curve/v:curve	AttributeValueSetConstraint	builder.CreateQName("v:dgmlayoutmru"), true, new string[] { "0", "1", "2", "3" }	
+v:CT_Curve/v:curve	AttributeValueSetConstraint	builder.CreateQName("v:spt"), true, new string[] { "0" }	
+v:CT_Curve/v:curve	UniqueAttributeValueConstraint	builder.CreateQName("v:id"), true, null	
+v:CT_Fill/v:fill	AttributeValuePatternConstraint	builder.CreateQName("v:focus"), @"-?(\d{1,2}|100)%"	
+v:CT_Fill/v:fill	AttributeValueRangeConstraint	builder.CreateQName("v:angle"), true, -32767, true, 32767, true	
+v:CT_Fill/v:fill	AttributeValueRangeConstraint	builder.CreateQName("v:origin"), true, -32767, true, 32767, true	
+v:CT_Fill/v:fill	AttributeValueSetConstraint	builder.CreateQName("v:title"), false, new string[] { "slashes", "colons" }	
+v:CT_Fill/v:fill	RelationshipExistConstraint	builder.CreateQName("r:id")	
+v:CT_Fill/v:fill	RelationshipTypeConstraint	builder.CreateQName("r:id"), "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"	
+v:CT_Fill/v:fill	UniqueAttributeValueConstraint	builder.CreateQName(":id"), false, null	
+v:CT_Group/v:group	AttributeValueSetConstraint	builder.CreateQName("v:dgmlayout"), true, new string[] { "0", "1", "2", "3" }	
+v:CT_Group/v:group	AttributeValueSetConstraint	builder.CreateQName("v:dgmlayoutmru"), true, new string[] { "0", "1", "2", "3" }	
+v:CT_Group/v:group	AttributeValueSetConstraint	builder.CreateQName("v:tableproperties"), true, new string[] { "1", "2", "3" }	
+v:CT_Group/v:group	UniqueAttributeValueConstraint	builder.CreateQName("v:id"), true, null	
+v:CT_Image/v:image	AttributeValueSetConstraint	builder.CreateQName("v:dgmlayout"), true, new string[] { "0", "1", "2", "3" }	
+v:CT_Image/v:image	AttributeValueSetConstraint	builder.CreateQName("v:dgmlayoutmru"), true, new string[] { "0", "1", "2", "3" }	
+v:CT_Image/v:image	AttributeValueSetConstraint	builder.CreateQName("v:spt"), true, new string[] { "75" }	
+v:CT_Image/v:image	UniqueAttributeValueConstraint	builder.CreateQName(":id"), true, null	
+v:CT_ImageData/v:imagedata	AttributeValueRangeConstraint	builder.CreateQName("v:blacklevel"), true, -0.5, true, 0.5, true	
+v:CT_ImageData/v:imagedata	RelationshipExistConstraint	builder.CreateQName("r:href")	
+v:CT_ImageData/v:imagedata	RelationshipExistConstraint	builder.CreateQName("r:id")	
+v:CT_ImageData/v:imagedata	RelationshipTypeConstraint	builder.CreateQName("r:id"), "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"	
+v:CT_ImageData/v:imagedata	RelationshipTypeConstraint	builder.CreateQName("v:href"), "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"	
+v:CT_ImageData/v:imagedata	RelationshipTypeConstraint	builder.CreateQName("v:pict"), "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"	
+v:CT_ImageData/v:imagedata	RelationshipTypeConstraint	builder.CreateQName("v:relid"), "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"	
+v:CT_ImageData/v:imagedata	UniqueAttributeValueConstraint	builder.CreateQName(":id"), false, null	
+v:CT_Line/v:line	AttributeValueSetConstraint	builder.CreateQName("v:dgmlayout"), true, new string[] { "0", "1", "2", "3" }	
+v:CT_Line/v:line	AttributeValueSetConstraint	builder.CreateQName("v:spt"), true, new string[] { "20" }	
+v:CT_Oval/v:oval	AttributeValueSetConstraint	builder.CreateQName("v:dgmlayout"), true, new string[] { "0", "1", "2", "3" }	
+v:CT_Oval/v:oval	AttributeValueSetConstraint	builder.CreateQName("v:dgmlayoutmru"), true, new string[] { "0", "1", "2", "3" }	
+v:CT_Oval/v:oval	AttributeValueSetConstraint	builder.CreateQName("v:spt"), true, new string[] { "3" }	
+v:CT_Oval/v:oval	UniqueAttributeValueConstraint	builder.CreateQName("v:id"), true, null	
+v:CT_Path/v:path	UniqueAttributeValueConstraint	builder.CreateQName("v:id"), true, null	
+v:CT_PolyLine/v:polyline	AttributeValueSetConstraint	builder.CreateQName("v:dgmlayout"), true, new string[] { "0", "1", "2", "3" }	
+v:CT_PolyLine/v:polyline	AttributeValueSetConstraint	builder.CreateQName("v:dgmlayoutmru"), true, new string[] { "0", "1", "2", "3" }	
+v:CT_PolyLine/v:polyline	AttributeValueSetConstraint	builder.CreateQName("v:spt"), true, new string[] { "0" }	
+v:CT_Rect/v:rect	AttributeValueSetConstraint	builder.CreateQName("v:dgmlayout"), true, new string[] { "0", "1", "2", "3" }	
+v:CT_Rect/v:rect	AttributeValueSetConstraint	builder.CreateQName("v:dgmlayoutmru"), true, new string[] { "0", "1", "2", "3" }	
+v:CT_Rect/v:rect	AttributeValueSetConstraint	builder.CreateQName("v:spt"), true, new string[] { "1" }	
+v:CT_Rect/v:rect	UniqueAttributeValueConstraint	builder.CreateQName("v:id"), true, null	
+v:CT_RoundRect/v:roundrect	AttributeValueSetConstraint	builder.CreateQName("v:dgmlayout"), true, new string[] { "0", "1", "2", "3" }	
+v:CT_RoundRect/v:roundrect	AttributeValueSetConstraint	builder.CreateQName("v:dgmlayoutmru"), true, new string[] { "0", "1", "2", "3" }	
+v:CT_RoundRect/v:roundrect	AttributeValueSetConstraint	builder.CreateQName("v:spt"), true, new string[] { "2" }	
+v:CT_RoundRect/v:roundrect	UniqueAttributeValueConstraint	builder.CreateQName("v:id"), true, null	
+v:CT_Shadow/v:shadow	UniqueAttributeValueConstraint	builder.CreateQName("v:id"), true, null	
+v:CT_Shape/v:shape	AttributeValueSetConstraint	builder.CreateQName("v:dgmlayout"), true, new string[] { "0", "1", "2", "3" }	
+v:CT_Shape/v:shape	AttributeValueSetConstraint	builder.CreateQName("v:dgmlayoutmru"), true, new string[] { "0", "1", "2", "3" }	
+v:CT_Shape/v:shape	UniqueAttributeValueConstraint	builder.CreateQName("v:id"), true, null	
+v:CT_Shapetype/v:shapetype	AttributeValueSetConstraint	builder.CreateQName("v:dgmlayout"), true, new string[] { "0", "1", "2", "3" }	
+v:CT_Shapetype/v:shapetype	AttributeValueSetConstraint	builder.CreateQName("v:dgmlayoutmru"), true, new string[] { "0", "1", "2", "3" }	
+v:CT_Shapetype/v:shapetype	UniqueAttributeValueConstraint	builder.CreateQName("v:id"), true, null	
+v:CT_Stroke/v:stroke	AttributeValueRangeConstraint	builder.CreateQName("v:miterlimit"), true, double.NegativeInfinity, true, 32767, true	
+v:CT_Stroke/v:stroke	AttributeValueRangeConstraint	builder.CreateQName("v:weight"), true, 0, true, 20116800, true	
+v:CT_Stroke/v:stroke	RelationshipExistConstraint	builder.CreateQName("r:id")	
+v:CT_Stroke/v:stroke	RelationshipTypeConstraint	builder.CreateQName("r:id"), "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"	
+v:CT_Stroke/v:stroke	UniqueAttributeValueConstraint	builder.CreateQName(":id"), false, null	
+v:CT_TextPath/v:textpath	UniqueAttributeValueConstraint	builder.CreateQName("v:id"), true, null	
+v:CT_Textbox/v:textbox	UniqueAttributeValueConstraint	builder.CreateQName("v:id"), true, null	
+vt:CT_Vstream/vt:vstream	UniqueAttributeValueConstraint	builder.CreateQName("vt:version"), true, null	
+w:CT_AbstractNum/w:abstractNum	UniqueAttributeValueConstraint	builder.CreateQName("w:abstractNumId"), true, null	
+w:CT_AltChunk/w:altChunk	RelationshipExistConstraint	builder.CreateQName("r:id")	
+w:CT_AltChunk/w:altChunk	RelationshipTypeConstraint	builder.CreateQName("w:id"), "http://schemas.openxmlformats.org/officeDocument/2006/relationships/aFChunk"	
+w:CT_AutoCaption/w:autoCaption	UniqueAttributeValueConstraint	builder.CreateQName("w:name"), true, null	
+w:CT_Bookmark/w:bookmarkStart	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_CellMergeTrackChange/w:cellMerge	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_Comment/w:comment	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_Control/w:control	RelationshipTypeConstraint	builder.CreateQName("w:id"), "http://schemas.openxmlformats.org/officeDocument/2006/relationships/control"	
+w:CT_Control/w:control	UniqueAttributeValueConstraint	builder.CreateQName("w:name"), true, null	
+w:CT_DecimalNumber/w:outlineLvl	AttributeValueRangeConstraint	builder.CreateQName("w:val"), true, 0, true, 9, true	
+w:CT_Div/w:div	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_DocProtect/w:documentProtection	AttributeValueSetConstraint	builder.CreateQName("w:cryptAlgorithmSid"), true, new string[] { "1", "2", "3", "4", "12", "13", "14" }	
+w:CT_FontRel/w:embedBold	RelationshipTypeConstraint	builder.CreateQName("w:id"), "http://schemas.openxmlformats.org/officeDocument/2006/relationships/font"	
+w:CT_FontRel/w:embedBoldItalic	RelationshipTypeConstraint	builder.CreateQName("w:id"), "http://schemas.openxmlformats.org/officeDocument/2006/relationships/font"	
+w:CT_FontRel/w:embedItalic	RelationshipTypeConstraint	builder.CreateQName("w:id"), "http://schemas.openxmlformats.org/officeDocument/2006/relationships/font"	
+w:CT_FontRel/w:embedRegular	RelationshipExistConstraint	builder.CreateQName("r:id")	
+w:CT_FontRel/w:embedRegular	RelationshipTypeConstraint	builder.CreateQName("w:id"), "http://schemas.openxmlformats.org/officeDocument/2006/relationships/font"	
+w:CT_FtnEdn/w:endnote	ReferenceExistConstraint	builder.CreateQName("w:id"), "/MainDocumentPart/EndnotesPart", builder.CreateQName("w:endnote"), "w:endnote", builder.CreateQName("w:id")	
+w:CT_FtnEdn/w:endnote	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_FtnEdn/w:footnote	ReferenceExistConstraint	builder.CreateQName("w:id"), "/MainDocumentPart/FootnotesPart", builder.CreateQName("w:footnote"), "w:footnote", builder.CreateQName("w:id")	
+w:CT_FtnEdn/w:footnote	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_FtnEdnRef/w:footnoteReference	ReferenceExistConstraint	builder.CreateQName("w:id"), "FootnotesPart", builder.CreateQName("w:footnote"), "w:footnote", builder.CreateQName("w:id")	
+w:CT_FtnEdnSepRef/w:endnote	ReferenceExistConstraint	builder.CreateQName("w:id"), "/MainDocumentPart/EndnotesPart", builder.CreateQName("w:endnote"), "w:endnote", builder.CreateQName("w:id")	
+w:CT_FtnEdnSepRef/w:endnote	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_FtnEdnSepRef/w:footnote	ReferenceExistConstraint	builder.CreateQName("w:id"), "/MainDocumentPart/FootnotesPart", builder.CreateQName("w:footnote"), "w:footnote", builder.CreateQName("w:id")	
+w:CT_FtnEdnSepRef/w:footnote	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_Guid/w:guid	UniqueAttributeValueConstraint	builder.CreateQName("w:val"), false, null	
+w:CT_HdrFtrRef/w:footerReference	RelationshipExistConstraint	builder.CreateQName("r:id")	
+w:CT_HdrFtrRef/w:footerReference	RelationshipTypeConstraint	builder.CreateQName("r:id"), "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer"	
+w:CT_HdrFtrRef/w:headerReference	RelationshipExistConstraint	builder.CreateQName("r:id")	
+w:CT_HdrFtrRef/w:headerReference	RelationshipTypeConstraint	builder.CreateQName("r:id"), "http://schemas.openxmlformats.org/officeDocument/2006/relationships/header"	
+w:CT_Hyperlink/w:hyperlink	RelationshipExistConstraint	builder.CreateQName("r:id")	
+w:CT_HyperlinkRuby/w:hyperlink	RelationshipExistConstraint	builder.CreateQName("r:id")	
+w:CT_Markup/w:commentReference	ReferenceExistConstraint	builder.CreateQName("w:id"), "WordprocessingCommentsPart", builder.CreateQName("w:comment"), "w:comment", builder.CreateQName("w:id")	
+w:CT_Markup/w:commentReference	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_Markup/w:customXmlDelRangeEnd	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), false, null	
+w:CT_Markup/w:customXmlInsRangeEnd	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_Markup/w:customXmlMoveFromRangeEnd	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_MarkupRange/w:bookmarkEnd	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_MarkupRange/w:commentRangeEnd	ReferenceExistConstraint	builder.CreateQName("w:id"), "WordprocessingCommentsPart", builder.CreateQName("w:comment"), "w:comment", builder.CreateQName("w:id")	
+w:CT_MarkupRange/w:commentRangeEnd	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_MarkupRange/w:commentRangeStart	ReferenceExistConstraint	builder.CreateQName("w:id"), "WordprocessingCommentsPart", builder.CreateQName("w:comment"), "w:comment", builder.CreateQName("w:id")	
+w:CT_MarkupRange/w:commentRangeStart	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_MarkupRange/w:moveFromRangeEnd	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_MarkupRange/w:moveToRangeEnd	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_MathCtrlDel/w:del	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_MathCtrlIns/w:ins	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_MathCtrlMove/w:moveFrom	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_MathCtrlMove/w:moveTo	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_MoveBookmark/w:moveFromRangeStart	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_MoveBookmark/w:moveToRangeStart	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), false, null	
+w:CT_NumPicBullet/w:numPicBullet	UniqueAttributeValueConstraint	builder.CreateQName("w:numPicBulletId"), true, null	
+w:CT_PPrChange/w:pPrChange	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_ParaRPrChange/w:rPrChange	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_Perm/w:permEnd	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_PermStart/w:permStart	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_RPrChange/w:rPrChange	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_RecipientData/w:recipientData	RelationshipTypeConstraint	builder.CreateQName("w:id"), "http://schemas.openxmlformats.org/officeDocument/2006/relationships/recipientData"	
+w:CT_Rel/w:attachedTemplate	RelationshipExistConstraint	builder.CreateQName("r:id")	
+w:CT_Rel/w:attachedTemplate	RelationshipTypeConstraint	builder.CreateQName("r:id"), "http://schemas.openxmlformats.org/officeDocument/2006/relationships/attachedTemplate"	
+w:CT_Rel/w:dataSource	RelationshipTypeConstraint	builder.CreateQName("w:id"), "http://schemas.openxmlformats.org/officeDocument/2006/relationships/mailMergeSource"	
+w:CT_Rel/w:printerSettings	RelationshipTypeConstraint	builder.CreateQName("w:id"), "http://schemas.openxmlformats.org/officeDocument/2006/relationships/printerSettings"	
+w:CT_Rel/w:recipientData	RelationshipTypeConstraint	builder.CreateQName("w:id"), "http://schemas.openxmlformats.org/officeDocument/2006/relationships/recipientData"	
+w:CT_Rel/w:sourceFileName	RelationshipTypeConstraint	builder.CreateQName("w:id"), "http://schemas.openxmlformats.org/officeDocument/2006/relationships/frame"	
+w:CT_Rel/w:src	RelationshipTypeConstraint	builder.CreateQName("r:id"), "http://schemas.openxmlformats.org/officeDocument/2006/relationships/mailMergeSource"	
+w:CT_Rel/w:subDoc	RelationshipTypeConstraint	builder.CreateQName("w:id"), "http://schemas.openxmlformats.org/officeDocument/2006/relationships/subDocument"	
+w:CT_RunTrackChange/w:del	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_RunTrackChange/w:ins	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_RunTrackChange/w:moveFrom	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_RunTrackChange/w:moveTo	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_SaveThroughXslt/w:saveThroughXslt	RelationshipTypeConstraint	builder.CreateQName(":id"), "http://schemas.openxmlformats.org/officeDocument/2006/relationships/transform"	
+w:CT_SectPrChange/w:sectPrChange	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_String/w:decimalSymbol	AttributeValuePatternConstraint	builder.CreateQName("w:val"), @".{1}"	
+w:CT_String/w:listSeparator	AttributeValuePatternConstraint	builder.CreateQName("w:val"), @".{1}"	
+w:CT_String/w:style	UniqueAttributeValueConstraint	builder.CreateQName("w:styleId"), true, null	
+w:CT_Style/w:style	UniqueAttributeValueConstraint	builder.CreateQName("w:styleId"), true, null	
+w:CT_TblGridChange/w:tblGridChange	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_TblPrChange/w:tblPrChange	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_TblPrExChange/w:tblPrExChange	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_TcPrChange/w:tcPrChange	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_TrPrChange/w:trPrChange	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_TrackChange/w:cellDel	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_TrackChange/w:cellIns	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_TrackChange/w:customXmlDelRangeStart	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), false, null	
+w:CT_TrackChange/w:customXmlInsRangeStart	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_TrackChange/w:customXmlMoveFromRangeStart	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_TrackChange/w:customXmlMoveToRangeStart	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_TrackChange/w:del	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_TrackChange/w:ins	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_TrackChange/w:moveFrom	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_TrackChange/w:moveTo	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+w:CT_TrackChangeNumbering/w:numberingChange	AttributeValueLengthConstraint	builder.CreateQName("w:original"), 0, 15	
+w:CT_TrackChangeNumbering/w:numberingChange	UniqueAttributeValueConstraint	builder.CreateQName("w:id"), true, null	
+x:CT_BookView/x:workbookView	AttributeValueRangeConstraint	builder.CreateQName("x:activeTab"), true, 0, true, 32766, true	
+x:CT_BookView/x:workbookView	AttributeValueRangeConstraint	builder.CreateQName("x:tabRatio"), true, double.NegativeInfinity, true, 1000, true	
+x:CT_BookView/x:workbookView	AttributeValueRangeConstraint	builder.CreateQName("x:windowHeight"), true, double.NegativeInfinity, true, 2147483647, true	
+x:CT_BookView/x:workbookView	AttributeValueRangeConstraint	builder.CreateQName("x:windowWidth"), true, double.NegativeInfinity, true, 2147483647, true	
+x:CT_BooleanProperty/x:i	IndexReferenceConstraint	builder.CreateQName("x:i"), ".", null, builder.CreateQName("x:dataField"), "x:dataField", 0	
+x:CT_ByteProperty/x:charset	AttributeValueRangeConstraint	builder.CreateQName("x:val"), true, 0, true, 255, true	
+x:CT_CacheField/x:cacheField	UniqueAttributeValueConstraint	builder.CreateQName("x:name"), true, null	
+x:CT_CacheHierarchy/x:cacheHierarchy	UniqueAttributeValueConstraint	builder.CreateQName("x:allUniqueName"), true, null	
+x:CT_CacheHierarchy/x:cacheHierarchy	UniqueAttributeValueConstraint	builder.CreateQName("x:defaultMemberUniqueName"), true, null	
+x:CT_CacheHierarchy/x:cacheHierarchy	UniqueAttributeValueConstraint	builder.CreateQName("x:uniqueName"), true, null	
+x:CT_CacheSource/x:cacheSource	ReferenceExistConstraint	builder.CreateQName("x:connectionId"), "/WorkbookPart/ConnectionsPart", builder.CreateQName("x:connection"), "x:connection", builder.CreateQName("x:id")	
+x:CT_CacheSource/x:cacheSource	UniqueAttributeValueConstraint	builder.CreateQName("x:connectionId"), true, null	
+x:CT_CalcCell/x:c	AttributeMutualExclusive	builder.CreateQName("x:l"), builder.CreateQName("x:s")	
+x:CT_CalcCell/x:c	AttributeValueRangeConstraint	builder.CreateQName("x:cm"), true, double.NegativeInfinity, true, 2147483647, true	
+x:CT_CalcCell/x:c	AttributeValueRangeConstraint	builder.CreateQName("x:s"), true, 0, true, 65490, true	
+x:CT_CalcCell/x:c	AttributeValueRangeConstraint	builder.CreateQName("x:vm"), true, double.NegativeInfinity, true, 2147483648, true	
+x:CT_CalcCell/x:c	IndexReferenceConstraint	builder.CreateQName("x:cm"), "/WorkbookPart/CellMetadataPart", builder.CreateQName("x:cellMetadata"), builder.CreateQName("x:bk"), "x:bk", 1	
+x:CT_CalcCell/x:c	IndexReferenceConstraint	builder.CreateQName("x:s"), "/WorkbookPart/WorkbookStylesPart", builder.CreateQName("x:cellXfs"), builder.CreateQName("x:xf"), "x:xf", 0	
+x:CT_CalcCell/x:c	IndexReferenceConstraint	builder.CreateQName("x:vm"), "/WorkbookPart/CellMetadataPart", builder.CreateQName("x:valueMetadata"), builder.CreateQName("x:bk"), "x:bk", 1	
+x:CT_CalcCell/x:c	ReferenceExistConstraint	builder.CreateQName("x:i"), "/WorkbookPart", builder.CreateQName("x:sheet"), "x:sheet", builder.CreateQName("x:sheetId")	
+x:CT_CalculatedMember/x:calculatedMember	AttributeAbsentConditionToValue	builder.CreateQName("x:hierarchy"), builder.CreateQName("x:set"), "1"	
+x:CT_CalculatedMember/x:calculatedMember	AttributeAbsentConditionToValue	builder.CreateQName("x:memberName"), builder.CreateQName("x:set"), "1"	
+x:CT_CalculatedMember/x:calculatedMember	AttributeAbsentConditionToValue	builder.CreateQName("x:parent"), builder.CreateQName("x:set"), "1"	
+x:CT_CalculatedMember/x:calculatedMember	AttributeRequiredConditionToValue	builder.CreateQName("x:hierarchy"), builder.CreateQName("x:set") , "0"	
+x:CT_CalculatedMember/x:calculatedMember	AttributeRequiredConditionToValue	builder.CreateQName("x:memberName"), builder.CreateQName("x:set") , "0"	
+x:CT_CalculatedMember/x:calculatedMember	AttributeValueLengthConstraint	builder.CreateQName("x:name"), 1, 63999	
+x:CT_Cell/x:c	AttributeMutualExclusive	builder.CreateQName("x:l"), builder.CreateQName("x:s")	
+x:CT_Cell/x:c	AttributeValueRangeConstraint	builder.CreateQName("x:cm"), true, double.NegativeInfinity, true, 2147483647, true	
+x:CT_Cell/x:c	AttributeValueRangeConstraint	builder.CreateQName("x:s"), true, 0, true, 65490, true	
+x:CT_Cell/x:c	AttributeValueRangeConstraint	builder.CreateQName("x:vm"), true, double.NegativeInfinity, true, 2147483648, true	
+x:CT_Cell/x:c	IndexReferenceConstraint	builder.CreateQName("x:cm"), "/WorkbookPart/CellMetadataPart", builder.CreateQName("x:cellMetadata"), builder.CreateQName("x:bk"), "x:bk", 1	
+x:CT_Cell/x:c	IndexReferenceConstraint	builder.CreateQName("x:s"), "/WorkbookPart/WorkbookStylesPart", builder.CreateQName("x:cellXfs"), builder.CreateQName("x:xf"), "x:xf", 0	
+x:CT_Cell/x:c	IndexReferenceConstraint	builder.CreateQName("x:vm"), "/WorkbookPart/CellMetadataPart", builder.CreateQName("x:valueMetadata"), builder.CreateQName("x:bk"), "x:bk", 1	
+x:CT_Cell/x:c	ReferenceExistConstraint	builder.CreateQName("x:i"), "/WorkbookPart", builder.CreateQName("x:sheet"), "x:sheet", builder.CreateQName("x:sheetId")	
+x:CT_Cell/x:oc	IndexReferenceConstraint	builder.CreateQName("x:cm"), "/WorkbookPart/CellMetadataPart", null, builder.CreateQName("x:cellMetadata"), "x:cellMetadata", 0	
+x:CT_Cell/x:oc	IndexReferenceConstraint	builder.CreateQName("x:s"), "/WorkbookPart/WorkbookStylesPart", null, builder.CreateQName("x:cellStyle"), "x:cellStyle", 0	
+x:CT_Cell/x:oc	IndexReferenceConstraint	builder.CreateQName("x:vm"), "/WorkbookPart/CellMetadataPart", null, builder.CreateQName("x:valueMetadata"), "x:valueMetadata", 0	
+x:CT_CellAlignment/x:alignment	AttributeValueRangeConstraint	builder.CreateQName("x:readingOrder"), true, 0, true, 2, true	
+x:CT_CellFormula/x:f	AttributeRequiredConditionToValue	builder.CreateQName("x:si"), builder.CreateQName("x:t") , "shared"	
+x:CT_CellFormula/x:f	AttributeValueSetConstraint	builder.CreateQName("x:bx"), true, new string[] { "false" }	
+x:CT_CellStyle/x:cellStyle	AttributeValueLengthConstraint	builder.CreateQName("x:name"), 0, 255	
+x:CT_CellStyle/x:cellStyle	AttributeValueRangeConstraint	builder.CreateQName("x:builtinId"), true, 0, true, 53, true	
+x:CT_CellStyle/x:cellStyle	AttributeValueRangeConstraint	builder.CreateQName("x:iLevel"), true, 0, true, 7, true	
+x:CT_CellStyle/x:cellStyle	IndexReferenceConstraint	builder.CreateQName("x:xfId"), "/WorkbookPart/WorkbookStylesPart", null, builder.CreateQName("x:xf"), "x:xf", 0	
+x:CT_CellStyle/x:cellStyle	UniqueAttributeValueConstraint	builder.CreateQName("x:xfId"), true, builder.CreateQName("x:cellStyles")	
+x:CT_CellWatch/x:cellWatch	UniqueAttributeValueConstraint	builder.CreateQName("x:r"), true, builder.CreateQName("x:cellWatches")	
+x:CT_CfRule/x:cfRule	AttributeRequiredConditionToValue	builder.CreateQName("x:operator"), builder.CreateQName("x:type") , "cells"	
+x:CT_CfRule/x:cfRule	AttributeRequiredConditionToValue	builder.CreateQName("x:timePeriod"), builder.CreateQName("x:type") , "timePeriod"	
+x:CT_CfRule/x:cfRule	IndexReferenceConstraint	builder.CreateQName("x:dxfId"), "/WorkbookPart/WorkbookStylesPart", null, builder.CreateQName("x:dxf"), "x:dxf", 0	
+x:CT_ChartsheetPr/x:sheetPr	AttributeValueLengthConstraint	builder.CreateQName("x:codeName"), 0, 32	
+x:CT_ChartsheetPr/x:sheetPr	AttributeValuePatternConstraint	builder.CreateQName("x:codeName"), @"[\p{L}\P{IsBasicLatin}][_\d\p{L}\P{IsBasicLatin}]*"	
+x:CT_ChartsheetView/x:sheetView	AttributeValueRangeConstraint	builder.CreateQName("x:colorId"), true, double.NegativeInfinity, true, 64, true	
+x:CT_ChartsheetView/x:sheetView	AttributeValueRangeConstraint	builder.CreateQName("x:zoomScale"), true, 10, true, 400, true	
+x:CT_ChartsheetView/x:sheetView	AttributeValueRangeConstraint	builder.CreateQName("x:zoomScaleNormal"), true, 10, true, 400, true	
+x:CT_ChartsheetView/x:sheetView	AttributeValueRangeConstraint	builder.CreateQName("x:zoomScalePageLayoutView"), true, 10, true, 400, true	
+x:CT_ChartsheetView/x:sheetView	AttributeValueRangeConstraint	builder.CreateQName("x:zoomScaleSheetLayoutView"), true, 10, true, 400, true	
+x:CT_ChartsheetView/x:sheetView	IndexReferenceConstraint	builder.CreateQName("x:workbookViewId"), "/WorkbookPart", null, builder.CreateQName("x:workbookView"), "x:workbookView", 0	
+x:CT_Col/x:col	AttributeValueRangeConstraint	builder.CreateQName("x:max"), true, 1, true, 16384, true	
+x:CT_Col/x:col	AttributeValueRangeConstraint	builder.CreateQName("x:min"), true, 1, true, 16384, true	
+x:CT_Col/x:col	AttributeValueRangeConstraint	builder.CreateQName("x:outlineLevel"), true, 0, true, 7, true	
+x:CT_Col/x:col	AttributeValueRangeConstraint	builder.CreateQName("x:style"), true, 0, true, 65429, true	
+x:CT_Col/x:col	AttributeValueRangeConstraint	builder.CreateQName("x:width"), true, 0, true, 255, true	
+x:CT_Col/x:col	IndexReferenceConstraint	builder.CreateQName("x:style"), "/WorkbookPart/WorkbookStylesPart", null, builder.CreateQName("x:xf"), "x:xf", 0	
+x:CT_Color/x:bgColor	AttributeValueRangeConstraint	builder.CreateQName("x:tint"), true, -1, true, 1, true	
+x:CT_Color/x:fgColor	AttributeValueRangeConstraint	builder.CreateQName("x:tint"), true, -1, true, 1, true	
+x:CT_Color/x:tabColor	AttributeMutualExclusive	builder.CreateQName("x:auto"), builder.CreateQName("x:indexed"), builder.CreateQName("x:rgb"), builder.CreateQName("x:theme")	
+x:CT_Color/x:tabColor	AttributeValueRangeConstraint	builder.CreateQName("x:tint"), true, -1, true, 1, true	
+x:CT_ColorFilter/x:colorFilter	IndexReferenceConstraint	builder.CreateQName("x:dxfId"), "/WorkbookPart/WorkbookStylesPart", null, builder.CreateQName("x:dxf"), "x:dxf", 0	
+x:CT_Comment/x:comment	IndexReferenceConstraint	builder.CreateQName("x:authorId"), ".", null, builder.CreateQName("x:author"), "x:author", 0	
+x:CT_Comment/x:comment	UniqueAttributeValueConstraint	builder.CreateQName("x:guid"), false, null	
+x:CT_ConditionalFormat/x:conditionalFormat	AttributeValueConditionToAnother	builder.CreateQName("x:type"), builder.CreateQName("x:scope"), new string[] { "none", "all" }, new string[] { "data", "selection" }	
+x:CT_ConditionalFormatting/x:conditionalFormatting	AttributeValueLengthConstraint	builder.CreateQName("x:sqref"), 1, int.MaxValue	
+x:CT_Connection/x:connection	AttributeValueRangeConstraint	builder.CreateQName("x:type"), true, 1, true, 8, true	
+x:CT_Connection/x:connection	UniqueAttributeValueConstraint	builder.CreateQName("x:id"), true, null	
+x:CT_Connection/x:connection	UniqueAttributeValueConstraint	builder.CreateQName("x:name"), true, null	
+x:CT_Control/x:control	AttributeValueRangeConstraint	builder.CreateQName("x:shapeId"), true, 1, true, 67098623, true	
+x:CT_CustomChartsheetView/x:customSheetView	AttributeValueRangeConstraint	builder.CreateQName("x:colorId"), true, double.NegativeInfinity, true, 64, true	
+x:CT_CustomChartsheetView/x:customSheetView	AttributeValueRangeConstraint	builder.CreateQName("x:scale"), true, 10, true, 400, true	
+x:CT_CustomChartsheetView/x:customSheetView	AttributeValueSetConstraint	builder.CreateQName("x:guid"), false, new string[] { "00000000-0000-0000-0000-000000000000" }	
+x:CT_CustomProperty/x:customPr	UniqueAttributeValueConstraint	builder.CreateQName("x:name"), false, null	
+x:CT_CustomSheetView/x:customSheetView	AttributeValueRangeConstraint	builder.CreateQName("x:colorId"), true, double.NegativeInfinity, true, 64, true	
+x:CT_CustomSheetView/x:customSheetView	AttributeValueRangeConstraint	builder.CreateQName("x:scale"), true, 10, true, 400, true	
+x:CT_CustomSheetView/x:customSheetView	AttributeValueSetConstraint	builder.CreateQName("x:guid"), false, new string[] { "00000000-0000-0000-0000-000000000000" }	
+x:CT_CustomWorkbookView/x:customWorkbookView	AttributeValueRangeConstraint	builder.CreateQName("x:activeSheetId"), true, 1, true, 65534, true	
+x:CT_CustomWorkbookView/x:customWorkbookView	AttributeValueRangeConstraint	builder.CreateQName("x:tabRatio"), true, double.NegativeInfinity, true, 1000, true	
+x:CT_CustomWorkbookView/x:customWorkbookView	AttributeValueRangeConstraint	builder.CreateQName("x:windowWidth"), true, double.NegativeInfinity, true, 2147483647, true	
+x:CT_DataBinding/x:DataBinding	AttributeAbsentConditionToValue	builder.CreateQName("x:ConnectionID"), builder.CreateQName("x:FileBinding"), "false"	
+x:CT_DataBinding/x:DataBinding	AttributeRequiredConditionToValue	builder.CreateQName("x:ConnectionID"), builder.CreateQName("x:FileBinding") , "true"	
+x:CT_DataBinding/x:DataBinding	AttributeValueRangeConstraint	builder.CreateQName("x:DataBindingLoadMode"), true, 0, true, 4, true	
+x:CT_DataBinding/x:DataBinding	UniqueAttributeValueConstraint	builder.CreateQName("x:DataBindingName"), true, null	
+x:CT_DataBinding/x:DataBinding	UniqueAttributeValueConstraint	builder.CreateQName("x:FileBindingName"), true, null	
+x:CT_DataField/x:dataField	IndexReferenceConstraint	builder.CreateQName("x:fld"), ".", null, builder.CreateQName("x:pivotField"), "x:pivotField", 0	
+x:CT_DataValidation/x:dataValidation	AttributeValueLengthConstraint	builder.CreateQName("x:errorTitle"), 0, 32	
+x:CT_DataValidation/x:dataValidation	AttributeValueLengthConstraint	builder.CreateQName("x:promptTitle"), 0, 32	
+x:CT_DataValidation/x:dataValidation	AttributeValueRangeConstraint	builder.CreateQName("x:sqref"), true, 1, true, 32767, true	
+x:CT_DateGroupItem/x:dateGroupItem	AttributeValueRangeConstraint	builder.CreateQName("x:day"), true, 1, true, 31, true	
+x:CT_DateGroupItem/x:dateGroupItem	AttributeValueRangeConstraint	builder.CreateQName("x:hour"), true, 0, true, 23, true	
+x:CT_DateGroupItem/x:dateGroupItem	AttributeValueRangeConstraint	builder.CreateQName("x:minute"), true, 0, true, 59, true	
+x:CT_DateGroupItem/x:dateGroupItem	AttributeValueRangeConstraint	builder.CreateQName("x:month"), true, 1, true, 12, true	
+x:CT_DateGroupItem/x:dateGroupItem	AttributeValueRangeConstraint	builder.CreateQName("x:second"), true, 0, true, 59, true	
+x:CT_DateGroupItem/x:dateGroupItem	AttributeValueRangeConstraint	builder.CreateQName("x:year"), true, 1000, true, 9999, true	
+x:CT_DbPr/x:dbPr	AttributeValueRangeConstraint	builder.CreateQName("x:commandType"), true, 1, true, 5, true	
+x:CT_DdeItem/x:ddeItem	AttributeValueConditionToAnother	builder.CreateQName("x:name"), builder.CreateQName("x:ole"), new string[] { "StdDocumentName" }, new string[] { "true" }	
+x:CT_DdeItem/x:ddeItem	AttributeValueLengthConstraint	builder.CreateQName("x:name"), 0, 255	
+x:CT_DdeLink/x:ddeLink	AttributeValueLengthConstraint	builder.CreateQName("x:ddeService"), 1, 255	
+x:CT_DdeLink/x:ddeLink	AttributeValueLengthConstraint	builder.CreateQName("x:ddeTopic"), 0, 255	
+x:CT_DefinedName/x:definedName	AttributeValueRangeConstraint	builder.CreateQName("x:sheetId"), true, 0, true, 65533, true	
+x:CT_Drawing/x:drawing	RelationshipExistConstraint	builder.CreateQName("r:id")	
+x:CT_Error/x:e	IndexReferenceConstraint	builder.CreateQName("x:in"), ".", null, builder.CreateQName("x:serverFormat"), "x:serverFormat", 0	
+x:CT_ExternalCell/x:cell	AttributeValueSetConstraint	builder.CreateQName("x:t"), false, new string[] { "s" }	
+x:CT_ExternalCell/x:cell	IndexReferenceConstraint	builder.CreateQName("x:vm"), "/WorkbookPart/CellMetadataPart", null, builder.CreateQName("x:valueMetadata"), "x:valueMetadata", 0	
+x:CT_ExternalDefinedName/x:definedName	AttributeValueRangeConstraint	builder.CreateQName("x:sheetId"), true, 0, true, 65533, true	
+x:CT_ExternalRow/x:row	AttributeValueRangeConstraint	builder.CreateQName("x:outlineLevel"), true, 0, true, 7, true	
+x:CT_ExternalRow/x:row	AttributeValueRangeConstraint	builder.CreateQName("x:r"), true, 1, true, 1048576, true	
+x:CT_ExternalRow/x:row	AttributeValueRangeConstraint	builder.CreateQName("x:r"), true, double.NegativeInfinity, true, 1048576, true	
+x:CT_ExternalRow/x:row	AttributeValueRangeConstraint	builder.CreateQName("x:s"), true, 0, true, 65490, true	
+x:CT_ExternalSheetData/x:sheetData	AttributeValueRangeConstraint	builder.CreateQName("x:sheetId"), true, 0, true, 65533, true	
+x:CT_ExternalSheetName/x:sheetName	AttributeValueLengthConstraint	builder.CreateQName("x:val"), 0, 31	
+x:CT_Field/x:field	UniqueAttributeValueConstraint	builder.CreateQName("x:x"), true, builder.CreateQName("x:colFields")	
+x:CT_FieldUsage/x:fieldUsage	AttributeValueRangeConstraint	builder.CreateQName("x:x"), true, -1, true, double.PositiveInfinity, true	
+x:CT_FieldUsage/x:fieldUsage	IndexReferenceConstraint	builder.CreateQName("x:x"), ".", null, builder.CreateQName("x:cacheField"), "x:cacheField", 0	
+x:CT_FileSharing/x:fileSharing	AttributeValueLengthConstraint	builder.CreateQName("x:userName"), 1, 54	
+x:CT_FileVersion/x:fileVersion	AttributeValueLengthConstraint	builder.CreateQName("x:appName"), 0, 65535	
+x:CT_FileVersion/x:fileVersion	AttributeValueLengthConstraint	builder.CreateQName("x:lastEdited"), 0, 65535	
+x:CT_FileVersion/x:fileVersion	AttributeValueLengthConstraint	builder.CreateQName("x:lowestEdited"), 0, 65535	
+x:CT_FileVersion/x:fileVersion	AttributeValueLengthConstraint	builder.CreateQName("x:rupBuild"), 0, 65535	
+x:CT_Filter/x:filter	IndexReferenceConstraint	builder.CreateQName("x:fld"), ".", null, builder.CreateQName("x:pivotField"), "x:pivotField", 0	
+x:CT_Filter/x:filter	IndexReferenceConstraint	builder.CreateQName("x:iMeasureFld"), ".", null, builder.CreateQName("x:pivotField"), "x:pivotField", 0	
+x:CT_Filter/x:filter	IndexReferenceConstraint	builder.CreateQName("x:iMeasureHier"), ".", null, builder.CreateQName("x:pivotHierarchy"), "x:pivotHierarchy", 0	
+x:CT_Filter/x:filter	UniqueAttributeValueConstraint	builder.CreateQName("x:id"), false, null	
+x:CT_FontName/x:rFont	AttributeValueLengthConstraint	builder.CreateQName("x:val"), 0, 31	
+x:CT_FontSize/x:sz	AttributeValueRangeConstraint	builder.CreateQName("x:val"), true, 1, true, 409.55, true	
+x:CT_Format/x:format	IndexReferenceConstraint	builder.CreateQName("x:dxfId"), "/WorkbookPart/WorkbookStylesPart", null, builder.CreateQName("x:dxf"), "x:dxf", 0	
+x:CT_FunctionGroups/x:functionGroups	AttributeValueRangeConstraint	builder.CreateQName("x:builtInGroupCount"), true, double.NegativeInfinity, true, 255, true	
+x:CT_FutureMetadata/x:futureMetadata	AttributeValueLengthConstraint	builder.CreateQName("x:name"), 1, 65535	
+x:CT_FutureMetadata/x:futureMetadata	AttributeValueRangeConstraint	builder.CreateQName("x:count"), true, double.NegativeInfinity, true, 2147483647, true	
+x:CT_FutureMetadata/x:futureMetadata	AttributeValueSetConstraint	builder.CreateQName("x:name"), false, new string[] { "XLMDX" }	
+x:CT_FutureMetadata/x:futureMetadata	UniqueAttributeValueConstraint	builder.CreateQName("x:name"), true, builder.CreateQName("x:metadata")	
+x:CT_GradientFill/x:gradientFill	AttributeValueRangeConstraint	builder.CreateQName("x:bottom"), true, 0, true, 1, true	
+x:CT_GradientFill/x:gradientFill	AttributeValueRangeConstraint	builder.CreateQName("x:degree"), true, -1.7E+308, true, 1.7E+308, true	
+x:CT_GradientFill/x:gradientFill	AttributeValueRangeConstraint	builder.CreateQName("x:left"), true, 0, true, 1, true	
+x:CT_GradientFill/x:gradientFill	AttributeValueRangeConstraint	builder.CreateQName("x:right"), true, 0, true, 1, true	
+x:CT_GradientFill/x:gradientFill	AttributeValueRangeConstraint	builder.CreateQName("x:top"), true, 0, true, 1, true	
+x:CT_GradientStop/x:stop	AttributeValueRangeConstraint	builder.CreateQName("x:position"), true, 0, true, 1, true	
+x:CT_GroupLevel/x:groupLevel	UniqueAttributeValueConstraint	builder.CreateQName("x:uniqueName"), true, null	
+x:CT_GroupMember/x:groupMember	UniqueAttributeValueConstraint	builder.CreateQName("x:uniqueName"), true, null	
+x:CT_Hyperlink/x:hyperlink	AttributeValueLengthConstraint	builder.CreateQName("x:display"), 0, 2084	
+x:CT_Hyperlink/x:hyperlink	AttributeValueLengthConstraint	builder.CreateQName("x:location"), 0, 2084	
+x:CT_Hyperlink/x:hyperlink	AttributeValueLengthConstraint	builder.CreateQName("x:tooltip"), 0, 255	
+x:CT_Hyperlink/x:hyperlink	RelationshipExistConstraint	builder.CreateQName("r:id")	
+x:CT_I/x:i	IndexReferenceConstraint	builder.CreateQName("x:i"), ".", null, builder.CreateQName("x:dataField"), "x:dataField", 0	
+x:CT_IgnoredError/x:ignoredError	AttributeValueRangeConstraint	builder.CreateQName("x:sqref"), true, double.NegativeInfinity, true, 2147483647, true	
+x:CT_IntProperty/x:charset	AttributeValueRangeConstraint	builder.CreateQName("x:val"), true, 0, true, 255, true	
+x:CT_Item/x:item	AttributeValueSetConstraint	builder.CreateQName("x:t"), false, new string[] { "blank", "grand" }	
+x:CT_Item/x:item	UniqueAttributeValueConstraint	builder.CreateQName("x:n"), true, builder.CreateQName("x:pivotField")	
+x:CT_LegacyDrawing/x:legacyDrawing	RelationshipExistConstraint	builder.CreateQName("r:id")	
+x:CT_LevelGroup/x:group	AttributeValueLengthConstraint	builder.CreateQName("x:uniqueParent"), 0, 65535	
+x:CT_LevelGroup/x:group	AttributeValueRangeConstraint	builder.CreateQName("x:id"), true, 1, true, double.PositiveInfinity, true	
+x:CT_LevelGroup/x:group	UniqueAttributeValueConstraint	builder.CreateQName("x:id"), true, builder.CreateQName("x:groups")	
+x:CT_LevelGroup/x:group	UniqueAttributeValueConstraint	builder.CreateQName("x:uniqueName"), true, null	
+x:CT_Map/x:Map	AttributeValueLengthConstraint	builder.CreateQName("x:Name"), 0, 65535	
+x:CT_Map/x:Map	AttributeValueLengthConstraint	builder.CreateQName("x:RootElement"), 0, 65535	
+x:CT_Map/x:Map	AttributeValueRangeConstraint	builder.CreateQName("x:ID"), true, 1, true, 2147483647, true	
+x:CT_Map/x:Map	UniqueAttributeValueConstraint	builder.CreateQName("x:SchemaID"), true, null	
+x:CT_Mdx/x:mdx	AttributeValueRangeConstraint	builder.CreateQName("x:n"), true, double.NegativeInfinity, true, 2147483647, true	
+x:CT_Mdx/x:mdx	IndexReferenceConstraint	builder.CreateQName("x:n"), "/WorkbookPart/CellMetadataPart", builder.CreateQName("x:metadataStrings"), builder.CreateQName("x:s"), "x:s", 0	
+x:CT_MdxKPI/x:k	AttributeValueRangeConstraint	builder.CreateQName("x:n"), true, double.NegativeInfinity, true, 2147483647, true	
+x:CT_MdxKPI/x:k	AttributeValueRangeConstraint	builder.CreateQName("x:np"), true, double.NegativeInfinity, true, 2147483647, true	
+x:CT_MdxKPI/x:k	IndexReferenceConstraint	builder.CreateQName("x:n"), ".", builder.CreateQName("x:metadataStrings"), builder.CreateQName("x:s"), "x:s", 0	
+x:CT_MdxKPI/x:k	IndexReferenceConstraint	builder.CreateQName("x:np"), "/WorkbookPart/CellMetadataPart", builder.CreateQName("x:metadataStrings"), builder.CreateQName("x:s"), "x:s", 0	
+x:CT_MdxMemeberProp/x:p	AttributeValueRangeConstraint	builder.CreateQName("x:n"), true, double.NegativeInfinity, true, 2147483647, true	
+x:CT_MdxMemeberProp/x:p	AttributeValueRangeConstraint	builder.CreateQName("x:np"), true, double.NegativeInfinity, true, 2147483647, true	
+x:CT_MdxMemeberProp/x:p	IndexReferenceConstraint	builder.CreateQName("x:n"), "/WorkbookPart/CellMetadataPart", builder.CreateQName("x:metadataStrings"), builder.CreateQName("x:s"), "x:s", 0	
+x:CT_MdxMemeberProp/x:p	IndexReferenceConstraint	builder.CreateQName("x:np"), "/WorkbookPart/CellMetadataPart", builder.CreateQName("x:metadataStrings"), builder.CreateQName("x:s"), "x:s", 0	
+x:CT_MdxMetadata/x:mdxMetadata	AttributeValueRangeConstraint	builder.CreateQName("x:count"), true, double.NegativeInfinity, true, 2147483647, true	
+x:CT_MdxSet/x:ms	AttributeValueRangeConstraint	builder.CreateQName("x:c"), true, 0, true, 2147483647, true	
+x:CT_MdxSet/x:ms	AttributeValueRangeConstraint	builder.CreateQName("x:ns"), true, 0, true, 2147483647, true	
+x:CT_MdxSet/x:ms	IndexReferenceConstraint	builder.CreateQName("x:ns"), "/WorkbookPart/CellMetadataPart", builder.CreateQName("x:metadataStrings"), builder.CreateQName("x:s"), "x:s", 0	
+x:CT_MdxTuple/x:t	AttributeValueRangeConstraint	builder.CreateQName("x:c"), true, double.NegativeInfinity, true, 2147483647, true	
+x:CT_MdxTuple/x:t	AttributeValueRangeConstraint	builder.CreateQName("x:fi"), true, double.NegativeInfinity, true, 58, true	
+x:CT_MdxTuple/x:t	AttributeValueRangeConstraint	builder.CreateQName("x:si"), true, double.NegativeInfinity, true, 2147483647, true	
+x:CT_MdxTuple/x:t	IndexReferenceConstraint	builder.CreateQName("x:si"), "/WorkbookPart/CellMetadataPart", builder.CreateQName("x:metadataStrings"), builder.CreateQName("x:s"), "x:s", 0	
+x:CT_MemberProperty/x:mp	IndexReferenceConstraint	builder.CreateQName("x:field"), "PivotTableCacheDefinitionPart", null, builder.CreateQName("x:cacheField"), "x:cacheField", 0	
+x:CT_MetadataBlocks/x:cellMetadata	AttributeValueRangeConstraint	builder.CreateQName("x:count"), true, double.NegativeInfinity, true, 2147483647, true	
+x:CT_MetadataBlocks/x:valueMetadata	AttributeValueRangeConstraint	builder.CreateQName("x:count"), true, double.NegativeInfinity, true, 2147483647, true	
+x:CT_MetadataRecord/x:rc	AttributeValueRangeConstraint	builder.CreateQName("x:t"), true, double.NegativeInfinity, true, 2147483647, true	
+x:CT_MetadataRecord/x:rc	IndexReferenceConstraint	builder.CreateQName("x:t"), ".", null, builder.CreateQName("x:metadataType"), "x:metadataType", 1	
+x:CT_MetadataStringIndex/x:n	AttributeValueRangeConstraint	builder.CreateQName("x:x"), true, 0, true, double.PositiveInfinity, true	
+x:CT_MetadataStringIndex/x:n	AttributeValueRangeConstraint	builder.CreateQName("x:x"), true, double.NegativeInfinity, true, 2147483647, true	
+x:CT_MetadataStringIndex/x:n	IndexReferenceConstraint	builder.CreateQName("x:in"), ".", null, builder.CreateQName("x:serverFormat"), "x:serverFormat", 0	
+x:CT_MetadataStrings/x:metadataStrings	AttributeValueRangeConstraint	builder.CreateQName("x:count"), true, double.NegativeInfinity, true, 2147483647, true	
+x:CT_MetadataType/x:metadataType	AttributeValueLengthConstraint	builder.CreateQName("x:name"), 1, 65535	
+x:CT_MetadataType/x:metadataType	UniqueAttributeValueConstraint	builder.CreateQName("x:name"), true, builder.CreateQName("x:metadataTypes")	
+x:CT_MetadataTypes/x:metadataTypes	AttributeValueRangeConstraint	builder.CreateQName("x:count"), true, double.NegativeInfinity, true, 2147483647, true	
+x:CT_Missing/x:m	IndexReferenceConstraint	builder.CreateQName("x:in"), ".", null, builder.CreateQName("x:serverFormat"), "x:serverFormat", 0	
+x:CT_NumFmt/x:numFmt	AttributeValueLengthConstraint	builder.CreateQName("x:formatCode"), 0, 255	
+x:CT_Number/x:n	AttributeValueRangeConstraint	builder.CreateQName("x:x"), true, 0, true, double.PositiveInfinity, true	
+x:CT_Number/x:n	AttributeValueRangeConstraint	builder.CreateQName("x:x"), true, double.NegativeInfinity, true, 2147483647, true	
+x:CT_Number/x:n	IndexReferenceConstraint	builder.CreateQName("x:in"), ".", null, builder.CreateQName("x:serverFormat"), "x:serverFormat", 0	
+x:CT_OlapPr/x:olapPr	AttributeValueRangeConstraint	builder.CreateQName("x:rowDrillCount"), true, 1, true, 1048576, true	
+x:CT_OleItem/x:oleItem	AttributeValueLengthConstraint	builder.CreateQName("x:name"), 0, 255	
+x:CT_OleItem/x:oleItem	AttributeValueLengthConstraint	builder.CreateQName("x:name"), 1, int.MaxValue	
+x:CT_OleLink/x:oleLink	AttributeValueLengthConstraint	builder.CreateQName("x:progId"), 1, 255	
+x:CT_OleObject/x:oleObject	AttributeValueLengthConstraint	builder.CreateQName("x:progId"), 0, 39	
+x:CT_OleObject/x:oleObject	AttributeValuePatternConstraint	builder.CreateQName("x:progId"), @"[^\d].*"	
+x:CT_OleObject/x:oleObject	AttributeValueRangeConstraint	builder.CreateQName("x:shapeId"), true, 1, true, 67098623, true	
+x:CT_PCDKPI/x:kpi	UniqueAttributeValueConstraint	builder.CreateQName("x:goal"), true, null	
+x:CT_PCDKPI/x:kpi	UniqueAttributeValueConstraint	builder.CreateQName("x:status"), true, null	
+x:CT_PCDKPI/x:kpi	UniqueAttributeValueConstraint	builder.CreateQName("x:trend"), true, null	
+x:CT_PCDKPI/x:kpi	UniqueAttributeValueConstraint	builder.CreateQName("x:uniqueName"), true, null	
+x:CT_PCDKPI/x:kpi	UniqueAttributeValueConstraint	builder.CreateQName("x:value"), true, null	
+x:CT_PCDKPI/x:kpi	UniqueAttributeValueConstraint	builder.CreateQName("x:weight"), true, null	
+x:CT_PageBreak/x:colBreaks	AttributeValueRangeConstraint	builder.CreateQName("x:count"), true, double.NegativeInfinity, true, 1023, true	
+x:CT_PageBreak/x:colBreaks	AttributeValueRangeConstraint	builder.CreateQName("x:manualBreakCount"), true, double.NegativeInfinity, true, 1023, true	
+x:CT_PageBreak/x:rowBreaks	AttributeValueRangeConstraint	builder.CreateQName("x:count"), true, double.NegativeInfinity, true, 1022, true	
+x:CT_PageBreak/x:rowBreaks	AttributeValueRangeConstraint	builder.CreateQName("x:manualBreakCount"), true, double.NegativeInfinity, true, 1022, true	
+x:CT_PageField/x:pageField	IndexReferenceConstraint	builder.CreateQName("x:fld"), "PivotTableCacheDefinitionPart", null, builder.CreateQName("x:cacheField"), "x:cacheField", 0	
+x:CT_PageField/x:pageField	UniqueAttributeValueConstraint	builder.CreateQName("x:name"), true, null	
+x:CT_PageMargins/x:pageMargins	AttributeValueRangeConstraint	builder.CreateQName("x:bottom"), true, 0, true, 49, false	
+x:CT_PageMargins/x:pageMargins	AttributeValueRangeConstraint	builder.CreateQName("x:footer"), true, 0, true, 49, false	
+x:CT_PageMargins/x:pageMargins	AttributeValueRangeConstraint	builder.CreateQName("x:header"), true, 0, true, 49, false	
+x:CT_PageMargins/x:pageMargins	AttributeValueRangeConstraint	builder.CreateQName("x:left"), true, 0, true, 49, false	
+x:CT_PageMargins/x:pageMargins	AttributeValueRangeConstraint	builder.CreateQName("x:right"), true, 0, true, 49, false	
+x:CT_PageMargins/x:pageMargins	AttributeValueRangeConstraint	builder.CreateQName("x:top"), true, 0, true, 49, false	
+x:CT_Parameter/x:parameter	AttributeRequiredConditionToValue	builder.CreateQName("x:cell"), builder.CreateQName("x:parameterType") , "cell"	
+x:CT_Parameter/x:parameter	AttributeValueLengthConstraint	builder.CreateQName("x:name"), 0, 255	
+x:CT_Parameter/x:parameter	AttributeValueLengthConstraint	builder.CreateQName("x:prompt"), 0, 65535	
+x:CT_Parameter/x:parameter	AttributeValueLengthConstraint	builder.CreateQName("x:string"), 0, 255	
+x:CT_Parameter/x:parameter	AttributeValueSetConstraint	builder.CreateQName("x:sqlType"), true, new string[] { "-22", "-20", "-11", "-10", "-9", "-8", "-7", "-6", "-5", "-4", "-3", "-2", "-1", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "101", "102", "103", "104", "105", "106", "107", "108", "109", "110", "111", "112", "113" }	
+x:CT_PhoneticPr/x:phoneticPr	IndexReferenceConstraint	builder.CreateQName("x:fontId"), "/WorkbookPart/WorkbookStylesPart", null, builder.CreateQName("x:font"), "x:font", 0	
+x:CT_PhoneticRun/x:rPh	AttributeValueLessEqualToAnother	builder.CreateQName("x:sb"), builder.CreateQName("x:eb"), false	
+x:CT_PivotArea/x:pivotArea	AttributeValueRangeConstraint	builder.CreateQName("x:fieldPosition"), true, 0, true, 255, true	
+x:CT_PivotCache/x:pivotCache	RelationshipExistConstraint	builder.CreateQName("r:id")	
+x:CT_PivotCache/x:pivotCache	UniqueAttributeValueConstraint	builder.CreateQName("x:cacheId"), true, builder.CreateQName("x:pivotCaches")	
+x:CT_PivotCacheDefinition/x:pivotCacheDefinition	AttributeValueLengthConstraint	builder.CreateQName("x:refreshedBy"), 0, 255	
+x:CT_PivotDimension/x:dimension	UniqueAttributeValueConstraint	builder.CreateQName("x:uniqueName"), true, null	
+x:CT_PivotField/x:pivotField	AttributeValueSetConstraint	builder.CreateQName("x:axis"), false, new string[] { "axisValues" }	
+x:CT_PivotFilter/x:filter	IndexReferenceConstraint	builder.CreateQName("x:fld"), ".", null, builder.CreateQName("x:pivotField"), "x:pivotField", 0	
+x:CT_PivotFilter/x:filter	IndexReferenceConstraint	builder.CreateQName("x:iMeasureFld"), ".", null, builder.CreateQName("x:pivotField"), "x:pivotField", 0	
+x:CT_PivotFilter/x:filter	IndexReferenceConstraint	builder.CreateQName("x:iMeasureHier"), ".", null, builder.CreateQName("x:pivotHierarchy"), "x:pivotHierarchy", 0	
+x:CT_PivotFilter/x:filter	UniqueAttributeValueConstraint	builder.CreateQName("x:id"), false, null	
+x:CT_PivotHierarchy/x:pivotHierarchy	AttributeValueLengthConstraint	builder.CreateQName("x:caption"), 0, 65535	
+x:CT_PivotSelection/x:pivotSelection	AttributeValueSetConstraint	builder.CreateQName("x:axis"), false, new string[] { "axisValues" }	
+x:CT_ProtectedRange/x:protectedRange	AttributeValueRangeConstraint	builder.CreateQName("x:sqref"), true, 1, true, double.PositiveInfinity, true	
+x:CT_ProtectedRange/x:protectedRange	UniqueAttributeValueConstraint	builder.CreateQName("x:name"), true, builder.CreateQName("x:protectedRanges")	
+x:CT_Query/x:query	AttributeValueLengthConstraint	builder.CreateQName("x:mdx"), 0, 65535	
+x:CT_QueryTable/x:queryTable	AttributeValueConditionToAnother	builder.CreateQName("x:backgroundRefresh"), builder.CreateQName("x:firstBackgroundRefresh"), new string[] { "true" }, new string[] { "true" }	
+x:CT_QueryTable/x:queryTable	AttributeValueLengthConstraint	builder.CreateQName("x:name"), 1, 255	
+x:CT_QueryTable/x:queryTable	AttributeValueRangeConstraint	builder.CreateQName("x:connectionId"), true, 1, true, double.PositiveInfinity, true	
+x:CT_QueryTable/x:queryTable	ReferenceExistConstraint	builder.CreateQName("x:connectionId"), "/WorkbookPart/ConnectionsPart", builder.CreateQName("x:connection"), "x:connection", builder.CreateQName("x:id")	
+x:CT_QueryTableField/x:queryTableField	AttributeValueConditionToAnother	builder.CreateQName("x:dataBound"), builder.CreateQName("x:clipped"), new string[] { "true" }, new string[] { "true" }	
+x:CT_QueryTableField/x:queryTableField	AttributeValueConditionToAnother	builder.CreateQName("x:dataBound"), builder.CreateQName("x:fillFormulas"), new string[] { "false" }, new string[] { "true" }	
+x:CT_QueryTableField/x:queryTableField	AttributeValueConditionToAnother	builder.CreateQName("x:dataBound"), builder.CreateQName("x:rowNumbers"), new string[] { "true" }, new string[] { "true" }	
+x:CT_QueryTableField/x:queryTableField	AttributeValueLengthConstraint	builder.CreateQName("x:name"), 0, 255	
+x:CT_QueryTableField/x:queryTableField	UniqueAttributeValueConstraint	builder.CreateQName("x:id"), true, null	
+x:CT_QueryTableField/x:queryTableField	UniqueAttributeValueConstraint	builder.CreateQName("x:name"), true, null	
+x:CT_QueryTableRefresh/x:queryTableRefresh	AttributeValueRangeConstraint	builder.CreateQName("x:minimumVersion"), true, 0, true, 31, true	
+x:CT_QueryTableRefresh/x:queryTableRefresh	AttributeValueRangeConstraint	builder.CreateQName("x:nextId"), true, double.NegativeInfinity, true, 65535, true	
+x:CT_QueryTableRefresh/x:queryTableRefresh	AttributeValueRangeConstraint	builder.CreateQName("x:unboundColumnsLeft"), true, double.NegativeInfinity, true, 16383, true	
+x:CT_QueryTableRefresh/x:queryTableRefresh	AttributeValueRangeConstraint	builder.CreateQName("x:unboundColumnsRight"), true, double.NegativeInfinity, true, 16383, true	
+x:CT_RangePr/x:rangePr	AttributeValueLessEqualToAnother	builder.CreateQName("x:startNum"), builder.CreateQName("x:endNum"), false	
+x:CT_RangeSet/x:rangeSet	AttributeMutualExclusive	builder.CreateQName("x:name"), builder.CreateQName("x:ref")	
+x:CT_RangeSet/x:rangeSet	AttributeValueLengthConstraint	builder.CreateQName("x:sheet"), 1, 31	
+x:CT_Reviewed/x:reviewed	AttributeValueRangeConstraint	builder.CreateQName("x:rId"), true, double.NegativeInfinity, true, 2147483647, true	
+x:CT_RevisionAutoFormatting/x:raf	AttributeValueRangeConstraint	builder.CreateQName("x:autoFormatId"), true, 0, true, 16, true	
+x:CT_RevisionComment/x:rcmt	AttributeValueLengthConstraint	builder.CreateQName("x:author"), 1, 52	
+x:CT_RevisionConflict/x:rcft	AttributeValueRangeConstraint	builder.CreateQName("x:sheetId"), true, 0, true, 32767, true	
+x:CT_RevisionDefinedName/x:rdn	AttributeValueLengthConstraint	builder.CreateQName("x:customMenu"), 0, 32767	
+x:CT_RevisionDefinedName/x:rdn	AttributeValueLengthConstraint	builder.CreateQName("x:description"), 0, 32767	
+x:CT_RevisionDefinedName/x:rdn	AttributeValueLengthConstraint	builder.CreateQName("x:help"), 0, 32767	
+x:CT_RevisionDefinedName/x:rdn	AttributeValueLengthConstraint	builder.CreateQName("x:oldCustomMenu"), 0, 32767	
+x:CT_RevisionDefinedName/x:rdn	AttributeValueLengthConstraint	builder.CreateQName("x:oldDescription"), 0, 32767	
+x:CT_RevisionDefinedName/x:rdn	AttributeValueLengthConstraint	builder.CreateQName("x:oldHelp"), 0, 32767	
+x:CT_RevisionDefinedName/x:rdn	AttributeValueLengthConstraint	builder.CreateQName("x:oldStatusBar"), 0, 32767	
+x:CT_RevisionDefinedName/x:rdn	AttributeValueLengthConstraint	builder.CreateQName("x:statusBar"), 0, 32767	
+x:CT_RevisionDefinedName/x:rdn	AttributeValuePatternConstraint	builder.CreateQName("x:name"), @"[a-zA-Z_\\][a-zA-Z0-9_.]*"	
+x:CT_RevisionDefinedName/x:rdn	AttributeValueRangeConstraint	builder.CreateQName("x:functionGroupId"), true, 1, true, 14, true	
+x:CT_RevisionDefinedName/x:rdn	AttributeValueRangeConstraint	builder.CreateQName("x:localSheetId"), true, double.NegativeInfinity, true, 32767, true	
+x:CT_RevisionDefinedName/x:rdn	UniqueAttributeValueConstraint	builder.CreateQName("x:name"), true, builder.CreateQName("x:revisions")	
+x:CT_RevisionFormatting/x:rfmt	AttributeValueRangeConstraint	builder.CreateQName("x:sheetId"), true, 0, true, 32767, true	
+x:CT_RevisionHeaders/x:headers	AttributeValueRangeConstraint	builder.CreateQName("x:preserveHistory"), true, 0, true, 32768, true	
+x:CT_RevisionHeaders/x:headers	AttributeValueRangeConstraint	builder.CreateQName("x:revisionId"), true, double.NegativeInfinity, true, 2147483647, true	
+x:CT_RevisionHeaders/x:headers	AttributeValueRangeConstraint	builder.CreateQName("x:version"), true, 1, true, 2147483647, true	
+x:CT_RevisionHeaders/x:headers	AttributeValueSetConstraint	builder.CreateQName("x:guid"), false, new string[] { "00000000-0000-0000-0000-000000000000" }	
+x:CT_RevisionMove/x:rm	AttributeValueRangeConstraint	builder.CreateQName("x:sheetId"), true, double.NegativeInfinity, true, 32767, true	
+x:CT_RevisionMove/x:rm	AttributeValueRangeConstraint	builder.CreateQName("x:sourceSheetId"), true, double.NegativeInfinity, true, 32767, true	
+x:CT_RevisionRowColumn/x:rrc	AttributeValueLengthConstraint	builder.CreateQName("x:sId"), 0, 32767	
+x:CT_RevisionSheetRename/x:rsnm	AttributeValueLengthConstraint	builder.CreateQName("x:sheetId"), 0, 32767	
+x:CT_Row/x:row	AttributeValueRangeConstraint	builder.CreateQName("x:outlineLevel"), true, 0, true, 7, true	
+x:CT_Row/x:row	AttributeValueRangeConstraint	builder.CreateQName("x:r"), true, 1, true, 1048576, true	
+x:CT_Row/x:row	AttributeValueRangeConstraint	builder.CreateQName("x:r"), true, double.NegativeInfinity, true, 1048576, true	
+x:CT_Row/x:row	AttributeValueRangeConstraint	builder.CreateQName("x:s"), true, 0, true, 65490, true	
+x:CT_Scenario/x:scenario	UniqueAttributeValueConstraint	builder.CreateQName("x:name"), true, builder.CreateQName("x:worksheet")	
+x:CT_Schema/x:Schema	UniqueAttributeValueConstraint	builder.CreateQName("x:ID"), true, null	
+x:CT_ServerFormat/x:serverFormat	AttributeMutualExclusive	builder.CreateQName("x:culture"), builder.CreateQName("x:format")	
+x:CT_ServerFormat/x:serverFormat	AttributeValueLengthConstraint	builder.CreateQName("x:culture"), 0, 31	
+x:CT_ServerFormat/x:serverFormat	AttributeValueLengthConstraint	builder.CreateQName("x:format"), 0, 65535	
+x:CT_SharedItems/x:sharedItems	AttributeValueLessEqualToAnother	builder.CreateQName("x:minValue"), builder.CreateQName("x:maxValue"), true	
+x:CT_SharedItems/x:sharedItems	AttributeValueSetConstraint	builder.CreateQName("x:maxValue"), false, new string[] { "NaN", "INF", "-INF" }	
+x:CT_SharedItems/x:sharedItems	AttributeValueSetConstraint	builder.CreateQName("x:minValue"), false, new string[] { "NaN", "INF", "-INF" }	
+x:CT_Sheet/x:sheet	AttributeValueLengthConstraint	builder.CreateQName("x:id"), 0, 255	
+x:CT_Sheet/x:sheet	AttributeValueLengthConstraint	builder.CreateQName("x:name"), 1, 31	
+x:CT_Sheet/x:sheet	AttributeValuePatternConstraint	builder.CreateQName("x:name"), @"[^'*\[\]/\\:?]{1}[^*\[\]/\\:?]*"	
+x:CT_Sheet/x:sheet	AttributeValueRangeConstraint	builder.CreateQName("x:sheetId"), true, 1, true, 65534, true	
+x:CT_Sheet/x:sheet	RelationshipExistConstraint	builder.CreateQName("r:id")	
+x:CT_Sheet/x:sheet	UniqueAttributeValueConstraint	builder.CreateQName("x:name"), false, null	
+x:CT_Sheet/x:sheet	UniqueAttributeValueConstraint	builder.CreateQName("x:sheetId"), true, null	
+x:CT_SheetData/x:sheetData	AttributeValueRangeConstraint	builder.CreateQName("x:sheetId"), true, 0, true, 65533, true	
+x:CT_SheetDimension/x:dimension	UniqueAttributeValueConstraint	builder.CreateQName("x:uniqueName"), true, null	
+x:CT_SheetFormatPr/x:sheetFormatPr	AttributeValueRangeConstraint	builder.CreateQName("x:baseColWidth"), true, double.NegativeInfinity, true, 255, true	
+x:CT_SheetFormatPr/x:sheetFormatPr	AttributeValueRangeConstraint	builder.CreateQName("x:defaultColWidth"), true, 0, true, 65535, true	
+x:CT_SheetFormatPr/x:sheetFormatPr	AttributeValueRangeConstraint	builder.CreateQName("x:outlineLevelCol"), true, 0, true, 7, true	
+x:CT_SheetFormatPr/x:sheetFormatPr	AttributeValueRangeConstraint	builder.CreateQName("x:outlineLevelRow"), true, 0, true, 7, true	
+x:CT_SheetId/x:sheetId	AttributeValueRangeConstraint	builder.CreateQName("x:val"), true, double.NegativeInfinity, true, 65535, true	
+x:CT_SheetPr/x:sheetPr	AttributeValueLengthConstraint	builder.CreateQName("x:codeName"), 0, 32	
+x:CT_SheetPr/x:sheetPr	AttributeValuePatternConstraint	builder.CreateQName("x:codeName"), @"[\p{L}\P{IsBasicLatin}][_\d\p{L}\P{IsBasicLatin}]*"	
+x:CT_SheetView/x:sheetView	AttributeValueRangeConstraint	builder.CreateQName("x:colorId"), true, double.NegativeInfinity, true, 64, true	
+x:CT_SheetView/x:sheetView	AttributeValueRangeConstraint	builder.CreateQName("x:zoomScale"), true, 10, true, 400, true	
+x:CT_SheetView/x:sheetView	AttributeValueRangeConstraint	builder.CreateQName("x:zoomScaleNormal"), true, 10, true, 400, true	
+x:CT_SheetView/x:sheetView	AttributeValueRangeConstraint	builder.CreateQName("x:zoomScalePageLayoutView"), true, 10, true, 400, true	
+x:CT_SheetView/x:sheetView	AttributeValueRangeConstraint	builder.CreateQName("x:zoomScaleSheetLayoutView"), true, 10, true, 400, true	
+x:CT_SheetView/x:sheetView	IndexReferenceConstraint	builder.CreateQName("x:workbookViewId"), "/WorkbookPart", null, builder.CreateQName("x:workbookView"), "x:workbookView", 0	
+x:CT_SingleXmlCell/x:singleXmlCell	AttributeValueRangeConstraint	builder.CreateQName("x:connectionId"), true, double.NegativeInfinity, true, 2147483647, true	
+x:CT_SingleXmlCell/x:singleXmlCell	AttributeValueRangeConstraint	builder.CreateQName("x:id"), true, 1, true, 4294967294, true	
+x:CT_SingleXmlCell/x:singleXmlCell	UniqueAttributeValueConstraint	builder.CreateQName("x:id"), true, null	
+x:CT_Sst/x:sst	AttributeValueRangeConstraint	builder.CreateQName("x:count"), true, double.NegativeInfinity, true, 2147483647, true	
+x:CT_Sst/x:sst	AttributeValueRangeConstraint	builder.CreateQName("x:uniqueCount"), true, double.NegativeInfinity, true, 2147483647, true	
+x:CT_String/x:s	IndexReferenceConstraint	builder.CreateQName("x:in"), ".", null, builder.CreateQName("x:serverFormat"), "x:serverFormat", 0	
+x:CT_Table/x:table	AttributeValueSetConstraint	builder.CreateQName("x:id"), false, new string[] { "0", "" }	
+x:CT_Table/x:table	IndexReferenceConstraint	builder.CreateQName("x:dataDxfId"), "/WorkbookPart/WorkbookStylesPart", null, builder.CreateQName("x:dxf"), "x:dxf", 0	
+x:CT_Table/x:table	IndexReferenceConstraint	builder.CreateQName("x:headerRowBorderDxfId"), "/WorkbookPart/WorkbookStylesPart", null, builder.CreateQName("x:dxf"), "x:dxf", 0	
+x:CT_Table/x:table	IndexReferenceConstraint	builder.CreateQName("x:headerRowDxfId"), "/WorkbookPart/WorkbookStylesPart", null, builder.CreateQName("x:dxf"), "x:dxf", 0	
+x:CT_Table/x:table	IndexReferenceConstraint	builder.CreateQName("x:tableBorderDxfId"), "/WorkbookPart/WorkbookStylesPart", null, builder.CreateQName("x:dxf"), "x:dxf", 0	
+x:CT_Table/x:table	IndexReferenceConstraint	builder.CreateQName("x:totalsRowBorderDxfId"), "/WorkbookPart/WorkbookStylesPart", null, builder.CreateQName("x:dxf"), "x:dxf", 0	
+x:CT_Table/x:table	IndexReferenceConstraint	builder.CreateQName("x:totalsRowDxfId"), "/WorkbookPart/WorkbookStylesPart", null, builder.CreateQName("x:dxf"), "x:dxf", 0	
+x:CT_Table/x:table	ReferenceExistConstraint	builder.CreateQName("x:connectionId"), "/WorkbookPart/ConnectionsPart", builder.CreateQName("x:connection"), "x:connection", builder.CreateQName("x:id")	
+x:CT_TableColumn/x:tableColumn	AttributeAbsentConditionToValue	builder.CreateQName("x:totalsRowLabel"), builder.CreateQName("x:totalsRowFunction"), "custom"	
+x:CT_TableColumn/x:tableColumn	AttributeValueLengthConstraint	builder.CreateQName("x:dataCellStyle"), 1, 255	
+x:CT_TableColumn/x:tableColumn	AttributeValueLengthConstraint	builder.CreateQName("x:headerRowCellStyle"), 1, 255	
+x:CT_TableColumn/x:tableColumn	AttributeValueLengthConstraint	builder.CreateQName("x:name"), 0, 255	
+x:CT_TableColumn/x:tableColumn	AttributeValueLengthConstraint	builder.CreateQName("x:totalsRowCellStyle"), 1, 255	
+x:CT_TableColumn/x:tableColumn	AttributeValueLengthConstraint	builder.CreateQName("x:totalsRowLabel"), 0, 32767	
+x:CT_TableColumn/x:tableColumn	AttributeValueRangeConstraint	builder.CreateQName("x:id"), true, 1, true, double.PositiveInfinity, true	
+x:CT_TableColumn/x:tableColumn	AttributeValueRangeConstraint	builder.CreateQName("x:queryTableFieldId"), true, 1, true, double.PositiveInfinity, true	
+x:CT_TableColumn/x:tableColumn	IndexReferenceConstraint	builder.CreateQName("x:dataDxfId"), "/WorkbookPart/WorkbookStylesPart", builder.CreateQName("x:dxfs"), builder.CreateQName("x:dxf"), "x:dxf", 0	
+x:CT_TableColumn/x:tableColumn	IndexReferenceConstraint	builder.CreateQName("x:headerRowDxfId"), "/WorkbookPart/WorkbookStylesPart", null, builder.CreateQName("x:dxf"), "x:dxf", 0	
+x:CT_TableColumn/x:tableColumn	IndexReferenceConstraint	builder.CreateQName("x:totalsRowDxfId"), "/WorkbookPart/WorkbookStylesPart", null, builder.CreateQName("x:dxf"), "x:dxf", 0	
+x:CT_TableColumn/x:tableColumn	UniqueAttributeValueConstraint	builder.CreateQName("x:id"), true, builder.CreateQName("x:table")	
+x:CT_TableColumn/x:tableColumn	UniqueAttributeValueConstraint	builder.CreateQName("x:name"), true, builder.CreateQName("x:table")	
+x:CT_TableMissing/x:m	IndexReferenceConstraint	builder.CreateQName("x:in"), ".", null, builder.CreateQName("x:serverFormat"), "x:serverFormat", 0	
+x:CT_TableStyleElement/x:tableStyleElement	AttributeValueRangeConstraint	builder.CreateQName("x:size"), true, 1, true, 9, true	
+x:CT_TableStyleElement/x:tableStyleElement	IndexReferenceConstraint	builder.CreateQName("x:dxfId"), "/WorkbookPart/WorkbookStylesPart", null, builder.CreateQName("x:dxf"), "x:dxf", 0	
+x:CT_TableStyles/x:tableStyles	AttributeValueLengthConstraint	builder.CreateQName("x:defaultTableStyle"), 1, 255	
+x:CT_TextField/x:textField	AttributeValueRangeConstraint	builder.CreateQName("x:position"), true, 0, true, 2147483647, true	
+x:CT_TextPr/x:textPr	AttributeValueLengthConstraint	builder.CreateQName("x:decimal"), 1, 255	
+x:CT_TextPr/x:textPr	AttributeValueLengthConstraint	builder.CreateQName("x:thousands"), 1, 255	
+x:CT_Tuple/x:tpl	IndexReferenceConstraint	builder.CreateQName("x:fld"), ".", null, builder.CreateQName("x:cacheField"), "x:cacheField", 0	
+x:CT_Tuple/x:tpl	IndexReferenceConstraint	builder.CreateQName("x:hier"), ".", null, builder.CreateQName("x:cacheHierarchy"), "x:cacheHierarchy", 0	
+x:CT_UndoInfo/x:undo	AttributeMutualExclusive	builder.CreateQName("x:dn"), builder.CreateQName("x:r")	
+x:CT_UndoInfo/x:undo	AttributeMutualExclusive	builder.CreateQName("x:dn"), builder.CreateQName("x:sId")	
+x:CT_UndoInfo/x:undo	AttributeValueConditionToAnother	builder.CreateQName("x:ref3D"), builder.CreateQName("x:nf"), new string[] { "false" }, new string[] { "true" }	
+x:CT_UndoInfo/x:undo	AttributeValueRangeConstraint	builder.CreateQName("x:sId"), true, double.NegativeInfinity, true, 32767, true	
+x:CT_WebPr/x:webPr	AttributeValueLengthConstraint	builder.CreateQName("x:url"), 1, int.MaxValue	
+x:CT_WebPublishItem/x:webPublishItem	AttributeAbsentConditionToNonValue	builder.CreateQName("x:sourceRef"), builder.CreateQName("x:sourceType"), "range"	
+x:CT_WebPublishItem/x:webPublishItem	AttributeRequiredConditionToValue	builder.CreateQName("x:sourceRef"), builder.CreateQName("x:sourceType") , "range"	
+x:CT_WebPublishItem/x:webPublishItem	AttributeValueLengthConstraint	builder.CreateQName("x:destinationFile"), 1, 255	
+x:CT_WebPublishItem/x:webPublishItem	AttributeValueLengthConstraint	builder.CreateQName("x:divId"), 1, 255	
+x:CT_WebPublishItem/x:webPublishItem	AttributeValueLengthConstraint	builder.CreateQName("x:title"), 0, 255	
+x:CT_WebPublishItem/x:webPublishItem	AttributeValueRangeConstraint	builder.CreateQName("x:id"), true, 1, true, 2147483647, true	
+x:CT_WebPublishItem/x:webPublishItem	UniqueAttributeValueConstraint	builder.CreateQName("x:id"), true, null	
+x:CT_WorksheetSource/x:worksheetSource	AttributeValueLengthConstraint	builder.CreateQName("x:name"), 1, 255	
+x:CT_WorksheetSource/x:worksheetSource	AttributeValueLengthConstraint	builder.CreateQName("x:sheet"), 0, 31	
+x:CT_WorksheetSource/x:worksheetSource	RelationshipExistConstraint	builder.CreateQName("r:id")	
+x:CT_X/x:mpMap	IndexReferenceConstraint	builder.CreateQName("x:v"), ".", null, builder.CreateQName("x:cacheField"), "x:cacheField", 0	
+x:CT_XStringElement/x:s	IndexReferenceConstraint	builder.CreateQName("x:in"), ".", null, builder.CreateQName("x:serverFormat"), "x:serverFormat", 0	
+x:CT_Xf/x:xf	AttributeValueRangeConstraint	builder.CreateQName("x:borderId"), true, 0, true, double.PositiveInfinity, true	
+x:CT_Xf/x:xf	IndexReferenceConstraint	builder.CreateQName("x:borderId"), "/WorkbookPart/WorkbookStylesPart", null, builder.CreateQName("x:border"), "x:border", 0	
+x:CT_Xf/x:xf	IndexReferenceConstraint	builder.CreateQName("x:fillId"), "/WorkbookPart/WorkbookStylesPart", null, builder.CreateQName("x:fill"), "x:fill", 0	
+x:CT_Xf/x:xf	IndexReferenceConstraint	builder.CreateQName("x:fontId"), "/WorkbookPart/WorkbookStylesPart", null, builder.CreateQName("x:font"), "x:font", 0	
+x:CT_Xf/x:xf	IndexReferenceConstraint	builder.CreateQName("x:xfId"), "/WorkbookPart/WorkbookStylesPart", builder.CreateQName("x:cellStyleXfs"), builder.CreateQName("x:xf"), "x:xf", 0	
+x:CT_XmlCellPr/x:xmlCellPr	AttributeValueSetConstraint	builder.CreateQName("x:id"), true, new string[] { "1" }	
+x:CT_XmlCellPr/x:xmlCellPr	UniqueAttributeValueConstraint	builder.CreateQName("x:uniqueName"), true, null	
+x:CT_XmlColumnPr/x:xmlColumnPr	AttributeValueLengthConstraint	builder.CreateQName("x:xpath"), 0, 32000	
+x:CT_XmlColumnPr/x:xmlColumnPr	ReferenceExistConstraint	builder.CreateQName("x:mapId"), "CustomXmlMappingsPart", builder.CreateQName("x:Map"), "x:Map", builder.CreateQName("x:ID")	
+x:CT_XmlPr/x:xmlPr	AttributeValueLengthConstraint	builder.CreateQName("x:xpath"), 0, 32000	
+x:CT_XmlPr/x:xmlPr	AttributeValueRangeConstraint	builder.CreateQName("x:mapId"), true, 1, true, 2147483647, true	
+x:CT_Xstring/x:t	AttributeValueRangeConstraint	builder.CreateQName("x:c"), true, double.NegativeInfinity, true, 2147483647, true	
+x:CT_Xstring/x:t	AttributeValueRangeConstraint	builder.CreateQName("x:fi"), true, double.NegativeInfinity, true, 58, true	
+x:CT_Xstring/x:t	AttributeValueRangeConstraint	builder.CreateQName("x:si"), true, double.NegativeInfinity, true, 2147483647, true	
+x:CT_Xstring/x:t	IndexReferenceConstraint	builder.CreateQName("x:si"), "/WorkbookPart/CellMetadataPart", builder.CreateQName("x:metadataStrings"), builder.CreateQName("x:s"), "x:s", 0	
+x:CT_pivotTableDefinition/x:pivotTableDefinition	AttributeValueRangeConstraint	builder.CreateQName("x:autoFormatId"), true, 0, true, 16, true	
+x:CT_pivotTableDefinition/x:pivotTableDefinition	AttributeValueRangeConstraint	builder.CreateQName("x:indent"), true, double.NegativeInfinity, true, 127, true	
+x:CT_pivotTableDefinition/x:pivotTableDefinition	AttributeValueRangeConstraint	builder.CreateQName("x:pageWrap"), true, double.NegativeInfinity, true, 255, true	
+x:CT_pivotTableDefinition/x:pivotTableDefinition	ReferenceExistConstraint	builder.CreateQName("x:cacheId"), "/WorkbookPart", builder.CreateQName("x:pivotCache"), "x:pivotCache", builder.CreateQName("x:cacheId")	
+xdr:CT_Connector/xdr:cxnSp	AttributeValueLengthConstraint	builder.CreateQName("xdr:macro"), 0, 256	
+xdr:CT_GraphicalObjectFrame/xdr:graphicFrame	AttributeValueLengthConstraint	builder.CreateQName("xdr:macro"), 0, 256	
+xdr:CT_Shape/xdr:sp	AttributeValueLengthConstraint	builder.CreateQName("xdr:macro"), 0, 256	

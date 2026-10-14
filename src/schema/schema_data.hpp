@@ -65,6 +65,19 @@ struct RawNamespace {
     std::uint8_t  version;
 };
 
+// SDK semantic constraint on an element (by type key, e.g. "w:CT_TrackChange/w:ins").
+struct RawSemantic {
+    std::uint8_t  kind;   // 0 unique 1 range 2 length 3 set 4 pattern 5 mutual-exclusive 6 cannot-omit
+    std::uint32_t elem;   // element qname the constraint is registered on
+    std::uint32_t attr;   // attribute qname (\x1f-joined list for kind 5)
+    std::uint32_t extra;  // unique: parent qname; set: \x1f-joined values; pattern: regex
+    std::uint32_t a, b;   // range: min/max (strings); length: min/max
+    std::uint8_t  f1, f2; // unique: case-sensitive; range: minIncl/maxIncl; set: is-valid-set
+    std::uint8_t  pad;
+    std::uint8_t  word_only;
+    std::uint8_t  version;
+};
+
 extern const char* const strings[];
 extern const std::size_t n_strings;
 extern const RawType types[];
@@ -83,5 +96,7 @@ extern const RawPart parts[];
 extern const std::size_t n_parts;
 extern const RawNamespace namespaces[];
 extern const std::size_t n_namespaces;
+extern const RawSemantic semantics[];
+extern const std::size_t n_semantics;
 
 }  // namespace docx::schema::data

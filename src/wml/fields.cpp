@@ -652,8 +652,7 @@ pugi::xml_node add_abstract(Document& d, const std::string& kind, const Json& op
     int aid = 0;
     for (auto a : num.children("w:abstractNum")) aid = std::max(aid, a.attribute("w:abstractNumId").as_int() + 1);
     // abstractNums must precede nums
-    auto first_num = num.child("w:num");
-    auto a = first_num ? num.insert_child_before("w:abstractNum", first_num) : num.append_child("w:abstractNum");
+    auto a = schema::insert_child(num, "w:abstractNum");
     xml::set_attr(a, "w:abstractNumId", std::to_string(aid));
     xml::set_attr(a, "w15:restartNumberingAfterBreak", "0");
     xml::set_attr(a.append_child("w:nsid"), "w:val", hex8());
@@ -697,7 +696,7 @@ int add_num(Document& d, int abstract_id, int restart_level = -1, int start = 1)
     auto num = d.numbering();
     int nid = 1;
     for (auto n : num.children("w:num")) nid = std::max(nid, n.attribute("w:numId").as_int() + 1);
-    auto n = num.append_child("w:num");
+    auto n = schema::insert_child(num, "w:num");
     xml::set_attr(n, "w:numId", std::to_string(nid));
     xml::set_attr(n.append_child("w:abstractNumId"), "w:val", std::to_string(abstract_id));
     if (restart_level >= 0) {

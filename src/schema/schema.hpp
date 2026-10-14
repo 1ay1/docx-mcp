@@ -72,6 +72,7 @@ struct Issue {
 
 struct ValidateOptions {
     std::size_t max_issues = 200;
+    bool semantic = true;  // the SDK's semantic constraints (unique ids, ranges, ...)
 };
 
 // Validate a part's XML against the schema. root must be the document element.

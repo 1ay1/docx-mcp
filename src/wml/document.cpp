@@ -419,7 +419,59 @@ void Document::touch(const std::string& part) {
     xml::fix_declarations(root);
 }
 
+// Copying content (split paragraph, copied pPr/rows) can duplicate w:id
+// values. Word requires them unique per annotation type within a part;
+// renumber later duplicates. Range starts/ends keep their pairing.
+void Document::dedupe_ids() {
+    static const char* kinds[] = {"w:ins", "w:del", "w:moveFrom", "w:moveTo", "w:rPrChange", "w:pPrChange",
+                                  "w:sectPrChange", "w:tblPrChange", "w:trPrChange", "w:tcPrChange", "w:tblGridChange",
+                                  "w:tblPrExChange", "w:numberingChange", "w:cellIns", "w:cellDel", "w:cellMerge"};
+    for (auto& name : pkg_.part_names()) {
+        auto* p = pkg_.part(name);
+        if (!p || !p->xml) continue;
+        if (schema::part_root_type(p->content_type) < 0) continue;
+        auto root = p->xml->document_element();
+        for (auto q : kinds) {
+            std::set<std::string> seen;
+            for (auto n : xml::descendants(root, q)) {
+                std::string id = xml::attr(n, "w:id");
+                if (id.empty()) continue;
+                if (!seen.insert(id).second) {
+                    std::string nid = std::to_string(next_annotation_id());
+                    xml::set_attr(n, "w:id", nid);
+                    seen.insert(nid);
+                }
+            }
+        }
+        // bookmarks: a duplicated start/end pair gets a fresh id together
+        std::map<std::string, int> starts;
+        for (auto b : xml::descendants(root, "w:bookmarkStart")) starts[xml::attr(b, "w:id")]++;
+        for (auto& [id, cnt] : starts) {
+            if (cnt < 2) continue;
+            auto bs = xml::descendants(root, "w:bookmarkStart");
+            auto be = xml::descendants(root, "w:bookmarkEnd");
+            std::vector<pugi::xml_node> s2, e2;
+            for (auto b : bs) if (xml::attr(b, "w:id") == id) s2.push_back(b);
+            for (auto b : be) if (xml::attr(b, "w:id") == id) e2.push_back(b);
+            for (std::size_t i = 1; i < s2.size(); i++) {
+                // a copied bookmark start keeps the name only once; drop the copy
+                std::string nid = std::to_string(next_bookmark_id());
+                xml::set_attr(s2[i], "w:id", nid);
+                if (i < e2.size()) xml::set_attr(e2[i], "w:id", nid);
+                std::string nm = xml::attr(s2[i], "w:name");
+                bool dup_name = false;
+                for (auto b : bs) if (b != s2[i] && xml::attr(b, "w:name") == nm) dup_name = true;
+                if (dup_name) {
+                    s2[i].parent().remove_child(s2[i]);
+                    if (i < e2.size()) e2[i].parent().remove_child(e2[i]);
+                }
+            }
+        }
+    }
+}
+
 void Document::finalize() {
+    dedupe_ids();
     for (auto& name : pkg_.part_names()) {
         auto* p = pkg_.part(name);
         if (!p || !p->xml || !p->dirty) continue;

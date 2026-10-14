@@ -95,6 +95,7 @@ private:
     bool ids_scanned_ = false;
     void scan_ids();
     void scan_hex_ids();
+    void dedupe_ids();
     pugi::xml_node part_root(const char* rel_type, const char* ctype, const std::string& stem,
                              const char* root_xml, bool create);
 };

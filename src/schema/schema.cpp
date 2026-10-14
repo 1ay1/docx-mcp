@@ -6,6 +6,8 @@
 #include <mutex>
 #include <regex>
 #include <unordered_map>
+#include <functional>
+#include <algorithm>
 
 #include "schema/schema_data.hpp"
 #include "util/util.hpp"
@@ -822,6 +824,111 @@ void validate_node(Ctx& c, pugi::xml_node n, TypeId t, const Ign& ign) {
     }
 }
 
+// The SDK's semantic constraints. Element-level ones (ranges, lengths,
+// sets, patterns, mutual exclusion) and the part-level uniqueness rule.
+void validate_semantic(Ctx& c, pugi::xml_node root) {
+    // index constraints by element qname
+    static const std::unordered_map<std::string, std::vector<const RawSemantic*>> by_elem = [] {
+        std::unordered_map<std::string, std::vector<const RawSemantic*>> m;
+        for (std::size_t i = 0; i < n_semantics; i++) {
+            const RawSemantic& s = semantics[i];
+            if (s.version > 7) continue;
+            m[S(s.elem)].push_back(&s);
+        }
+        return m;
+    }();
+    auto local_eq = [](std::string_view a, std::string_view b) { return local(a) == local(b); };
+    auto find_attr = [&](pugi::xml_node n, std::string_view q) -> pugi::xml_attribute {
+        // the SDK matches by local name (some constraints carry the wrong namespace)
+        pugi::xml_attribute loose;
+        for (auto a : n.attributes()) {
+            if (std::string_view(a.name()) == q) return a;
+            if (!loose && local_eq(a.name(), q) && std::string_view(a.name()).find("xmlns") != 0) loose = a;
+        }
+        return loose;
+    };
+    // uniqueness: (elem, attr) -> value -> count, over the whole part
+    std::map<std::pair<std::string, std::string>, std::map<std::string, int>> uniq;
+    std::vector<std::pair<pugi::xml_node, const RawSemantic*>> uniq_hits;
+    std::function<void(pugi::xml_node, TypeId)> walk = [&](pugi::xml_node n, TypeId nt) {
+        for (auto k : n.children()) {
+            if (k.type() != pugi::node_element) continue;
+            std::string_view q = k.name();
+            if (q == "mc:Fallback") continue;  // the SDK reads the selected branch only
+            TypeId kt = is_mc(q) ? nt : child_type(nt, q);
+            if (is_mc(q)) { walk(k, nt); continue; }
+            if (kt < 0) continue;
+            std::string key(type_key(kt));
+            if (auto it = by_elem.find(key); it != by_elem.end()) {
+                for (const RawSemantic* s : it->second) {
+                    std::string aq = S(s->attr);
+                    if (s->kind == 5) {
+                        int present = 0;
+                        for (auto& name : util::split(aq, '\x1f'))
+                            if (find_attr(k, name)) present++;
+                        if (present > 1) add(c, k, "attributes " + aq + " are mutually exclusive");
+                        continue;
+                    }
+                    auto a = find_attr(k, aq);
+                    if (!a) continue;
+                    std::string v = a.value();
+                    switch (s->kind) {
+                        case 0:
+                            // the SDK skips constraints scoped to a parent (`if (_parent is not null) return null;`)
+                            if (v.empty() || s->extra) break;
+                            uniq[{key, aq}][s->f1 ? v : util::lower(v)]++;
+                            uniq_hits.push_back({k, s});
+                            break;
+                        case 1: {
+                            if (v.empty()) break;
+                            long double d;
+                            // like GetAttrNumVal: hexBinary values parse as hex
+                            bool hexv = !v.empty() && std::all_of(v.begin(), v.end(), [](char ch) { return std::isxdigit((unsigned char)ch); }) &&
+                                        std::any_of(v.begin(), v.end(), [](char ch) { return std::isalpha((unsigned char)ch); });
+                            if (hexv) d = (long double)std::stoull(v, nullptr, 16);
+                            else if (!parse_float(v, d)) break;
+                            long double lo = std::strtold(S(s->a), nullptr), hi = std::strtold(S(s->b), nullptr);
+                            bool ok = (s->f1 ? d >= lo : d > lo) && (s->f2 ? d <= hi : d < hi);
+                            if (!ok) add(c, k, "attribute " + aq + ": value " + v + " is out of range [" + S(s->a) + ", " + S(s->b) + "]");
+                            break;
+                        }
+                        case 2: {
+                            auto len = (long)util::u32_length(v);
+                            if (len < std::stol(S(s->a)) || len > std::stol(S(s->b)))
+                                add(c, k, "attribute " + aq + ": length " + std::to_string(len) + " outside " + S(s->a) + ".." + S(s->b));
+                            break;
+                        }
+                        case 3: {
+                            if (v.empty()) break;
+                            bool in = false;
+                            for (auto& x : util::split(S(s->extra), '\x1f')) if (x == v) in = true;
+                            if (in != (s->f1 != 0)) add(c, k, "attribute " + aq + ": value '" + v + "' is not allowed here");
+                            break;
+                        }
+                        case 4: {
+                            if (v.empty()) break;
+                            try {
+                                // .NET IsMatch: anywhere in the string unless anchored
+                                if (!std::regex_search(v, std::regex(S(s->extra)))) add(c, k, "attribute " + aq + ": value '" + v + "' does not match " + S(s->extra));
+                            } catch (std::regex_error&) {}
+                            break;
+                        }
+                    }
+                }
+            }
+            walk(k, kt);
+        }
+    };
+    TypeId rt = root_type(root.name());
+    walk(root, rt);
+    for (auto& [n, s] : uniq_hits) {
+        std::string aq = S(s->attr);
+        std::string v = find_attr(n, aq).value();
+        if (uniq[{std::string(S(s->elem)), aq}][s->f1 ? v : util::lower(v)] > 1)
+            add(c, n, "attribute " + aq + " should be unique; value '" + v + "' is used more than once");
+    }
+}
+
 }  // namespace
 
 std::vector<Issue> validate(pugi::xml_node root, const ValidateOptions& opt) {
@@ -833,6 +940,7 @@ std::vector<Issue> validate(pugi::xml_node root, const ValidateOptions& opt) {
         return out;
     }
     validate_node(c, root, t, scope_of({}, root));
+    if (opt.semantic) validate_semantic(c, root);
     return out;
 }
 
