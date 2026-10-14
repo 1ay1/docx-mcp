@@ -4,7 +4,7 @@
 
 An MCP server that edits Word documents the way Word does.
 
-Agents get 85 tools that cover the Word ribbon: text, formatting, styles,
+Agents get 87 tools that cover the Word ribbon: text, formatting, styles,
 lists, tables, pictures, headers and footers, fields, tables of contents,
 footnotes, content controls, page setup, protection, and the whole
 **Review** tab: Track Changes, accept and reject, threaded comments and
@@ -110,8 +110,10 @@ The server is built for the way models actually call tools:
 - **Errors that say how to fix the call.** Unknown arguments list the valid
   ones. A bad document handle lists the open documents. A missing argument
   names it and describes it.
-- **Profiles for small contexts.** `--tools core` exposes 32 tools (about 7.5k
-  tokens of schema) instead of 85.
+- **Nothing out of reach.** Clients that show a model only some tools (Cursor,
+  agentty, small models) still work: `help` lists every tool by task and
+  `run_tool` runs any of them. `--tools core` (34) and `--tools essential` (14)
+  shrink the schema for small contexts.
 - **Protocol robustness.** It supports MCP versions 2024-11-05 through the
   current one, handles JSON-RPC batches, UTF-8 BOMs and CRLF, and survives
   malformed input. It never writes anything but protocol frames to stdout.
@@ -148,7 +150,7 @@ And the behaviour is checked against Word's:
 | Compare round-trips (WmlComparer corpus) | 29 / 29 |
 | Password hash vs. a file protected in Word | verified |
 | Edit battery, accept and reject on every corpus file: SDK errors | 0 in 2,256 outputs |
-| All 85 tools, tracked and untracked, on real documents: SDK errors | 0 |
+| All 87 tools, tracked and untracked, on real documents: SDK errors | 0 |
 
 Details in [docs/conformance.md](docs/conformance.md).
 
@@ -179,6 +181,7 @@ cd build/tests
 python3 ../../tests/e2e.py ../docx-mcp /tmp/e2e
 python3 ../../tests/sloppy.py ../docx-mcp /tmp/sloppy
 python3 ../../tests/coverage.py ../docx-mcp /tmp/cov
+python3 ../../tests/discover.py ../docx-mcp           # a model with few tools can still find each one
 python3 ../../tests/fuzz.py ../docx-mcp /tmp/fuzz 60   # random tool-call chains, validity after every step
 ```
 

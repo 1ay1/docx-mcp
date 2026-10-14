@@ -1,3 +1,4 @@
+#include "mcp/discover.hpp"
 #include "mcp/tools.hpp"
 
 #include <algorithm>
@@ -319,7 +320,12 @@ std::string server_instructions() {
         "Review with list_revisions, accept_revisions, reject_revisions. Comments: add_comment, reply_comment, resolve_comment.\n"
         "Formatting uses Word's names: bold, italic, size (points), color (hex like FF0000), alignment (left/center/right/both), "
         "space_after (points), style (\"Heading 1\", \"Title\", \"Quote\"...).\n"
-        "If something goes wrong, the error says how to fix the call. undo reverts the last change.";
+        "If something goes wrong, the error says how to fix the call. undo reverts the last change.\n"
+        "\n"
+        "There are tools for everything in Word's ribbon: tables, pictures, lists, styles, headers and footers, page "
+        "setup, footnotes, links, fields and TOC, content controls, comments, tracked changes, compare, protection. "
+        "If your client shows you only some of them, call help {topic} to find the one you need and run_tool "
+        "{tool, arguments} to run it.";
 }
 
 std::vector<ToolDef> make_tools() {
@@ -479,7 +485,7 @@ std::vector<ToolDef> make_tools() {
              auto& s = sess(S, a);
              return Json{{"text", to_text(s.doc, sarg(a, "view", "current"), sarg(a, "format", "markdown") == "markdown")}};
          }});
-    add({"get_outline", "Outline", "Heading structure (Navigation Pane).", obj({{"doc", kDoc}}, {"doc"}), true, false,
+    add({"get_outline", "Outline", "Show the document outline: every heading with its level and paragraph id (the Navigation Pane). Use it to see the structure and jump to a section.", obj({{"doc", kDoc}}, {"doc"}), true, false,
          [](Sessions& S, const Json& a) {
              auto& s = sess(S, a);
              assign_missing_para_ids(s.doc, s.doc.body(), s.doc.main());
@@ -768,7 +774,7 @@ std::vector<ToolDef> make_tools() {
              }
              return v;
          }});
-    add({"get_style", "Style definition", "A style's settings: based on, next, formatting.", obj({{"doc", kDoc}, {"style", str("")}}, {"doc", "style"}), true, false,
+    add({"get_style", "Style definition", "Show a style's settings: font, size, color, spacing, based on, next style. Works for Word's built-in styles too.", obj({{"doc", kDoc}, {"style", str("")}}, {"doc", "style"}), true, false,
          [](Sessions& S, const Json& a) {
              auto& s = sess(S, a);
              auto st = find_style(s.doc, need(a, "style"));
@@ -817,7 +823,7 @@ std::vector<ToolDef> make_tools() {
              for (auto p : ps) labels.push_back(list_label(s.doc, p));
              return Json{{"num_id", nid}, {"labels", labels}};
          }});
-    add({"set_list_level", "Increase / decrease list level", "Change list level (Tab / Shift+Tab in a list).",
+    add({"set_list_level", "Increase / decrease list level", "Indent or outdent list items: change the list level (Tab / Shift+Tab in a bulleted or numbered list).",
          obj({{"doc", kDoc}, {"paragraphs", arr(str(""), "")}, {"level", integer("0-8")}, {"track", kTrack}}, {"doc", "paragraphs", "level"}), false, false,
          [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
@@ -829,7 +835,7 @@ std::vector<ToolDef> make_tools() {
              }
              return Json{{"ok", true}};
          }});
-    add({"remove_list", "Remove bullets / numbering", "", obj({{"doc", kDoc}, {"paragraphs", arr(str(""), "")}, {"track", kTrack}}, {"doc", "paragraphs"}),
+    add({"remove_list", "Remove bullets / numbering", "Remove bullets or numbering from paragraphs, keeping the text.", obj({{"doc", kDoc}, {"paragraphs", arr(str(""), "")}, {"track", kTrack}}, {"doc", "paragraphs"}),
          false, false, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
              std::vector<pugi::xml_node> ps;
@@ -837,7 +843,7 @@ std::vector<ToolDef> make_tools() {
              remove_list(s.doc, ps, track(a));
              return Json{{"ok", true}};
          }});
-    add({"restart_numbering", "Restart numbering", "Restart (Set Numbering Value) at a paragraph.",
+    add({"restart_numbering", "Restart numbering", "Restart a numbered list at a paragraph, from 1 or any number (Set Numbering Value).",
          obj({{"doc", kDoc}, {"paragraph", kPara}, {"start", integer("Default 1.")}}, {"doc", "paragraph"}), false, false,
          [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
@@ -949,7 +955,7 @@ std::vector<ToolDef> make_tools() {
              resolve_comment(s.doc, need(a, "comment_id"), barg(a, "resolved", true));
              return Json{{"ok", true}};
          }});
-    add({"edit_comment", "Edit comment", "Replace a comment's text.", obj({{"doc", kDoc}, {"comment_id", str("")}, {"text", str("")}}, {"doc", "comment_id", "text"}),
+    add({"edit_comment", "Edit comment", "Change a comment's text.", obj({{"doc", kDoc}, {"comment_id", str("")}, {"text", str("")}}, {"doc", "comment_id", "text"}),
          false, false, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
              edit_comment(s.doc, need(a, "comment_id"), need(a, "text"));
@@ -1026,7 +1032,7 @@ std::vector<ToolDef> make_tools() {
              if (a.contains("format")) format_cell(s.doc, tc, obj_arg(a, "format"), track(a));
              return Json{{"ok", true}};
          }});
-    add({"table_rows", "Insert / delete rows", "Insert a row above/below, or delete rows. row is 1-based.",
+    add({"table_rows", "Insert / delete rows", "Add a row above or below, or delete rows, in a table. row is 1-based.",
          obj({{"doc", kDoc}, {"table", integer("")}, {"action", enm({"insert_above", "insert_below", "delete"}, "")}, {"row", integer("")},
               {"cells", arr(str(""), "Texts for the new row.")}, {"track", kTrack}, {"author", str("Author of this change.")}},
              {"doc", "table", "action", "row"}),
@@ -1039,7 +1045,7 @@ std::vector<ToolDef> make_tools() {
              else insert_row(s.doc, tbl, r, act == "insert_below", strs(a, "cells"), track(a));
              return table_json(tbl);
          }});
-    add({"table_columns", "Insert / delete columns", "", obj({{"doc", kDoc}, {"table", integer("")}, {"action", enm({"insert_left", "insert_right", "delete"}, "")},
+    add({"table_columns", "Insert / delete columns", "Add or delete table columns (insert_left, insert_right, delete). col is 1-based.", obj({{"doc", kDoc}, {"table", integer("")}, {"action", enm({"insert_left", "insert_right", "delete"}, "")},
                                                          {"col", integer("")}, {"track", kTrack}, {"author", str("Author of this change.")}},
                                                         {"doc", "table", "action", "col"}),
          false, false, [](Sessions& S, const Json& a) {
@@ -1051,7 +1057,7 @@ std::vector<ToolDef> make_tools() {
              else insert_column(s.doc, tbl, c, act == "insert_right", track(a));
              return table_json(tbl);
          }});
-    add({"merge_cells", "Merge cells", "Merge a rectangle of cells (1-based, inclusive).",
+    add({"merge_cells", "Merge cells", "Merge table cells: a rectangle of cells becomes one (1-based, inclusive).",
          obj({{"doc", kDoc}, {"table", integer("")}, {"from_row", integer("")}, {"from_col", integer("")}, {"to_row", integer("")}, {"to_col", integer("")}},
              {"doc", "table", "from_row", "from_col", "to_row", "to_col"}),
          false, false, [](Sessions& S, const Json& a) {
@@ -1069,7 +1075,7 @@ std::vector<ToolDef> make_tools() {
              format_table(s.doc, table_at(s.doc, iarg(a, "table", 1)), obj_arg(a, "format"), track(a));
              return Json{{"ok", true}};
          }});
-    add({"delete_table", "Delete table", "", obj({{"doc", kDoc}, {"table", integer("")}, {"track", kTrack}, {"author", str("Author of this change.")}}, {"doc", "table"}), false, true,
+    add({"delete_table", "Delete table", "Delete a whole table from the document.", obj({{"doc", kDoc}, {"table", integer("")}, {"track", kTrack}, {"author", str("Author of this change.")}}, {"doc", "table"}), false, true,
          [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
              delete_table(s.doc, table_at(s.doc, iarg(a, "table", 1)), track(a));
@@ -1128,7 +1134,7 @@ std::vector<ToolDef> make_tools() {
              add_hyperlink(s.doc, r.p, b, e, need(a, "url"), sarg(a, "text"), sarg(a, "tooltip"), track(a));
              return para_brief(s.doc, r.p);
          }});
-    add({"list_hyperlinks", "Links", "", obj({{"doc", kDoc}}, {"doc"}), true, false, [](Sessions& S, const Json& a) {
+    add({"list_hyperlinks", "Links", "List the links in the document: their text, URL or bookmark target, and paragraph.", obj({{"doc", kDoc}}, {"doc"}), true, false, [](Sessions& S, const Json& a) {
         Json v = Json::array();
         for (auto& l : list_hyperlinks(sess(S, a).doc)) v.push_back({{"text", l.text}, {"target", l.target}, {"paragraph", l.para}});
         return v;
@@ -1137,7 +1143,7 @@ std::vector<ToolDef> make_tools() {
          obj({{"doc", kDoc}, {"target_contains", str("")}}, {"doc"}), false, false, [](Sessions& S, const Json& a) {
              return Json{{"removed", remove_hyperlinks(mut(S, a).doc, sarg(a, "target_contains"))}};
          }});
-    add({"add_bookmark", "Bookmark", "Bookmark text (match/start/end) or a point.",
+    add({"add_bookmark", "Bookmark", "Add a bookmark on text (match/start/end) or at a point, for links and cross-references.",
          obj({{"doc", kDoc}, {"paragraph", kPara}, {"name", str("Letters, digits, _; starts with a letter; max 40.")}, {"match", str("")},
               {"start", integer("")}, {"end", integer("")}},
              {"doc", "paragraph", "name"}),
@@ -1148,7 +1154,7 @@ std::vector<ToolDef> make_tools() {
              add_bookmark(s.doc, r.p, b, r.p, e, need(a, "name"));
              return Json{{"ok", true}};
          }});
-    add({"list_bookmarks", "Bookmarks", "", obj({{"doc", kDoc}, {"include_hidden", boolean("Include _Toc/_Ref/_GoBack bookmarks.")}}, {"doc"}), true, false,
+    add({"list_bookmarks", "Bookmarks", "List bookmarks with the text they mark. include_hidden adds Word's hidden _Toc/_Ref ones.", obj({{"doc", kDoc}, {"include_hidden", boolean("Include _Toc/_Ref/_GoBack bookmarks.")}}, {"doc"}), true, false,
          [](Sessions& S, const Json& a) {
              Json v = Json::array();
              for (auto& b : list_bookmarks(sess(S, a).doc)) {
@@ -1157,7 +1163,7 @@ std::vector<ToolDef> make_tools() {
              }
              return v;
          }});
-    add({"delete_bookmark", "Delete bookmark", "", obj({{"doc", kDoc}, {"name", str("")}}, {"doc", "name"}), false, false, [](Sessions& S, const Json& a) {
+    add({"delete_bookmark", "Delete bookmark", "Remove a bookmark (the text stays).", obj({{"doc", kDoc}, {"name", str("")}}, {"doc", "name"}), false, false, [](Sessions& S, const Json& a) {
         delete_bookmark(mut(S, a).doc, need(a, "name"));
         return Json{{"ok", true}};
     }});
@@ -1170,12 +1176,12 @@ std::vector<ToolDef> make_tools() {
              auto r = para(s, a);
              return Json{{"note_id", add_note(s.doc, r.p, pos_in(r.p, a), sarg(a, "kind", "footnote"), need(a, "text"), track(a))}};
          }});
-    add({"list_notes", "Footnotes / endnotes", "", obj({{"doc", kDoc}}, {"doc"}), true, false, [](Sessions& S, const Json& a) {
+    add({"list_notes", "Footnotes / endnotes", "List footnotes and endnotes with their text and the paragraph they belong to.", obj({{"doc", kDoc}}, {"doc"}), true, false, [](Sessions& S, const Json& a) {
         Json v = Json::array();
         for (auto& n : list_notes(sess(S, a).doc)) v.push_back({{"id", n.id}, {"kind", n.kind}, {"text", n.text}, {"paragraph", n.anchor_para}});
         return v;
     }});
-    add({"delete_note", "Delete note", "", obj({{"doc", kDoc}, {"kind", enm({"footnote", "endnote"}, "")}, {"id", str("")}, {"track", kTrack}}, {"doc", "kind", "id"}),
+    add({"delete_note", "Delete note", "Delete a footnote or endnote and its reference mark.", obj({{"doc", kDoc}, {"kind", enm({"footnote", "endnote"}, "")}, {"id", str("")}, {"track", kTrack}}, {"doc", "kind", "id"}),
          false, true, [](Sessions& S, const Json& a) {
              delete_note(mut(S, a).doc, need(a, "kind"), need(a, "id"), track(a));
              return Json{{"ok", true}};
@@ -1192,7 +1198,7 @@ std::vector<ToolDef> make_tools() {
              insert_field(s.doc, r.p, pos_in(r.p, a), need(a, "code"), sarg(a, "result"), obj_arg(a, "format"), track(a));
              return Json{{"ok", true}};
          }});
-    add({"list_fields", "Fields", "", obj({{"doc", kDoc}}, {"doc"}), true, false, [](Sessions& S, const Json& a) {
+    add({"list_fields", "Fields", "List fields (PAGE, DATE, TOC, REF, MERGEFIELD...) with their codes and current results.", obj({{"doc", kDoc}}, {"doc"}), true, false, [](Sessions& S, const Json& a) {
         Json v = Json::array();
         for (auto& f : list_fields(sess(S, a).doc)) v.push_back({{"code", f.instr}, {"result", f.result}, {"paragraph", f.para}});
         return v;
@@ -1242,7 +1248,7 @@ std::vector<ToolDef> make_tools() {
              auto sdt = add_content_control(s.doc, r.p, b, e, o);
              return Json{{"id", xml::attr(sdt.child("w:sdtPr").child("w:id"), "w:val")}};
          }});
-    add({"list_content_controls", "Content controls", "", obj({{"doc", kDoc}}, {"doc"}), true, false, [](Sessions& S, const Json& a) {
+    add({"list_content_controls", "Content controls", "List content controls (fillable fields, checkboxes, dropdowns, dates) with tag, title, type and value.", obj({{"doc", kDoc}}, {"doc"}), true, false, [](Sessions& S, const Json& a) {
         Json v = Json::array();
         for (auto& c : list_content_controls(sess(S, a).doc)) {
             Json j = {{"id", c.id}, {"type", c.type}, {"text", c.text}};
@@ -1300,13 +1306,13 @@ std::vector<ToolDef> make_tools() {
              for (auto p : paragraphs(s.doc.pkg().xml(part).document_element())) ps.push_back(para_brief(s.doc, p));
              return Json{{"part", part}, {"paragraphs", ps}, {"hint", "edit further with paragraph = \"" + part + "#<id>\""}};
          }});
-    add({"remove_header_footer", "Remove header / footer", "",
+    add({"remove_header_footer", "Remove header / footer", "Remove a header or footer (default, first page or even pages) from a section.",
          obj({{"doc", kDoc}, {"section", integer("")}, {"kind", enm({"header", "footer"}, "")}, {"which", enm({"default", "first", "even"}, "")}}, {"doc", "kind"}),
          false, true, [](Sessions& S, const Json& a) {
              remove_header_footer(mut(S, a).doc, iarg(a, "section", 1), need(a, "kind"), sarg(a, "which", "default"));
              return Json{{"ok", true}};
          }});
-    add({"read_header_footer", "Read header / footer", "", obj({{"doc", kDoc}, {"section", integer("")}, {"kind", enm({"header", "footer"}, "")},
+    add({"read_header_footer", "Read header / footer", "Read a header or footer: its paragraphs with ids you can edit (paragraph = \"part#id\").", obj({{"doc", kDoc}, {"section", integer("")}, {"kind", enm({"header", "footer"}, "")},
                                                                 {"which", enm({"default", "first", "even"}, "")}},
                                                                {"doc", "kind"}),
          true, false, [](Sessions& S, const Json& a) {
@@ -1406,6 +1412,49 @@ std::vector<ToolDef> make_tools() {
              xml::fix_declarations(part.document_element());
              return Json{{"ok", true}};
          }});
+
+    // ── discovery ──────────────────────────────────────────────────────────
+    // Clients that rank or cap tools show a model only a few of these. help
+    // maps every task to its tool; run_tool runs one the client didn't show.
+    // Both read the full catalog through `catalog` (set once T is complete).
+    auto catalog = std::make_shared<std::vector<ToolDef>>();
+    add({"help", "What can this do / which tool",
+         "Help for Word documents (docx files): lists everything this can do, by task, and which tool does it. "
+         "Open, create, read, write and edit text and paragraphs; format font, size, bold, headings, styles; "
+         "tables, rows, cells; pictures; lists and bullets; headers, footers, page numbers, margins; comments; "
+         "track changes; footnotes; links; table of contents. Give a topic or tool name to see its arguments. "
+         "Call this first when the Word tool you need isn't in your list, then use run_tool.",
+         obj({{"topic", str("A task (\"tables\", \"add a comment\") or a tool name. Omit for everything.")}}), true, false,
+         [catalog](Sessions&, const Json& a) { return help_result(*catalog, sarg(a, "topic")); }});
+    add({"run_tool", "Run any docx tool",
+         "Run any Word document tool by name, including ones your client didn't list (find them with help). Same "
+         "arguments as calling the tool directly: edit, format, tables, comments, track changes, headers, anything.",
+         obj({{"tool", str("Tool name from help, e.g. insert_table.")}, {"arguments", anyobj("That tool's arguments.")}},
+             {"tool"}),
+         false, false, [catalog](Sessions& S, const Json& a) -> Json {
+             std::string name = need(a, "tool");
+             if (name == "run_tool" || name == "help") throw std::runtime_error("call " + name + " directly");
+             for (auto& t : *catalog)
+                 if (t.name == name) return call_tool(t, S, a.contains("arguments") ? a["arguments"] : Json::object());
+             std::string best;
+             std::size_t bd = 4;
+             for (auto& t : *catalog) {
+                 // closest name by edit distance, for a typo
+                 auto& x = t.name;
+                 std::vector<std::size_t> pr(x.size() + 1), cu(x.size() + 1);
+                 for (std::size_t j = 0; j <= x.size(); j++) pr[j] = j;
+                 for (std::size_t i = 1; i <= name.size(); i++) {
+                     cu[0] = i;
+                     for (std::size_t j = 1; j <= x.size(); j++)
+                         cu[j] = std::min({pr[j] + 1, cu[j - 1] + 1, pr[j - 1] + (name[i - 1] == x[j - 1] ? 0 : 1)});
+                     std::swap(pr, cu);
+                 }
+                 if (pr[x.size()] < bd) { bd = pr[x.size()]; best = x; }
+             }
+             throw std::runtime_error("unknown tool '" + name + "'" + (best.empty() ? "" : " (did you mean '" + best + "'?)") +
+                                      "; help lists every tool by task");
+         }});
+    *catalog = T;
 
     return T;
 }

@@ -46,8 +46,8 @@ class Fuzz:
         self.path = path
         self.log = []
 
-    def call(self, tool, **a):
-        name = tool
+    def call(self, _tool, **a):
+        name = _tool
         a = dict(doc=self.doc, **a)
         self.log.append((name, a))
         r = self.c.rpc("tools/call", {"name": name, "arguments": a})
@@ -124,9 +124,9 @@ class Fuzz:
         ]
         return r.choice(ops)()
 
-    def first(self, tool, key, **a):
+    def first(self, _tool, key, **a):
         """A random item from a list tool, or None."""
-        v, _ = self.call(tool, **a)
+        v, _ = self.call(_tool, **a)
         self.log.pop()
         if isinstance(v, dict):
             v = next((x for x in v.values() if isinstance(x, list)), [])

@@ -38,8 +38,8 @@ class Run:
         self.calls = 0
         self.used = set()
 
-    def call(self, tool, ok_errors=(), **a):
-        name = tool
+    def call(self, _tool, ok_errors=(), **a):
+        name = _tool
         """Call a tool. Tool errors are fine when they read as a clean message;
         protocol errors and crashes are failures."""
         self.calls += 1
@@ -281,6 +281,12 @@ def exercise(R, doc, track, work, tag):
     R.call("unprotect_document", doc=doc)
     R.call("undo", doc=doc)
     R.call("undo", doc=doc, steps=2)
+    R.call("help")
+    R.call("help", topic="tables")
+    R.call("help", topic="insert_table")
+    R.call("run_tool", tool="get_statistics", arguments={"doc": doc})
+    R.call("run_tool", tool="insert_paragraph", arguments={"doc": doc, "text": "via run_tool", **t})
+    R.call("run_tool", tool="no_such_tool", arguments={}, ok_errors=("unknown tool",))
 
 
 def main():

@@ -63,7 +63,7 @@ else()
 endif()
 
 file(GLOB_RECURSE DOCX_CORE_SOURCES CONFIGURE_DEPENDS
-    src/util/*.cpp src/opc/*.cpp src/xml/*.cpp src/schema/*.cpp src/wml/*.cpp src/mcp/session.cpp src/mcp/tools*.cpp)
+    src/util/*.cpp src/opc/*.cpp src/xml/*.cpp src/schema/*.cpp src/wml/*.cpp src/mcp/session.cpp src/mcp/tools*.cpp src/mcp/discover.cpp)
 list(REMOVE_ITEM DOCX_CORE_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/schema/schema_data.cpp)
 
 # Word's template parts (blank document, built-in styles) compiled in.

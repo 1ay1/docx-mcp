@@ -38,4 +38,8 @@ std::string server_instructions();
 // can't be made to fit. Returns notes about corrections it made.
 std::vector<std::string> normalize_args(const ToolDef& t, Json& args);
 
+// Run one tool the way tools/call does: normalize arguments, run, wrap
+// non-object results, add correction notes. Throws on failure.
+Json call_tool(const ToolDef& t, Sessions& S, Json args);
+
 }  // namespace docx::server

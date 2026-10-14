@@ -15,6 +15,7 @@
 #include <mcp/server.hpp>
 
 #include "mcp/session.hpp"
+#include "mcp/discover.hpp"
 #include "mcp/tools.hpp"
 #include "util/crash.hpp"
 #include "util/fsio.hpp"
@@ -105,6 +106,54 @@ int main(int argc, char** argv) {
 
     mcp::Server server{mcp::Implementation{"docx-mcp", kVersion}};
     server.set_instructions(docx::server::server_instructions());
+    // Workflows as prompts, and the task catalog as a resource, for clients
+    // that surface them (slash commands, attachable context).
+    static const auto full_catalog = docx::server::make_tools();
+    for (auto& w : docx::server::workflows()) {
+        mcp::Prompt p;
+        p.name = w.name;
+        p.title = w.title;
+        p.description = w.description;
+        std::vector<mcp::PromptArgument> args;
+        for (auto& a : w.args) {
+            mcp::PromptArgument pa;
+            pa.name = a.name;
+            pa.description = a.description;
+            pa.required = a.required;
+            args.push_back(pa);
+        }
+        p.arguments = args;
+        auto build = w.text;
+        auto need = w.args;
+        server.register_prompt(p, [build, need](const std::vector<std::pair<std::string, std::string>>& in) {
+            for (auto& a : need) {
+                if (!a.required) continue;
+                bool have = false;
+                for (auto& [k, v] : in) have |= k == a.name && !v.empty();
+                if (!have) throw jsonrpc::RpcError(jsonrpc::errc::InvalidParams, std::string("missing argument '") + a.name + "'");
+            }
+            mcp::GetPromptResult r;
+            r.messages = {mcp::PromptMessage{mcp::Role::User, mcp::text(build(in))}};
+            return r;
+        });
+    }
+    {
+        mcp::Resource res;
+        res.uri = "docx://guide";
+        res.name = "guide";
+        res.title = "docx-mcp tools by task";
+        res.description = "Every tool grouped by task, with arguments. Useful when a client shows only some tools.";
+        res.mimeType = "text/markdown";
+        server.register_resource(res, [](const std::string& uri) {
+            mcp::ReadResourceResult r;
+            mcp::TextResourceContents c;
+            c.uri = uri;
+            c.text = docx::server::guide_markdown(full_catalog);
+            c.mimeType = "text/markdown";
+            r.contents = {c};
+            return r;
+        });
+    }
     // Version negotiation (MCP lifecycle spec): answer with the client's
     // version when we speak it, else with our newest. Everything this server
     // uses (tools, text + structured content) exists in all of these.
@@ -138,11 +187,7 @@ int main(int argc, char** argv) {
             mcp::CallToolResult r;
             try {
                 std::lock_guard lk(sessions.mu);
-                nlohmann::json args = in;
-                auto notes = docx::server::normalize_args(*def, args);
-                nlohmann::json out = def->run(sessions, args);
-                if (!out.is_object()) out = nlohmann::json{{"result", out}};
-                if (!notes.empty()) out["_notes"] = notes;
+                nlohmann::json out = docx::server::call_tool(*def, sessions, in);
                 r.content = {mcp::text(out.dump(2))};
                 r.structuredContent = out;
             } catch (const std::bad_alloc&) {

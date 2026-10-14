@@ -27,11 +27,17 @@ slashes (`C:/Tools/docx-mcp.exe`).
 | Flag | Env var | What it does |
 |---|---|---|
 | `--author NAME` | `DOCX_MCP_AUTHOR` | Name on tracked changes and comments |
-| `--tools PROFILE` | `DOCX_MCP_TOOLS` | `full` (85 tools, default), `core` (32), `review` (26), or a comma list of tool names |
+| `--tools PROFILE` | `DOCX_MCP_TOOLS` | `full` (87 tools, default), `core` (34), `essential` (14), `review` (28), or a comma list of tool names |
 | `--root DIR` | `DOCX_MCP_ROOT` | Folder that relative paths resolve against |
 
-Use `--tools core` for clients that limit the number of tools (Cursor allows
-about 40 across all servers), or for small local models.
+Every profile includes `help` and `run_tool`. `help` lists everything by task
+("tables", "add a comment") and `run_tool` runs any tool by name, so a model
+can still reach a tool its client didn't show it. The tools are also listed by
+task in the `docx://guide` resource, and `review_document`, `draft_document`,
+`redline` and `fill_template` are offered as prompts.
+
+Use `--tools core` or `--tools essential` for clients that limit the number of
+tools (Cursor allows about 40 across all servers), or for small local models.
 
 ## Claude Desktop
 
@@ -114,15 +120,16 @@ claude mcp add docx -- /path/to/docx-mcp --author "Your Name"
       "args": ["--author", "Your Name"],
       "timeoutMs": 120000,
       "trustAnnotations": true,
-      "tools": { "pin": ["open_document", "read_document", "save_document"] }
+      "tools": { "pin": ["help", "run_tool", "open_document", "read_document", "save_document"] }
     }
   }
 }
 ```
 
-agentty sends at most 16 MCP tools per turn and reaches the rest through
-`mcp_search_tools`, so all 85 work without `--tools core`. Pinning keeps the
-three you always need in every turn. `trustAnnotations` lets agentty believe
+agentty sends the model only the MCP tools that best match each request (16
+of them). Pinning `help` and `run_tool` keeps every other tool one call away:
+without them a model asked "what can you do?" sees an arbitrary 16 and
+concludes the rest don't exist. `trustAnnotations` lets agentty believe
 the server's read-only marks, so tools like `read_document` and `list_*` are
 treated as reads instead of as commands that can write and run anything.
 `agentty mcp-status` shows whether it's loaded.

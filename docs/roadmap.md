@@ -38,6 +38,11 @@ allow it. On "what can you do with Word docs?" the ranking picked
 Any client that caps or ranks tools has the same problem: Cursor (about 40
 tools across all servers), Copilot, small local models.
 
+**Status: done in v0.3.0** (0.1-0.5 and 0.7; 0.6 is an agentty change, reported
+there). `help` and `run_tool` are in every profile; `tests/discover.py`
+replays agentty's ranking and checks all 50 everyday tasks are reachable.
+In agentty, "what can you do with Word docs?" now lists every area.
+
 **Work.**
 
 | Item | Done when |

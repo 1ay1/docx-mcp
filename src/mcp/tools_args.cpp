@@ -172,6 +172,11 @@ std::vector<ToolDef> select_tools(std::vector<ToolDef> all, const std::string& p
     std::string profile = util::lower(util::trim(profile_in));
     if (profile.empty() || profile == "full" || profile == "all") return all;
     static const std::map<std::string, std::vector<std::string>> sets = {
+        // for clients that rank or cap tools: the everyday ones, plus help and
+        // run_tool so nothing else is out of reach
+        {"essential", {"open_document", "create_document", "save_document", "read_document", "find_text",
+                       "insert_text", "replace_text", "delete_text", "insert_paragraph", "delete_paragraph",
+                       "format_text", "undo"}},
         {"core", {"open_document", "create_document", "save_document", "close_document", "undo",
                   "read_document", "get_text", "get_outline", "find_text",
                   "insert_text", "replace_text", "delete_text", "find_replace", "insert_paragraph", "delete_paragraph",
@@ -193,7 +198,15 @@ std::vector<ToolDef> select_tools(std::vector<ToolDef> all, const std::string& p
         bool found = false;
         for (auto& t : all)
             if (t.name == n) { out.push_back(t); found = true; break; }
-        if (!found) throw std::runtime_error("unknown tool or profile '" + n + "' (profiles: full, core, review)");
+        if (!found) throw std::runtime_error("unknown tool or profile '" + n + "' (profiles: full, essential, core, review)");
+    }
+    // every profile keeps the way to the rest
+    for (auto n : {"help", "run_tool"}) {
+        bool have = false;
+        for (auto& t : out) have |= t.name == n;
+        if (!have)
+            for (auto& t : all)
+                if (t.name == n) out.push_back(t);
     }
     return out;
 }
@@ -247,6 +260,14 @@ std::vector<std::string> normalize_args(const ToolDef& t, Json& args) {
     }
     args = out;
     return notes;
+}
+
+Json call_tool(const ToolDef& t, Sessions& S, Json args) {
+    auto notes = normalize_args(t, args);
+    Json out = t.run(S, args);
+    if (!out.is_object()) out = Json{{"result", out}};
+    if (!notes.empty()) out["_notes"] = notes;
+    return out;
 }
 
 }  // namespace docx::server
