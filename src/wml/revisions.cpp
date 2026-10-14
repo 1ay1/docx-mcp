@@ -375,6 +375,18 @@ void resolve_math(Ctx& c, pugi::xml_node root) {
     }
 }
 
+// An equation whose every run went away is gone too; then a paragraph that
+// held only that equation and is now empty behaves like any emptied one.
+void drop_empty_math(pugi::xml_node root) {
+    for (auto q : {"m:oMathPara", "m:oMath"})
+        for (auto m : xml::descendants(root, q)) {
+            if (!m.parent()) continue;
+            bool text = false;
+            for (auto t : xml::descendants(m, "m:t")) if (*t.text().get()) text = true;
+            if (!text) m.parent().remove_child(m);
+        }
+}
+
 // ── driver ───────────────────────────────────────────────────────────────
 
 void run_pass(Ctx& c, pugi::xml_node root) {
@@ -417,6 +429,7 @@ void run_pass(Ctx& c, pugi::xml_node root) {
         bool is_add = q == "w:ins" || q == "w:moveTo";
         resolve_container(c, k, is_add == c.accept);
     }
+    drop_empty_math(root);
 
     // 3. paragraph marks (collect first; removing marks reshapes the tree)
     std::vector<std::pair<pugi::xml_node, pugi::xml_node>> marks;  // (p, rev)

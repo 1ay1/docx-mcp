@@ -1034,12 +1034,8 @@ pugi::xml_node insert_equation(Document& d, pugi::xml_node p, int pos, const std
     } else {
         out = before ? parent.insert_copy_before(math, before) : parent.append_copy(math);
     }
-    if (tracking(d, o)) {
-        for (auto r : xml::descendants(out, "m:r")) {
-            auto rpr = schema::ensure_child(r, "w:rPr");
-            stamp(d, schema::ensure_child(rpr, "w:ins"));
-        }
-    }
+    if (tracking(d, o))
+        for (auto r : xml::descendants(out, "m:r")) wrap_math_run(d, r, "w:ins");
     xml::declare(xml::root_of(p), "m");
     return out;
 }

@@ -90,5 +90,8 @@ int reject_all_in(Document& d, pugi::xml_node root, const RevFilter& f);
 
 // Stamp a revision element with id/author/date.
 void stamp(Document& d, pugi::xml_node rev);
+// Track a math run as inserted/deleted: wraps the m:r in w:ins/w:del
+// (the schema-valid form; Word's own form puts the marker inside m:r).
+void wrap_math_run(Document& d, pugi::xml_node mr, const char* q);
 
 }  // namespace docx::wml

@@ -100,6 +100,10 @@ struct Walker {
                 continue;
             }
             if (q == "m:oMath" || q == "m:oMathPara") {
+                // an equation whose runs were all removed (rejected insertion) has no content
+                bool has_text = false;
+                for (auto t : xml::descendants(c, "m:t")) if (*t.text().get()) has_text = true;
+                if (!has_text) continue;
                 Atom a;
                 a.run = c; a.node = c; a.ch = kObj; a.rev = rev; a.rev_node = rn; a.ins_node = ins; a.object = true;
                 out.push_back(a);

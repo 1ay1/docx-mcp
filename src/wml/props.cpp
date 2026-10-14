@@ -8,6 +8,7 @@
 #include "schema/schema.hpp"
 #include "util/util.hpp"
 #include "wml/edit.hpp"
+#include "wml/styles.hpp"
 #include "xml/xml.hpp"
 
 namespace docx::wml {
@@ -111,7 +112,11 @@ void apply_rpr_json(Document& d, pugi::xml_node rpr, const Json& props) {
     for (auto& [k, v] : props.items()) {
         if (k == "style") {
             if (v.is_null()) rpr.remove_child("w:rStyle");
-            else val(rpr, "w:rStyle", v, v.get<std::string>());
+            else {
+                std::string sid = ensure_style(d, v.get<std::string>());
+                if (sid == "DefaultParagraphFont") rpr.remove_child("w:rStyle");
+                else val(rpr, "w:rStyle", v, sid);
+            }
         } else if (k == "bold") { onoff(rpr, "w:b", v); onoff(rpr, "w:bCs", v); }
         else if (k == "italic") { onoff(rpr, "w:i", v); onoff(rpr, "w:iCs", v); }
         else if (k == "caps" || k == "all_caps") onoff(rpr, "w:caps", v);
@@ -246,7 +251,11 @@ void apply_ppr_json(Document& d, pugi::xml_node ppr, const Json& props) {
     for (auto& [k, v] : props.items()) {
         if (k == "style") {
             if (v.is_null()) ppr.remove_child("w:pStyle");
-            else val(ppr, "w:pStyle", v, v.get<std::string>());
+            else {
+                std::string sid = ensure_style(d, v.get<std::string>());
+                if (sid == "Normal") ppr.remove_child("w:pStyle");
+                else val(ppr, "w:pStyle", v, sid);
+            }
         } else if (k == "alignment" || k == "align" || k == "justification") {
             if (v.is_null()) { ppr.remove_child("w:jc"); continue; }
             std::string a = v.get<std::string>();

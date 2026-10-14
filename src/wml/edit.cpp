@@ -7,6 +7,7 @@
 #include "schema/schema.hpp"
 #include "util/util.hpp"
 #include "wml/edit.hpp"
+#include "wml/styles.hpp"
 #include "xml/xml.hpp"
 
 namespace docx::wml {
@@ -112,6 +113,17 @@ void stamp(Document& d, pugi::xml_node rev) {
 
 // ── text ─────────────────────────────────────────────────────────────────
 
+void wrap_math_run(Document& d, pugi::xml_node mr, const char* q) {
+    // ECMA CT_RunTrackChange allows math content (EG_OMathMathElements), so the
+    // valid form is <w:ins><m:r>..</m:r></w:ins>. Word itself writes the
+    // marker inside m:r, which the schema rejects; we read both.
+    auto parent = mr.parent();
+    if (is_revision_container(parent) || mr.child("w:ins") || mr.child("w:del")) return;
+    auto w = parent.insert_child_before(q, mr);
+    stamp(d, w);
+    w.append_move(mr);
+}
+
 void insert_text(Document& d, pugi::xml_node p, int pos, const std::u32string& text, const Json& rpr,
                  const EditOpts& o) {
     if (text.empty()) return;
@@ -189,11 +201,7 @@ void delete_text(Document& d, pugi::xml_node p, int s, int e, const EditOpts& o)
         if (name_is(r, "m:oMath") || name_is(r, "m:oMathPara")) {
             if (!track) { r.parent().remove_child(r); continue; }
             // math is deleted by marking its runs
-            for (auto mr : xml::descendants(r, "m:r")) {
-                auto rp = schema::ensure_child(mr, "w:rPr");
-                auto del = schema::ensure_child(rp, "w:del");
-                stamp(d, del);
-            }
+            for (auto mr : xml::descendants(r, "m:r")) wrap_math_run(d, mr, "w:del");
             continue;
         }
         delete_run(d, r, track);
@@ -418,8 +426,9 @@ pugi::xml_node insert_paragraph(Document& d, pugi::xml_node ref, bool after, con
     }
     if (!style.empty()) {
         auto ppr = schema::ensure_child(np, "w:pPr");
-        if (style == "Normal") ppr.remove_child("w:pStyle");
-        else xml::set_attr(schema::ensure_child(ppr, "w:pStyle"), "w:val", style);
+        std::string sid = ensure_style(d, style);
+        if (sid == "Normal") ppr.remove_child("w:pStyle");
+        else xml::set_attr(schema::ensure_child(ppr, "w:pStyle"), "w:val", sid);
         ppr.remove_child("w:numPr");
         if (!ppr.first_child()) np.remove_child(ppr);
     }
