@@ -4,3 +4,5 @@ tests/corpus/**/*.pdf
 .agentty/
 __pycache__/
 /out/
+tools/oxval/obj/
+tools/oxval/bin/
