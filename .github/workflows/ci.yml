@@ -1,0 +1,36 @@
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build g++-14
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=g++-14 -DCMAKE_C_COMPILER=gcc-14
+      - name: Build
+        run: cmake --build build
+      - name: Unit tests
+        working-directory: build/tests
+        run: |
+          ./edit_test
+          ./comments_test
+          ./structure_test
+          ./docops_test
+      - name: Corpus tests
+        working-directory: build/tests
+        run: |
+          ./revisions_corpus ../../tests/corpus/oxpt/RP
+          ./robustness ../../tests/corpus/oxpt
+      - name: End-to-end over MCP stdio
+        run: python3 tests/e2e.py build/docx-mcp /tmp/e2e
