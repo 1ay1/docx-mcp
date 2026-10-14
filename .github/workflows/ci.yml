@@ -86,10 +86,19 @@ jobs:
         run: |
           cat "$RUNNER_TEMP/docx-mcp-stderr.txt" || true
           if command -v gdb >/dev/null; then
-            printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"x","version":"1"}}}' \
-              '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"create_document","arguments":{"path":"/tmp/c.docx"}}}' \
-              '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"apply_style","arguments":{"doc":"doc1","paragraphs":["1"],"style":"Heading 1"}}}' > /tmp/in.txt
-            gdb -batch -ex run -ex bt --args ${{ matrix.exe }} < /tmp/in.txt 2>&1 | tail -40
+            python3 - > /tmp/in.txt <<'EOF'
+          import json
+          def m(i, meth, p): print(json.dumps({"jsonrpc": "2.0", "id": i, "method": meth, "params": p}))
+          m(1, "initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "x", "version": "1"}})
+          m(2, "tools/call", {"name": "create_document", "arguments": {"path": "/tmp/c.docx", "author": "A", "title": "T"}})
+          m(3, "tools/call", {"name": "insert_text", "arguments": {"doc": "doc1", "paragraph": "1", "text": "Services Agreement"}})
+          m(4, "tools/call", {"name": "apply_style", "arguments": {"doc": "doc1", "paragraphs": ["1"], "style": "Title"}})
+          m(5, "tools/call", {"name": "insert_paragraph", "arguments": {"doc": "doc1", "paragraph": "1", "text": "a\nb\nc\nd"}})
+          m(6, "tools/call", {"name": "apply_style", "arguments": {"doc": "doc1", "paragraphs": ["2", "4"], "style": "Heading 1"}})
+          m(7, "tools/call", {"name": "format_text", "arguments": {"doc": "doc1", "paragraph": "5", "match": "d", "format": {"bold": True}}})
+          m(8, "tools/call", {"name": "insert_table", "arguments": {"doc": "doc1", "paragraph": "5", "rows": [["a", "b"]], "style": "Grid Table 4 Accent 1"}})
+          EOF
+            gdb -batch -ex run -ex bt --args ${{ matrix.exe }} < /tmp/in.txt 2>&1 | grep -v '^\[' | tail -40
           fi
 
       - name: Package
