@@ -30,6 +30,9 @@ if(MSVC)
     set(DOCX_WARNINGS /W3)
 else()
     set(DOCX_WARNINGS -Wall -Wextra -Wno-unused-parameter)
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 14)
+        list(APPEND DOCX_WARNINGS -Wdangling-reference)
+    endif()
 endif()
 
 # Everything is vendored or a submodule; nothing comes from the system or

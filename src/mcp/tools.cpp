@@ -1277,7 +1277,10 @@ std::vector<ToolDef> make_tools() {
          obj({{"doc", kDoc}, {"core", anyobj("")}, {"custom", anyobj("")}}, {"doc"}), false, false, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
              if (a.contains("core")) set_core_properties(s.doc, obj_arg(a, "core"));
-             if (a.contains("custom")) for (auto& [k, v] : obj_arg(a, "custom").items()) set_custom_property(s.doc, k, v);
+             if (a.contains("custom")) {
+                 Json custom = obj_arg(a, "custom");  // named: .items() on a temporary dangles before C++23 P2718
+                 for (auto& [k, v] : custom.items()) set_custom_property(s.doc, k, v);
+             }
              return Json{{"core", core_properties(s.doc)}, {"custom", custom_properties(s.doc)}};
          }});
     add({"get_settings", "Settings", "Document settings: track changes, protection, compatibility mode, tab stops, zoom, ...",
