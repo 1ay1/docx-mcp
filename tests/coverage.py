@@ -205,6 +205,14 @@ def exercise(R, doc, track, work, tag):
     # objects
     R.call("insert_picture", doc=doc, paragraph=p0, position=1, data_base64=base64.b64encode(png()).decode(),
            width=40, alt_text="red square", **t)
+    R.call("insert_picture", doc=doc, paragraph=p1, data_base64=base64.b64encode(png()).decode(), width=30,
+           layout={"wrap": "square", "horizontal": "right", "vertical_from": "paragraph", "y": 6}, **t)
+    R.call("insert_picture", doc=doc, paragraph=p2, data_base64=base64.b64encode(png()).decode(), width=30,
+           layout="behind", **t)
+    R.call("list_pictures", doc=doc)
+    R.call("format_picture", doc=doc, picture=1, width=50, layout="tight", alt_text="moved")
+    R.call("format_picture", doc=doc, picture=2, layout="inline")
+    R.call("delete_picture", doc=doc, picture=3, **t)
     R.call("insert_break", doc=doc, paragraph=p1, position=2, type="line", **t)
     R.call("insert_break", doc=doc, paragraph=p2, position=3, type="column", **t)
     R.call("insert_break", doc=doc, paragraph=p3, type="page", **t)

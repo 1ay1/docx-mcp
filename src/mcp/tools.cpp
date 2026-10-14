@@ -1083,12 +1083,20 @@ std::vector<ToolDef> make_tools() {
          }});
 
     // ── insert: pictures, breaks, links, notes, fields, TOC, equations ──
+    const Json kLayout = {
+        {"description",
+         "Layout Options. \"inline\" (default) flows with the text; \"square\", \"tight\", \"through\", \"top_bottom\" wrap "
+         "text around it; \"behind\" / \"in_front\" float over the text. Or an object: {wrap, horizontal: left|center|right, "
+         "vertical: top|center|bottom, x, y (points or \"1in\"), horizontal_from: margin|page|column|character, "
+         "vertical_from: margin|page|paragraph|line, distance (gap to text, points)}."}};
     add({"insert_picture", "Insert picture",
-         "Insert an inline picture from a file (PNG, JPEG, GIF, BMP, TIFF, SVG, EMF, WMF) or base64 data. Size in points; "
-         "give width or height to keep the aspect ratio. Too-wide pictures are scaled to the text width like Word.",
+         "Insert a picture or image (photo, logo, chart image) from a file (PNG, JPEG, GIF, BMP, TIFF, SVG, EMF, WMF) or "
+         "base64 data. Size in points; give width or height to keep the aspect ratio. Too-wide pictures are scaled to "
+         "the text width like Word. layout makes it float with text wrapping.",
          obj({{"doc", kDoc}, {"paragraph", kPara}, {"position", integer("")}, {"after", str("")}, {"file", str("Image file path.")},
               {"data_base64", str("Image bytes (alternative to file).")}, {"width", num("pt")}, {"height", num("pt")},
-              {"alt_text", str("Alt text for accessibility.")}, {"track", kTrack}, {"author", str("Author of this change.")}},
+              {"alt_text", str("Alt text for accessibility.")}, {"layout", kLayout}, {"track", kTrack},
+              {"author", str("Author of this change.")}},
              {"doc", "paragraph"}),
          false, false, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
@@ -1100,8 +1108,48 @@ std::vector<ToolDef> make_tools() {
                  if (!b) throw std::runtime_error("bad base64");
                  data = *b;
              } else throw std::runtime_error("give file or data_base64");
-             insert_picture(s.doc, r.p, pos_in(r.p, a), data, darg(a, "width", 0.0), darg(a, "height", 0.0), sarg(a, "alt_text"), r.part, track(a));
-             return Json{{"ok", true}};
+             auto place = placement_from_json(a.contains("layout") ? a["layout"] : Json());
+             insert_picture(s.doc, r.p, pos_in(r.p, a), data, darg(a, "width", 0.0), darg(a, "height", 0.0), sarg(a, "alt_text"),
+                            r.part, track(a), place);
+             auto all = list_pictures(s.doc);
+             int n = 0;
+             for (auto& pi : all)
+                 if (pi.para == para_id(r.p)) n = pi.index;
+             return Json{{"ok", true}, {"picture", n}, {"layout", place.wrap}};
+         }});
+    add({"list_pictures", "Pictures",
+         "List the pictures in the document: number, size in points, layout (inline or how text wraps), alt text and "
+         "the paragraph each sits in.",
+         obj({{"doc", kDoc}}, {"doc"}), true, false, [](Sessions& S, const Json& a) {
+             Json v = Json::array();
+             for (auto& p : list_pictures(sess(S, a).doc))
+                 v.push_back({{"picture", p.index}, {"name", p.name}, {"alt_text", p.alt}, {"paragraph", p.para},
+                              {"layout", p.wrap}, {"width", std::round(p.width_pt * 10) / 10},
+                              {"height", std::round(p.height_pt * 10) / 10}});
+             return v;
+         }});
+    add({"format_picture", "Resize / position picture",
+         "Resize a picture, change how text wraps around it (Layout Options), move it, or set its alt text. Give width "
+         "or height alone to keep the aspect ratio.",
+         obj({{"doc", kDoc}, {"picture", integer("From list_pictures (1-based).")}, {"width", num("pt")}, {"height", num("pt")},
+              {"layout", kLayout}, {"alt_text", str("")}},
+             {"doc", "picture"}),
+         false, false, [](Sessions& S, const Json& a) {
+             auto& s = mut(S, a);
+             int n = iarg(a, "picture", 1);
+             set_picture(s.doc, n, darg(a, "width", 0.0), darg(a, "height", 0.0), a.contains("layout") ? a["layout"] : Json(),
+                         a.contains("alt_text") ? a["alt_text"] : Json());
+             auto p = list_pictures(s.doc)[n - 1];
+             return Json{{"picture", n}, {"layout", p.wrap}, {"width", std::round(p.width_pt * 10) / 10},
+                         {"height", std::round(p.height_pt * 10) / 10}};
+         }});
+    add({"delete_picture", "Delete picture", "Delete a picture (number from list_pictures).",
+         obj({{"doc", kDoc}, {"picture", integer("")}, {"track", kTrack}, {"author", str("Author of this change.")}},
+             {"doc", "picture"}),
+         false, true, [](Sessions& S, const Json& a) {
+             auto& s = mut(S, a);
+             delete_picture(s.doc, iarg(a, "picture", 1), track(a));
+             return Json{{"ok", true}, {"remaining", list_pictures(s.doc).size()}};
          }});
     add({"insert_break", "Insert break", "Page break, column break, line break, or a section break after a paragraph.",
          obj({{"doc", kDoc}, {"paragraph", kPara}, {"type", enm({"page", "column", "line", "section_next_page", "section_continuous", "section_even_page", "section_odd_page"}, "")},

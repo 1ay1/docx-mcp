@@ -135,7 +135,16 @@ class Fuzz:
 
     def extra(self, pid, s, e, track):
         r = self.r
-        k = r.randint(0, 36)
+        k = r.randint(0, 39)
+        if k == 37:
+            return self.call("insert_picture", paragraph=pid, position=s, data_base64=PNG, width=r.choice([20, 80]),
+                             layout=r.choice(["inline", "square", "tight", "through", "top_bottom", "behind", "in_front",
+                                              {"wrap": "square", "horizontal": "center", "vertical_from": "page", "y": 72}]), **track)
+        if k == 38:
+            return self.call("format_picture", picture=r.randint(1, 3), width=r.choice([0, 40]),
+                             layout=r.choice(["inline", "square", "behind", {"wrap": "in_front", "x": 10, "y": 10}]))
+        if k == 39:
+            return self.call("delete_picture", picture=r.randint(1, 3), **track)
         if k == 34:
             return self.call("insert_caption", paragraph=pid, label=r.choice(["Figure", "Table", "Chart"]), text=self.text() or "c", **track)
         if k == 35:

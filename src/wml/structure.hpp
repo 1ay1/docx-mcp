@@ -36,10 +36,30 @@ void delete_table(Document& d, pugi::xml_node tbl, const EditOpts& o);
 Json table_json(pugi::xml_node tbl);
 
 // ── pictures ──
-// Insert an inline picture (PNG/JPEG/GIF/BMP/TIFF/SVG/EMF/WMF bytes) at
-// visible pos of p. width/height in points (0 = from image, keep aspect).
+// Where a picture sits. Inline flows with the text like a character; anything
+// else floats (Layout Options): wrap = square | tight | through | top_bottom |
+// behind | in_front. Position offsets are in points from `relative_to`
+// (horizontal: margin | page | column | character; vertical: margin | page |
+// paragraph | line), or an alignment (left/center/right, top/center/bottom).
+struct Placement {
+    std::string wrap = "inline";
+    std::string h_from = "column", v_from = "paragraph";
+    std::string h_align, v_align;   // instead of offsets
+    double x_pt = 0, y_pt = 0;
+    double distance_pt = 9;         // gap between picture and text (Word's 0.13")
+};
+Placement placement_from_json(const Json& j);
+// Insert a picture (PNG/JPEG/GIF/BMP/TIFF/SVG/EMF/WMF bytes) at visible pos
+// of p. width/height in points (0 = from image, keep aspect).
 pugi::xml_node insert_picture(Document& d, pugi::xml_node p, int pos, const util::Bytes& data, double width_pt,
-                              double height_pt, const std::string& alt_text, const std::string& part, const EditOpts& o);
+                              double height_pt, const std::string& alt_text, const std::string& part, const EditOpts& o,
+                              const Placement& place = {});
+struct PictureInfo { int index; std::string id, name, alt, para, wrap; double width_pt, height_pt; };
+std::vector<PictureInfo> list_pictures(Document& d);
+// Resize (keeps aspect when one side is 0 and keep_aspect), re-place, or set
+// alt text of picture n (1-based, document order).
+void set_picture(Document& d, int n, double width_pt, double height_pt, const Json& placement, const Json& alt);
+void delete_picture(Document& d, int n, const EditOpts& o);
 
 // ── breaks ──
 void insert_break(Document& d, pugi::xml_node p, int pos, const std::string& type, const EditOpts& o);  // page|column|line

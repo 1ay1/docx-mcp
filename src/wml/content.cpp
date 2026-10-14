@@ -169,8 +169,10 @@ int next_docpr_id(Document& d) {
 
 // ── pictures ─────────────────────────────────────────────────────────────
 
+void make_floating(Document& d, pugi::xml_node inl, const Placement& pl);
+
 pugi::xml_node insert_picture(Document& d, pugi::xml_node p, int pos, const util::Bytes& data, double wpt, double hpt,
-                              const std::string& alt, const std::string& part_in, const EditOpts& o) {
+                              const std::string& alt, const std::string& part_in, const EditOpts& o, const Placement& place) {
     ImgInfo im = sniff(data);
     std::string part = part_in.empty() ? d.main() : part_in;
     std::string ext = im.ext == "jpeg" ? "jpeg" : im.ext;
@@ -242,11 +244,261 @@ pugi::xml_node insert_picture(Document& d, pugi::xml_node p, int pos, const util
     auto geom = sp.append_child("a:prstGeom");
     geom.append_attribute("prst") = "rect";
     geom.append_child("a:avLst");
+    if (place.wrap != "inline") make_floating(d, inl, place);
     auto out = place_run(d, p, pos, r, o);
     auto root = xml::root_of(p);
     for (auto pre : {"wp", "a", "pic", "r"}) xml::declare(root, pre);
     xml::declare(root, "wp14", true);
     return out;
+}
+
+namespace {
+long emu(double pt) { return std::lround(pt * 12700); }
+
+void set_wrap(pugi::xml_node anchor, const Placement& pl) {
+    // the wrap element sits after effectExtent, before docPr
+    for (auto q : {"wp:wrapNone", "wp:wrapSquare", "wp:wrapTight", "wp:wrapThrough", "wp:wrapTopAndBottom"})
+        anchor.remove_child(q);
+    auto before = anchor.child("wp:docPr");
+    std::string w = pl.wrap;
+    pugi::xml_node e;
+    if (w == "behind" || w == "in_front") e = anchor.insert_child_before("wp:wrapNone", before);
+    else if (w == "top_bottom") e = anchor.insert_child_before("wp:wrapTopAndBottom", before);
+    else {
+        e = anchor.insert_child_before(w == "tight" ? "wp:wrapTight" : w == "through" ? "wp:wrapThrough" : "wp:wrapSquare", before);
+        e.append_attribute("wrapText") = "bothSides";
+        if (w == "tight" || w == "through") {
+            // Word's default contour for a picture: its rectangle, in 1/21600ths
+            auto poly = e.append_child("wp:wrapPolygon");
+            poly.append_attribute("edited") = "0";
+            auto pt = [&](const char* q, const char* x, const char* y) {
+                auto n = poly.append_child(q);
+                n.append_attribute("x") = x;
+                n.append_attribute("y") = y;
+            };
+            pt("wp:start", "0", "0");
+            pt("wp:lineTo", "0", "21600");
+            pt("wp:lineTo", "21600", "21600");
+            pt("wp:lineTo", "21600", "0");
+            pt("wp:lineTo", "0", "0");
+        }
+    }
+    xml::set_attr(anchor, "behindDoc", w == "behind" ? "1" : "0");
+    long gap = emu(pl.distance_pt);
+    bool tb = w == "top_bottom";
+    xml::set_attr(anchor, "distT", std::to_string(tb ? gap : 0));
+    xml::set_attr(anchor, "distB", std::to_string(tb ? gap : 0));
+    xml::set_attr(anchor, "distL", std::to_string(tb || w == "behind" || w == "in_front" ? 0 : gap));
+    xml::set_attr(anchor, "distR", std::to_string(tb || w == "behind" || w == "in_front" ? 0 : gap));
+}
+
+void set_position(pugi::xml_node anchor, const Placement& pl) {
+    auto fill = [&](const char* q, const std::string& from, const std::string& align, double off) {
+        auto e = anchor.child(q);
+        while (e.first_child()) e.remove_child(e.first_child());
+        xml::set_attr(e, "relativeFrom", from);
+        if (!align.empty()) e.append_child("wp:align").text().set(align.c_str());
+        else e.append_child("wp:posOffset").text().set(std::to_string(emu(off)).c_str());
+    };
+    fill("wp:positionH", pl.h_from, pl.h_align, pl.x_pt);
+    fill("wp:positionV", pl.v_from, pl.v_align, pl.y_pt);
+}
+}  // namespace
+
+Placement placement_from_json(const Json& j) {
+    Placement pl;
+    if (j.is_null() || (j.is_object() && j.empty())) return pl;
+    if (j.is_string()) pl.wrap = j.get<std::string>();
+    auto norm = [](std::string s) {
+        s = util::lower(util::trim(s));
+        for (auto& c : s) if (c == '-' || c == ' ') c = '_';
+        return s;
+    };
+    if (j.is_object()) {
+        for (auto& [k, v] : j.items()) {
+            std::string sv = v.is_string() ? norm(v.get<std::string>()) : "";
+            if (k == "wrap") pl.wrap = sv;
+            else if (k == "x") pl.x_pt = v.is_number() ? v.get<double>() : util::length_twips(v) / 20.0;
+            else if (k == "y") pl.y_pt = v.is_number() ? v.get<double>() : util::length_twips(v) / 20.0;
+            else if (k == "horizontal") pl.h_align = sv;
+            else if (k == "vertical") pl.v_align = sv;
+            else if (k == "horizontal_from" || k == "relative_to_x") pl.h_from = sv;
+            else if (k == "vertical_from" || k == "relative_to_y") pl.v_from = sv;
+            else if (k == "distance") pl.distance_pt = v.is_number() ? v.get<double>() : util::length_twips(v) / 20.0;
+            else
+                throw std::runtime_error(util::unknown_key("placement key", k, {"wrap", "horizontal", "vertical", "x", "y",
+                                                                              "horizontal_from", "vertical_from", "distance"}));
+        }
+    } else {
+        pl.wrap = norm(pl.wrap);
+    }
+    // friendly names for Word's Layout Options
+    static const std::map<std::string, std::string> wraps = {
+        {"inline", "inline"}, {"in_line", "inline"}, {"in_line_with_text", "inline"}, {"square", "square"},
+        {"tight", "tight"}, {"through", "through"}, {"top_bottom", "top_bottom"}, {"top_and_bottom", "top_bottom"},
+        {"behind", "behind"}, {"behind_text", "behind"}, {"in_front", "in_front"}, {"in_front_of_text", "in_front"},
+        {"front", "in_front"}};
+    auto it = wraps.find(pl.wrap);
+    if (it == wraps.end())
+        throw std::runtime_error(util::unknown_key("wrap", pl.wrap, {"inline", "square", "tight", "through", "top_bottom",
+                                                                    "behind", "in_front"}));
+    pl.wrap = it->second;
+    auto check = [](const std::string& v, std::initializer_list<std::string_view> ok, const char* what) {
+        if (v.empty()) return;
+        for (auto o : ok) if (v == o) return;
+        throw std::runtime_error(util::unknown_key(what, v, std::vector<std::string_view>(ok)));
+    };
+    check(pl.h_align, {"left", "center", "right", "inside", "outside"}, "horizontal alignment");
+    check(pl.v_align, {"top", "center", "bottom", "inside", "outside"}, "vertical alignment");
+    check(pl.h_from, {"margin", "page", "column", "character", "leftMargin", "rightMargin"}, "horizontal_from");
+    check(pl.v_from, {"margin", "page", "paragraph", "line", "topMargin", "bottomMargin"}, "vertical_from");
+    if (pl.distance_pt < 0 || pl.distance_pt > 300) throw std::runtime_error("distance must be 0 to 300 points");
+    return pl;
+}
+
+// Turn a wp:inline into a wp:anchor in place, keeping its graphic.
+void make_floating(Document& d, pugi::xml_node inl, const Placement& pl) {
+    auto drw = inl.parent();
+    auto anchor = drw.insert_child_before("wp:anchor", inl);
+    for (auto a : {"distT", "distB", "distL", "distR"}) anchor.append_attribute(a) = "0";
+    anchor.append_attribute("simplePos") = "0";
+    // stack order: above everything placed so far
+    unsigned long z = 251658240;
+    for (auto& part : d.story_parts())
+        if (d.pkg().has(part))
+            for (auto n : d.pkg().xml(part).select_nodes("//wp:anchor/@relativeHeight"))
+                z = std::max<unsigned long>(z, n.attribute().as_ullong() + 1024);
+    anchor.append_attribute("relativeHeight") = std::to_string(z).c_str();
+    anchor.append_attribute("behindDoc") = "0";
+    anchor.append_attribute("locked") = "0";
+    anchor.append_attribute("layoutInCell") = "1";
+    anchor.append_attribute("allowOverlap") = "1";
+    for (auto a : {"wp14:anchorId", "wp14:editId"})
+        if (auto v = inl.attribute(a)) anchor.append_attribute(a) = v.value();
+    auto sp = anchor.append_child("wp:simplePos");
+    sp.append_attribute("x") = "0";
+    sp.append_attribute("y") = "0";
+    anchor.append_child("wp:positionH");
+    anchor.append_child("wp:positionV");
+    for (auto c = inl.first_child(); c;) {
+        auto nx = c.next_sibling();
+        anchor.append_move(c);
+        c = nx;
+    }
+    drw.remove_child(inl);
+    if (!anchor.child("wp:effectExtent")) {
+        auto ee = anchor.insert_child_after("wp:effectExtent", anchor.child("wp:extent"));
+        for (auto a : {"l", "t", "r", "b"}) ee.append_attribute(a) = "0";
+    }
+    set_position(anchor, pl);
+    set_wrap(anchor, pl);
+}
+
+namespace {
+// Every picture drawing in body order: the wp:inline or wp:anchor holding a pic:pic.
+std::vector<pugi::xml_node> picture_frames(Document& d) {
+    std::vector<pugi::xml_node> v;
+    for (auto drw : xml::descendants(d.body(), "w:drawing"))
+        for (auto f : drw.children())
+            if ((xml::name_is(f, "wp:inline") || xml::name_is(f, "wp:anchor")) && xml::first_descendant(f, "pic:pic"))
+                v.push_back(f);
+    return v;
+}
+
+pugi::xml_node frame_at(Document& d, int n) {
+    auto v = picture_frames(d);
+    if (n < 1 || n > (int)v.size())
+        throw std::runtime_error("picture " + std::to_string(n) + " not found (document has " + std::to_string(v.size()) +
+                                 "; list_pictures shows them)");
+    return v[n - 1];
+}
+
+std::string wrap_of(pugi::xml_node f) {
+    if (xml::name_is(f, "wp:inline")) return "inline";
+    if (f.child("wp:wrapSquare")) return "square";
+    if (f.child("wp:wrapTight")) return "tight";
+    if (f.child("wp:wrapThrough")) return "through";
+    if (f.child("wp:wrapTopAndBottom")) return "top_bottom";
+    return std::string(xml::attr(f, "behindDoc")) == "1" ? "behind" : "in_front";
+}
+}  // namespace
+
+std::vector<PictureInfo> list_pictures(Document& d) {
+    std::vector<PictureInfo> v;
+    int i = 0;
+    for (auto f : picture_frames(d)) {
+        auto ext = f.child("wp:extent");
+        auto dp = f.child("wp:docPr");
+        auto p = xml::ancestor(f, "w:p");
+        v.push_back({++i, xml::attr(dp, "id"), xml::attr(dp, "name"), xml::attr(dp, "descr"), para_id(p), wrap_of(f),
+                     ext.attribute("cx").as_double() / 12700.0, ext.attribute("cy").as_double() / 12700.0});
+    }
+    return v;
+}
+
+void set_picture(Document& d, int n, double wpt, double hpt, const Json& placement, const Json& alt) {
+    auto f = frame_at(d, n);
+    if (wpt > 0 || hpt > 0) {
+        auto ext = f.child("wp:extent");
+        double cx = ext.attribute("cx").as_double(), cy = ext.attribute("cy").as_double();
+        double ncx = wpt > 0 ? wpt * 12700 : cx * (hpt * 12700 / std::max(1.0, cy));
+        double ncy = hpt > 0 ? hpt * 12700 : cy * (wpt * 12700 / std::max(1.0, cx));
+        if (ncx < 1 || ncy < 1 || ncx > 22 * 914400 || ncy > 22 * 914400)
+            throw std::runtime_error("picture size must be up to 22 inches");
+        auto put = [&](pugi::xml_node e) {
+            e.attribute("cx").set_value(std::to_string(std::lround(ncx)).c_str());
+            e.attribute("cy").set_value(std::to_string(std::lround(ncy)).c_str());
+        };
+        put(ext);
+        if (auto xe = xml::first_descendant(f, "a:ext")) put(xe);
+    }
+    if (alt.is_string()) {
+        auto s = util::xml_safe(alt.get<std::string>());
+        xml::set_attr(f.child("wp:docPr"), "descr", s);
+        if (auto c = xml::first_descendant(f, "pic:cNvPr")) xml::set_attr(c, "descr", s);
+    }
+    if (!placement.is_null()) {
+        auto pl = placement_from_json(placement);
+        if (pl.wrap == "inline") {
+            if (xml::name_is(f, "wp:anchor")) {
+                // back into the line: the frame keeps extent, docPr, graphic
+                auto drw = f.parent();
+                auto inl = drw.insert_child_before("wp:inline", f);
+                for (auto a : {"distT", "distB", "distL", "distR"}) inl.append_attribute(a) = "0";
+                for (auto a : {"wp14:anchorId", "wp14:editId"})
+                    if (auto v = f.attribute(a)) inl.append_attribute(a) = v.value();
+                for (auto q : {"wp:extent", "wp:effectExtent", "wp:docPr", "wp:cNvGraphicFramePr", "a:graphic"})
+                    if (auto c = f.child(q)) inl.append_move(c);
+                drw.remove_child(f);
+            }
+        } else if (xml::name_is(f, "wp:inline")) {
+            make_floating(d, f, pl);
+        } else {
+            set_position(f, pl);
+            set_wrap(f, pl);
+        }
+    }
+}
+
+void delete_picture(Document& d, int n, const EditOpts& o) {
+    auto f = frame_at(d, n);
+    auto run = xml::ancestor(f, "w:r");
+    auto p = xml::ancestor(run, "w:p");
+    // its visible offset: the picture is one object atom
+    ParaText pt = analyze(p);
+    for (std::size_t i = 0; i < pt.vis.size(); i++)
+        if (pt.atoms[pt.vis[i]].run == run) {
+            delete_text(d, p, (int)i, (int)i + 1, o);
+            return;
+        }
+    // floating pictures aren't in the visible text: remove the run itself
+    if (o.track ? *o.track : d.track_changes()) {
+        auto del = run.parent().insert_child_before("w:del", run);
+        stamp(d, del);
+        del.append_move(run);
+    } else {
+        run.parent().remove_child(run);
+    }
 }
 
 // ── breaks ───────────────────────────────────────────────────────────────

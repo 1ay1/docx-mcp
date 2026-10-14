@@ -17,7 +17,7 @@ GROUPS = [
     ("Track changes", ["set_track_changes", "list_revisions", "accept_revisions", "reject_revisions", "compare_documents"]),
     ("Comments", ["add_comment", "list_comments", "reply_comment", "resolve_comment", "edit_comment", "delete_comment"]),
     ("Tables", ["insert_table", "read_table", "set_cell", "table_rows", "table_columns", "merge_cells", "format_table", "delete_table"]),
-    ("Insert", ["insert_picture", "insert_break", "insert_hyperlink", "list_hyperlinks", "remove_hyperlinks", "add_bookmark",
+    ("Insert", ["insert_picture", "list_pictures", "format_picture", "delete_picture", "insert_break", "insert_hyperlink", "list_hyperlinks", "remove_hyperlinks", "add_bookmark",
                 "list_bookmarks", "delete_bookmark", "insert_note", "list_notes", "delete_note", "insert_field", "list_fields",
                 "update_fields", "insert_toc", "insert_equation", "insert_caption", "insert_cross_reference", "list_reference_targets", "add_content_control", "list_content_controls", "set_content_control"]),
     ("Page layout", ["get_page_setup", "set_page_setup", "set_header_footer", "remove_header_footer", "read_header_footer"]),

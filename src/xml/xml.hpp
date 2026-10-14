@@ -24,6 +24,9 @@ std::string uri_of(std::string_view prefix);
 void fix_declarations(pugi::xml_node root);
 
 // DOM helpers (qualified names, e.g. "w:p").
+inline bool name_is(pugi::xml_node n, std::string_view qname) {
+    return n && n.type() == pugi::node_element && qname == n.name();
+}
 std::vector<pugi::xml_node> children(pugi::xml_node n, std::string_view qname);
 std::vector<pugi::xml_node> descendants(pugi::xml_node n, std::string_view qname);
 pugi::xml_node first_descendant(pugi::xml_node n, std::string_view qname);

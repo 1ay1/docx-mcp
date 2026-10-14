@@ -50,6 +50,8 @@ TASKS = [
     ("merge table cells", "merge_cells"),
     ("shade a table", "format_table"),
     ("insert a picture", "insert_picture"),
+    ("wrap text around an image", "format_picture"),
+    ("resize a picture", "format_picture"),
     ("insert a page break", "insert_break"),
     ("add a hyperlink", "insert_hyperlink"),
     ("add a footnote", "insert_note"),

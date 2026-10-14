@@ -104,6 +104,37 @@ TEST(table_tracked) {
     CHECK_EQ(ja["rows"][1][0].get<std::string>(), std::string("x"));
 }
 
+// every Layout Option makes a valid anchor, can be changed and turned back
+// inline; delete works for floating ones too
+TEST(picture_floating) {
+    auto d = sample(false);
+    auto p = paragraphs(d.body())[0];
+    auto png = util::base64_decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+    for (auto w : {"square", "tight", "through", "top_bottom", "behind", "in_front"})
+        insert_picture(d, p, 0, *png, 20, 0, "pic", "", {}, placement_from_json(Json(w)));
+    auto ps = list_pictures(d);
+    CHECK_EQ((int)ps.size(), 6);
+    CHECK_EQ((int)xml::descendants(d.body(), "wp:anchor").size(), 6);
+    std::string why;
+    CHECK_EQ(schema_issues(d, &why), 0);
+    if (!why.empty()) std::printf("    %s\n", why.c_str());
+    set_picture(d, 1, 40, 0, Json{{"wrap", "square"}, {"horizontal", "center"}, {"vertical_from", "page"}, {"y", "1in"}},
+                Json("moved"));
+    auto first = list_pictures(d)[0];
+    CHECK_EQ(first.alt, std::string("moved"));
+    CHECK(first.width_pt > 39.9 && first.width_pt < 40.1);
+    set_picture(d, 2, 0, 0, Json("inline"), Json());
+    CHECK_EQ((int)xml::descendants(d.body(), "wp:inline").size(), 1);
+    delete_picture(d, 3, {});
+    CHECK_EQ((int)list_pictures(d).size(), 5);
+    bool threw = false;
+    try { placement_from_json(Json{{"wrap", "square"}, {"vertical_from", "sky"}}); } catch (std::exception&) { threw = true; }
+    CHECK(threw);
+    CHECK_EQ(schema_issues(d), 0);
+    save(d, "picture_floating");
+}
+
 TEST(picture_inline) {
     auto d = sample();
     auto p = paragraphs(d.body())[0];

@@ -1,6 +1,6 @@
 # Tool reference
 
-Generated from `docx-mcp --list-tools` by `tools/gen_tool_docs.py`. 90 tools.
+Generated from `docx-mcp --list-tools` by `tools/gen_tool_docs.py`. 93 tools.
 
 Every tool that edits takes `doc` (a handle or a file path), and most take `track` (record as a tracked change) and `author`. Paragraphs are addressed by the `id` that `read_document` returns.
 
@@ -15,7 +15,7 @@ Every tool that edits takes `doc` (a handle or a file path), and most take `trac
 - [Track changes](#track-changes): `set_track_changes`, `list_revisions`, `accept_revisions`, `reject_revisions`, `compare_documents`
 - [Comments](#comments): `add_comment`, `list_comments`, `reply_comment`, `resolve_comment`, `edit_comment`, `delete_comment`
 - [Tables](#tables): `insert_table`, `read_table`, `set_cell`, `table_rows`, `table_columns`, `merge_cells`, `format_table`, `delete_table`
-- [Insert](#insert): `insert_picture`, `insert_break`, `insert_hyperlink`, `list_hyperlinks`, `remove_hyperlinks`, `add_bookmark`, `list_bookmarks`, `delete_bookmark`, `insert_note`, `list_notes`, `delete_note`, `insert_field`, `list_fields`, `update_fields`, `insert_toc`, `insert_equation`, `insert_caption`, `insert_cross_reference`, `list_reference_targets`, `add_content_control`, `list_content_controls`, `set_content_control`
+- [Insert](#insert): `insert_picture`, `list_pictures`, `format_picture`, `delete_picture`, `insert_break`, `insert_hyperlink`, `list_hyperlinks`, `remove_hyperlinks`, `add_bookmark`, `list_bookmarks`, `delete_bookmark`, `insert_note`, `list_notes`, `delete_note`, `insert_field`, `list_fields`, `update_fields`, `insert_toc`, `insert_equation`, `insert_caption`, `insert_cross_reference`, `list_reference_targets`, `add_content_control`, `list_content_controls`, `set_content_control`
 - [Page layout](#page-layout): `get_page_setup`, `set_page_setup`, `set_header_footer`, `remove_header_footer`, `read_header_footer`
 - [File](#file): `get_properties`, `set_properties`, `get_settings`, `set_settings`, `protect_document`, `unprotect_document`
 - [Expert](#expert): `validate_document`, `get_xml`, `set_paragraph_xml`
@@ -657,7 +657,7 @@ Delete a whole table from the document.
 
 ### `insert_picture`
 
-Insert an inline picture from a file (PNG, JPEG, GIF, BMP, TIFF, SVG, EMF, WMF) or base64 data. Size in points; give width or height to keep the aspect ratio. Too-wide pictures are scaled to the text width like Word.
+Insert a picture or image (photo, logo, chart image) from a file (PNG, JPEG, GIF, BMP, TIFF, SVG, EMF, WMF) or base64 data. Size in points; give width or height to keep the aspect ratio. Too-wide pictures are scaled to the text width like Word. layout makes it float with text wrapping.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
@@ -668,10 +668,43 @@ Insert an inline picture from a file (PNG, JPEG, GIF, BMP, TIFF, SVG, EMF, WMF) 
 | `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `file` | string |  | Image file path. |
 | `height` | number |  | pt |
+| `layout` | any |  | Layout Options. "inline" (default) flows with the text; "square", "tight", "through", "top_bottom" wrap text around it; "behind" / "in_front" float over the text. Or an object: {wrap, horizontal: left\|center\|right, vertical: top\|center\|bottom, x, y (points or "1in"), horizontal_from: margin\|page\|column\|character, vertical_from: margin\|page\|paragraph\|line, distance (gap to text, points)}. |
 | `paragraph` | string | yes | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
 | `position` | integer |  | Character offset to insert at (default end). |
 | `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 | `width` | number |  | pt |
+
+### `list_pictures`
+
+List the pictures in the document: number, size in points, layout (inline or how text wraps), alt text and the paragraph each sits in.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+
+### `format_picture`
+
+Resize a picture, change how text wraps around it (Layout Options), move it, or set its alt text. Give width or height alone to keep the aspect ratio.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `alt_text` | string |  |  |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `height` | number |  | pt |
+| `layout` | any |  | Layout Options. "inline" (default) flows with the text; "square", "tight", "through", "top_bottom" wrap text around it; "behind" / "in_front" float over the text. Or an object: {wrap, horizontal: left\|center\|right, vertical: top\|center\|bottom, x, y (points or "1in"), horizontal_from: margin\|page\|column\|character, vertical_from: margin\|page\|paragraph\|line, distance (gap to text, points)}. |
+| `picture` | integer | yes | From list_pictures (1-based). |
+| `width` | number |  | pt |
+
+### `delete_picture`
+
+Delete a picture (number from list_pictures).
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `author` | string |  | Author of this change. |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `picture` | integer | yes |  |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 
 ### `insert_break`
 
