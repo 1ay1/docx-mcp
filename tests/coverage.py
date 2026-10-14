@@ -220,11 +220,14 @@ def exercise(R, doc, track, work, tag):
     fn = R.call("insert_note", doc=doc, paragraph=p0, position=3, text="A footnote", **t)
     R.call("insert_note", doc=doc, paragraph=p1, kind="endnote", text="An endnote", **t)
     notes = R.call("list_notes", doc=doc) or []
-    R.call("insert_note", doc=doc, paragraph=p2, text="Doomed note", **t)
+    nr = R.call("insert_note", doc=doc, paragraph=p2, text="Doomed note", **t)
     notes = R.call("list_notes", doc=doc) or []
-    doomed = [n for n in notes if isinstance(n, dict) and "Doomed" in n.get("text", "")]
+    notes = [n for n in notes if isinstance(n, dict)]
+    doomed = [n for n in notes if "Doomed" in n.get("text", "")] or notes
     if doomed:
         R.call("delete_note", doc=doc, kind=doomed[0].get("kind", "footnote"), id=str(doomed[0]["id"]), **t)
+    else:
+        R.fail.append("%s: no notes to delete; insert_note returned %s, list_notes %s" % (tag, json.dumps(nr), json.dumps(notes)))
     R.call("insert_field", doc=doc, paragraph=p1, position=1, code="PAGE", result="1", **t)
     R.call("insert_field", doc=doc, paragraph=p1, code="DATE \\@ \"yyyy-MM-dd\"", **t)
     R.call("insert_field", doc=doc, paragraph=p2, code="REF cov_bm \\h", **t)
