@@ -1400,7 +1400,8 @@ std::vector<ToolDef> make_tools() {
          }});
     add({"set_page_setup", "Page setup",
          "Set page layout of a section (1-based, default all): orientation, paper (letter|a4|legal|a3|a5|b5|executive|tabloid), "
-         "page_width/page_height, margins {top,bottom,left,right,header,footer,gutter} (pt or \"1in\"), columns, column_space, "
+         "page_width/page_height, margins {top,bottom,left,right,header,footer,gutter} (pt or \"1in\"), columns, column_space, column_line, column_widths, "
+         "page_borders, page_color, "
          "vertical_align, line_numbers, page_numbers {start, format}, title_page (different first page), type (section start).",
          obj({{"doc", kDoc}, {"section", integer("Omit for all sections.")},
               {"setup", {{"type", "object"}, {"description", "Lengths in pt or with units (\"1in\", \"2cm\")."},
@@ -1409,6 +1410,10 @@ std::vector<ToolDef> make_tools() {
                                          {"page_width", str("")}, {"page_height", str("")},
                                          {"margins", anyobj("{top,bottom,left,right,header,footer,gutter}")},
                                          {"columns", integer("")}, {"column_space", str("")},
+                                         {"column_line", boolean("Line between columns.")},
+                                         {"column_widths", arr(str(""), "Unequal columns: a width per column (pt or \"2in\").")},
+                                         {"page_borders", anyobj("\"single\", {style, size, color} for all sides, or {top, left, bottom, right, offset_from: page|text}; null removes.")},
+                                         {"page_color", str("Page background (whole document), RRGGBB or a name; null removes.")},
                                          {"vertical_align", enm({"top", "center", "both", "bottom"}, "")},
                                          {"line_numbers", anyobj("")}, {"page_numbers", anyobj("{start, format}")},
                                          {"title_page", boolean("Different first page.")},
@@ -1450,6 +1455,19 @@ std::vector<ToolDef> make_tools() {
          false, true, [](Sessions& S, const Json& a) {
              remove_header_footer(mut(S, a).doc, iarg(a, "section", 1), need(a, "kind"), sarg(a, "which", "default"));
              return Json{{"removed", sarg(a, "which", "default") + " " + need(a, "kind")}, {"section", iarg(a, "section", 1)}};
+         }});
+    add({"set_watermark", "Watermark",
+         "Put a text watermark behind every page (Design > Watermark), e.g. DRAFT or CONFIDENTIAL. remove: true takes it off.",
+         obj({{"doc", kDoc}, {"text", str("Watermark text.")}, {"remove", boolean("Remove the watermark instead.")},
+              {"layout", enm({"diagonal", "horizontal"}, "Default diagonal.")}, {"color", str("RRGGBB or a name. Default silver.")},
+              {"font", str("Default Calibri.")}, {"size", num("Points; default fits the page width.")},
+              {"opacity", num("0-1, default 0.5.")}},
+             {"doc"}),
+         false, false, [](Sessions& S, const Json& a) {
+             auto& s = mut(S, a);
+             if (barg(a, "remove", false)) return Json{{"removed", remove_watermark(s.doc)}};
+             int n = set_watermark(s.doc, need(a, "text"), a);
+             return Json{{"watermark", need(a, "text")}, {"headers", n}, {"layout", sarg(a, "layout", "diagonal")}};
          }});
     add({"read_header_footer", "Read header / footer", "Read a header or footer: its paragraphs with ids you can edit (paragraph = \"part#id\").", obj({{"doc", kDoc}, {"section", integer("")}, {"kind", enm({"header", "footer"}, "")},
                                                                 {"which", enm({"default", "first", "even"}, "")}},

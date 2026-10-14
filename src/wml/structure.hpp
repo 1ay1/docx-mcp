@@ -81,6 +81,9 @@ std::string header_footer(Document& d, int section, const std::string& kind, con
 void set_header_footer_text(Document& d, int section, const std::string& kind, const std::string& which,
                             const std::string& text, const Json& opts);
 void remove_header_footer(Document& d, int section, const std::string& kind, const std::string& which);
+// Text watermark behind every page (Design > Watermark). Returns headers touched.
+int set_watermark(Document& d, const std::string& text, const Json& opts);
+int remove_watermark(Document& d);
 
 // ── notes ──
 std::string add_note(Document& d, pugi::xml_node p, int pos, const std::string& kind, const std::string& text, const EditOpts& o);

@@ -144,6 +144,9 @@ void border(pugi::xml_node b, const Json& v) {
 
 }  // namespace
 
+void set_border(pugi::xml_node b, const Json& v) { border(b, v); }
+std::string color_hex(const Json& v) { return hexcolor(v); }
+
 std::string enum_attr(pugi::xml_node e, const char* attr, const std::string& v) {
     std::string c = check_enum_impl(e, attr, v);
     xml::set_attr(e, attr, c);

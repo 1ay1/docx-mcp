@@ -566,7 +566,23 @@ Json section_json(Document& d, pugi::xml_node s) {
     if (auto c = s.child("w:cols")) {
         j["columns"] = util::to_int(xml::attr(c, "w:num", "1"));
         j["column_space"] = util::to_double(xml::attr(c, "w:space", "720")) / 20;
+        if (xml::attr(c, "w:sep") == "1" || xml::attr(c, "w:sep") == "true") j["column_line"] = true;
+        if (c.child("w:col")) {
+            Json cw = Json::array();
+            for (auto col : xml::children(c, "w:col")) cw.push_back(util::to_double(xml::attr(col, "w:w", "0")) / 20);
+            j["column_widths"] = cw;
+        }
     }
+    if (auto pb = s.child("w:pgBorders")) {
+        Json bj = Json::object();
+        for (auto side : {"top", "left", "bottom", "right"})
+            if (auto b = pb.child((std::string("w:") + side).c_str()))
+                bj[side] = {{"style", xml::attr(b, "w:val")}, {"size", util::to_double(xml::attr(b, "w:sz", "4")) / 8},
+                            {"color", xml::attr(b, "w:color", "auto")}};
+        bj["offset_from"] = xml::attr(pb, "w:offsetFrom", "text");
+        j["page_borders"] = bj;
+    }
+    if (auto bg = d.body().parent().child("w:background")) j["page_color"] = xml::attr(bg, "w:color");
     j["title_page"] = (bool)s.child("w:titlePg");
     Json hf = Json::object();
     for (auto q : {"w:headerReference", "w:footerReference"}) {
@@ -647,7 +663,62 @@ void format_section(Document& d, int index, const Json& props, const EditOpts& o
             auto pn = schema::ensure_child(s, "w:pgNumType");
             if (v.contains("start")) xml::set_attr(pn, "w:start", std::to_string(v["start"].get<int>()));
             if (v.contains("format")) xml::set_attr(pn, "w:fmt", v["format"].get<std::string>());
-        } else throw std::runtime_error(util::unknown_key("page setup key", k, {"orientation", "paper", "page_width", "page_height", "margins", "columns", "column_space", "type", "title_page", "vertical_align", "line_numbers", "page_numbers"}));
+        } else if (k == "column_line") {
+            auto c = schema::ensure_child(s, "w:cols");
+            if (v.get<bool>()) xml::set_attr(c, "w:sep", "1");
+            else xml::remove_attr(c, "w:sep");
+        } else if (k == "column_widths") {
+            // unequal columns: [width, ...] or [{width, space}, ...]
+            auto c = schema::ensure_child(s, "w:cols");
+            while (c.child("w:col")) c.remove_child("w:col");
+            if (v.is_null() || v.empty()) { xml::remove_attr(c, "w:equalWidth"); continue; }
+            xml::set_attr(c, "w:num", std::to_string(v.size()));
+            xml::set_attr(c, "w:equalWidth", "0");
+            std::string gap = xml::attr(c, "w:space", "720");
+            for (std::size_t i = 0; i < v.size(); i++) {
+                auto col = c.append_child("w:col");
+                const Json& w = v[i].is_object() ? v[i].value("width", Json(nullptr)) : v[i];
+                if (w.is_null()) throw std::runtime_error("column_widths: each entry needs a width");
+                xml::set_attr(col, "w:w", std::to_string(twips_of(w)));
+                if (i + 1 < v.size())
+                    xml::set_attr(col, "w:space", v[i].is_object() && v[i].contains("space") ? std::to_string(twips_of(v[i]["space"])) : gap);
+            }
+        } else if (k == "page_borders") {
+            // "single" | {style,size,color,space} for all sides | {top:..., left:..., offset_from:"page"|"text"}
+            if (v.is_null() || (v.is_boolean() && !v.get<bool>())) { s.remove_child("w:pgBorders"); continue; }
+            auto pb = schema::ensure_child(s, "w:pgBorders");
+            static const char* sides[] = {"top", "left", "bottom", "right"};
+            bool per_side = v.is_object() && (v.contains("top") || v.contains("left") || v.contains("bottom") || v.contains("right"));
+            std::string from = v.is_object() ? v.value("offset_from", std::string("page")) : "page";
+            if (from != "page" && from != "text") throw std::runtime_error("page_borders.offset_from must be page or text");
+            if (from == "page") xml::set_attr(pb, "w:offsetFrom", "page");
+            else xml::remove_attr(pb, "w:offsetFrom");
+            Json all = v;
+            if (all.is_object()) all.erase("offset_from");
+            for (auto side : sides) {
+                Json bv = per_side ? (v.contains(side) ? v[side] : Json(nullptr)) : all;
+                std::string q = std::string("w:") + side;
+                if (bv.is_null()) { if (per_side && v.contains(side)) pb.remove_child(q.c_str()); continue; }
+                // Word measures page-border space from the page edge in points (24 is its default)
+                if (from == "page" && (!bv.is_object() || !bv.contains("space"))) {
+                    if (!bv.is_object()) bv = Json{{"style", bv.is_string() ? bv.get<std::string>() : "single"}};
+                    bv["space"] = 24;
+                }
+                set_border(schema::ensure_child(pb, q), bv);
+            }
+        } else if (k == "page_color") {
+            // document-wide: w:background, shown once settings asks for it
+            auto body_root = d.body().parent();
+            if (v.is_null()) {
+                body_root.remove_child("w:background");
+                d.settings().remove_child("w:displayBackgroundShape");
+                continue;
+            }
+            auto bg = body_root.child("w:background");
+            if (!bg) bg = body_root.prepend_child("w:background");
+            xml::set_attr(bg, "w:color", color_hex(v));
+            schema::ensure_child(d.settings(), "w:displayBackgroundShape");
+        } else throw std::runtime_error(util::unknown_key("page setup key", k, {"orientation", "paper", "page_width", "page_height", "margins", "columns", "column_space", "column_line", "column_widths", "type", "title_page", "vertical_align", "line_numbers", "page_numbers", "page_borders", "page_color"}));
     }
     // pPr even-and-odd headers live in settings
     if (props.contains("even_odd_headers")) {
@@ -728,6 +799,108 @@ void set_header_footer_text(Document& d, int section, const std::string& kind, c
             i = e + 1;
         }
     }
+}
+
+// ── watermark ──────────────────────────────────────────────────────────────
+// Word's Design > Watermark: a VML text path in each header, behind the text.
+
+namespace {
+bool is_watermark_run(pugi::xml_node r) {
+    for (auto pict : xml::children(r, "w:pict"))
+        for (auto sh : pict.children())
+            if (std::string(xml::attr(sh, "id")).rfind("PowerPlusWaterMarkObject", 0) == 0) return true;
+    return false;
+}
+
+std::vector<std::string> header_parts_for_watermark(Document& d, bool create) {
+    std::vector<std::string> parts;
+    auto ss = sections(d);
+    for (int i = 1; i <= (int)ss.size(); i++)
+        for (auto which : {"default", "first", "even"}) {
+            std::string part = header_footer(d, i, "header", which, create && i == 1 && std::string(which) == "default");
+            if (!part.empty() && std::find(parts.begin(), parts.end(), part) == parts.end()) parts.push_back(part);
+        }
+    return parts;
+}
+
+int remove_watermarks_in(pugi::xml_node root) {
+    std::vector<pugi::xml_node> runs;
+    for (auto r : root.select_nodes(".//w:r")) if (is_watermark_run(r.node())) runs.push_back(r.node());
+    for (auto r : runs) r.parent().remove_child(r);
+    return (int)runs.size();
+}
+}  // namespace
+
+int remove_watermark(Document& d) {
+    int n = 0;
+    for (auto& part : header_parts_for_watermark(d, false)) n += remove_watermarks_in(d.pkg().xml(part).document_element());
+    return n;
+}
+
+int set_watermark(Document& d, const std::string& text, const Json& opts_in) {
+    if (util::trim(text).empty()) throw std::runtime_error("watermark text is empty (use remove to take it off)");
+    const Json o = opts_in.is_object() ? opts_in : Json::object();
+    std::string font = o.value("font", std::string("Calibri"));
+    std::string color = o.contains("color") ? color_hex(o["color"]) : "C0C0C0";
+    bool diagonal = o.value("layout", std::string("diagonal")) != "horizontal";
+    double opacity = o.value("opacity", 0.5);
+    if (opacity <= 0 || opacity > 1) throw std::runtime_error("opacity must be between 0 and 1");
+    // Word sizes the shape to the text: ~0.6 em per character at 1pt font
+    double size = o.value("size", 0.0);
+    auto u = util::to_u32(text);
+    double width = size > 0 ? size * 0.6 * u.size() : 468.0;
+    if (size <= 0) size = std::max(20.0, std::min(200.0, width / (0.6 * std::max<std::size_t>(1, u.size()))));
+    double height = size * 1.2;
+    auto esc = [](const std::string& s) {
+        std::string r;
+        for (char c : s) {
+            if (c == '&') r += "&amp;"; else if (c == '<') r += "&lt;"; else if (c == '>') r += "&gt;"; else if (c == '"') r += "&quot;";
+            else r += c;
+        }
+        return r;
+    };
+    char buf[64];
+    auto num = [&](double v) { std::snprintf(buf, sizeof buf, "%.1f", v); return std::string(buf); };
+    int n = 0;
+    for (auto& part : header_parts_for_watermark(d, true)) {
+        auto root = d.pkg().xml(part).document_element();
+        remove_watermarks_in(root);
+        xml::declare(root, "v");
+        xml::declare(root, "o");
+        xml::declare(root, "w10");
+        std::string id = "PowerPlusWaterMarkObject" + std::to_string(d.next_annotation_id());
+        std::string frag =
+            "<w:r><w:rPr><w:noProof/></w:rPr><w:pict>"
+            "<v:shapetype id=\"_x0000_t136\" coordsize=\"21600,21600\" o:spt=\"136\" adj=\"10800\" path=\"m@7,l@8,m@5,21600l@6,21600e\">"
+            "<v:formulas><v:f eqn=\"sum #0 0 10800\"/><v:f eqn=\"prod #0 2 1\"/><v:f eqn=\"sum 21600 0 @1\"/><v:f eqn=\"sum 0 0 @2\"/>"
+            "<v:f eqn=\"sum 21600 0 @3\"/><v:f eqn=\"if @0 @3 0\"/><v:f eqn=\"if @0 21600 @1\"/><v:f eqn=\"if @0 0 @2\"/>"
+            "<v:f eqn=\"if @0 @4 21600\"/><v:f eqn=\"mid @5 @6\"/><v:f eqn=\"mid @8 @5\"/><v:f eqn=\"mid @7 @8\"/>"
+            "<v:f eqn=\"mid @6 @7\"/><v:f eqn=\"sum @6 0 @5\"/></v:formulas>"
+            "<v:path textpathok=\"t\" o:connecttype=\"custom\" o:connectlocs=\"@9,0;@10,10800;@11,21600;@12,10800\" o:connectangles=\"270,180,90,0\"/>"
+            "<v:textpath on=\"t\" fitshape=\"t\"/><v:handles><v:h position=\"#0,bottomRight\" xrange=\"6629,14971\"/></v:handles>"
+            "<o:lock v:ext=\"edit\" text=\"t\" shapetype=\"t\"/></v:shapetype>"
+            "<v:shape id=\"" + id + "\" o:spid=\"_x0000_s" + std::to_string(2049 + n) + "\" type=\"#_x0000_t136\" "
+            "style=\"position:absolute;margin-left:0;margin-top:0;width:" + num(width) + "pt;height:" + num(height) + "pt;" +
+            (diagonal ? "rotation:315;" : "") +
+            "z-index:-251657216;mso-position-horizontal:center;mso-position-horizontal-relative:margin;"
+            "mso-position-vertical:center;mso-position-vertical-relative:margin\" o:allowincell=\"f\" fillcolor=\"#" + color +
+            "\" stroked=\"f\"><v:fill opacity=\"" + num(opacity) + "\"/>"
+            "<v:textpath style=\"font-family:&quot;" + esc(font) + "&quot;;font-size:1pt\" string=\"" + esc(text) + "\"/>"
+            "<w10:wrap anchorx=\"margin\" anchory=\"margin\"/></v:shape></w:pict></w:r>";
+        pugi::xml_document holder;
+        std::string err;
+        if (!xml::parse_fragment(frag, holder, &err)) throw std::runtime_error("watermark: " + err);
+        auto p = root.child("w:p");
+        if (!p) {
+            p = root.append_child("w:p");
+            xml::set_attr(schema::ensure_child(p, "w:pPr").append_child("w:pStyle"), "w:val", "Header");
+        }
+        // first in the paragraph, after pPr
+        pugi::xml_node before = p.child("w:pPr") ? p.child("w:pPr").next_sibling() : p.first_child();
+        for (auto c : holder.children()) xml::copy_into(p, c, before);
+        n++;
+    }
+    return n;
 }
 
 void remove_header_footer(Document& d, int section, const std::string& kind, const std::string& which) {

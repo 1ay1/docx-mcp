@@ -73,6 +73,10 @@ bool is_run_prop(const std::string& key);
 bool is_para_prop(const std::string& key);
 Json rpr_to_json(pugi::xml_node rpr);
 Json ppr_to_json(pugi::xml_node ppr);
+// A border element from "single" or {style, size (pt), color, space}.
+void set_border(pugi::xml_node b, const Json& v);
+// "#1F4E79", "1f4e79" or a basic name -> RRGGBB.
+std::string color_hex(const Json& v);
 
 // ── revisions ──
 struct RevisionInfo {

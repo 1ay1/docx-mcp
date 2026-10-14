@@ -271,11 +271,18 @@ def exercise(R, doc, track, work, tag):
                                              "columns": 2, "paper": "a4", "page_numbers": {"start": 3}}, **t)
     R.call("insert_break", doc=doc, paragraph=p2, type="section_next_page", **t)
     R.call("set_page_setup", doc=doc, section=2, setup={"orientation": "portrait", "title_page": True}, **t)
+    R.call("set_page_setup", doc=doc, section=1, setup={"page_borders": {"style": "double", "color": "1F4E79"},
+                                                        "page_color": "FDF6E3", "column_line": True,
+                                                        "column_widths": ["3in", "2in"]}, **t)
     R.call("set_header_footer", doc=doc, kind="header", text="Header {PAGE} of {NUMPAGES}", alignment="center")
     R.call("set_header_footer", doc=doc, kind="footer", which="first", text="First footer")
     R.call("set_header_footer", doc=doc, kind="header", which="even", text="Even header")
     R.call("read_header_footer", doc=doc, kind="header")
     R.call("remove_header_footer", doc=doc, kind="header", which="even")
+    R.call("set_watermark", doc=doc, text="DRAFT")
+    R.call("set_watermark", doc=doc, text="CONFIDENTIAL", layout="horizontal", color="red")
+    if not track:
+        R.call("set_watermark", doc=doc, remove=True)
 
     # doc-level
     R.call("get_properties", doc=doc)
