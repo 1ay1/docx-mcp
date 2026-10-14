@@ -644,8 +644,8 @@ std::vector<ToolDef> make_tools() {
              return para_brief(s.doc, r.p);
          }});
     add({"move_paragraphs", "Move paragraphs",
-         "Cut paragraphs and paste them elsewhere (before/after a target). Untracked moves relocate the XML; tracked moves are "
-         "recorded as a deletion plus an insertion.",
+         "Cut paragraphs and paste them elsewhere (before/after a target). With Track Changes this is a real Word "
+         "move: shown as moved from / moved to, accepted or rejected as one.",
          obj({{"doc", kDoc}, {"paragraphs", arr(str(""), "Paragraph ids in order.")}, {"target", kPara}, {"where", enm({"after", "before"}, "")},
               {"track", kTrack}, {"author", str("Author of this change.")}},
              {"doc", "paragraphs", "target"}),
@@ -654,31 +654,8 @@ std::vector<ToolDef> make_tools() {
              std::vector<pugi::xml_node> ps;
              for (auto& id : strs(a, "paragraphs")) ps.push_back(find_para(s.doc, id).p);
              auto tgt = find_para(s.doc, need(a, "target")).p;
-             bool after = sarg(a, "where", "after") == "after";
-             EditOpts o = track(a);
-             bool tracked = o.track ? *o.track : s.doc.track_changes();
-             if (!tracked) {
-                 pugi::xml_node anchor = tgt;
-                 for (auto p : ps) {
-                     if (p == tgt) continue;
-                     if (after) { anchor.parent().insert_move_after(p, anchor); anchor = p; }
-                     else tgt.parent().insert_move_before(p, tgt);
-                 }
-             } else {
-                 pugi::xml_node anchor = tgt;
-                 for (auto p : ps) {
-                     if (p == tgt) continue;
-                     pugi::xml_document copy;
-                     copy.append_copy(p);
-                     auto np = after ? anchor.parent().insert_copy_after(copy.first_child(), anchor) : tgt.parent().insert_copy_before(copy.first_child(), tgt);
-                     xml::set_attr(np, "w14:paraId", s.doc.new_hex_id());
-                     // the copy is an insertion; the original a deletion
-                     mark_paragraph_inserted(s.doc, np);
-                     delete_paragraph(s.doc, p, {true});
-                     if (after) anchor = np;
-                 }
-             }
-             return Json{{"moved", ps.size()}};
+             int n = move_paragraphs(s.doc, ps, tgt, sarg(a, "where", "after") == "after", track(a));
+             return Json{{"moved", n}};
          }});
 
     // ── formatting ───────────────────────────────────────────────────────

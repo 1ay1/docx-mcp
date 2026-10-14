@@ -148,10 +148,15 @@ void remove_mark(pugi::xml_node p) {
         // Before a table / at the end of a cell or story the mark can't be removed;
         // Word drops an empty paragraph there, else keeps it.
         bool empty = true;
-        for (auto c : p.children())
-            if (c.type() == pugi::node_element && !name_is(c, "w:pPr") && !name_is(c, "w:bookmarkStart") &&
-                !name_is(c, "w:bookmarkEnd"))
-                empty = false;
+        for (auto c : p.children()) {
+            std::string_view q = c.name();
+            // range markers carry no content (bookmarks, move/comment ranges)
+            bool marker = q == "w:pPr" || q == "w:bookmarkStart" || q == "w:bookmarkEnd" ||
+                          q == "w:moveFromRangeStart" || q == "w:moveFromRangeEnd" || q == "w:moveToRangeStart" ||
+                          q == "w:moveToRangeEnd" || q == "w:commentRangeStart" || q == "w:commentRangeEnd" ||
+                          q == "w:proofErr" || q == "w:permStart" || q == "w:permEnd";
+            if (c.type() == pugi::node_element && !marker) empty = false;
+        }
         int blocks_in_parent = 0;
         for (auto c : p.parent().children())
             if (name_is(c, "w:p") || name_is(c, "w:tbl")) blocks_in_parent++;

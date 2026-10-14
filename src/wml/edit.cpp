@@ -109,7 +109,7 @@ void stamp(Document& d, pugi::xml_node rev) {
 
 // ── text ─────────────────────────────────────────────────────────────────
 
-void mark_paragraph_inserted(Document& d, pugi::xml_node p) {
+void mark_paragraph_inserted(Document& d, pugi::xml_node p, const char* q_mark) {
     // Copied content carries its old revisions: deleted text is gone in the
     // copy, inserted text is plain content of the new insertion.
     std::function<void(pugi::xml_node)> settle = [&](pugi::xml_node n) {
@@ -146,14 +146,14 @@ void mark_paragraph_inserted(Document& d, pugi::xml_node p) {
     settle(p);
     auto rpr = schema::ensure_child(schema::ensure_child(p, "w:pPr"), "w:rPr");
     for (auto q : {"w:ins", "w:del", "w:moveFrom", "w:moveTo"}) rpr.remove_child(q);
-    stamp(d, schema::ensure_child(rpr, "w:ins"));
+    stamp(d, schema::ensure_child(rpr, q_mark));
     p.child("w:pPr").remove_child("w:pPrChange");
     // wrap runs (and math) where they sit: in p, hyperlinks, fldSimple, sdtContent...
     std::function<void(pugi::xml_node)> wrap_runs = [&](pugi::xml_node n) {
         std::vector<pugi::xml_node> run;
         auto flush = [&]() {
             if (run.empty()) return;
-            auto ins = n.insert_child_before("w:ins", run.front());
+            auto ins = n.insert_child_before(q_mark, run.front());
             stamp(d, ins);
             for (auto r : run) ins.append_move(r);
             run.clear();
@@ -163,7 +163,7 @@ void mark_paragraph_inserted(Document& d, pugi::xml_node p) {
             std::string_view q = c.name();
             if (q == "w:r" || q == "m:oMath" || q == "m:oMathPara") {
                 if (q == "w:r") run.push_back(c);
-                else { flush(); for (auto mr : xml::descendants(c, "m:r")) wrap_math_run(d, mr, "w:ins"); }
+                else { flush(); for (auto mr : xml::descendants(c, "m:r")) wrap_math_run(d, mr, q_mark); }
             } else {
                 flush();
                 if (q == "w:hyperlink" || q == "w:fldSimple" || q == "w:smartTag" || q == "w:customXml" ||
@@ -562,6 +562,89 @@ pugi::xml_node insert_paragraph(Document& d, pugi::xml_node ref, bool after, con
         }
     }
     return np;
+}
+
+int move_paragraphs(Document& d, const std::vector<pugi::xml_node>& ps_in, pugi::xml_node tgt, bool after,
+                    const EditOpts& o) {
+    std::vector<pugi::xml_node> ps;
+    for (auto p : ps_in)
+        if (p != tgt) ps.push_back(p);
+    if (ps.empty()) return 0;
+    if (!tracking(d, o)) {
+        pugi::xml_node anchor = tgt;
+        for (auto p : ps) {
+            if (after) { anchor.parent().insert_move_after(p, anchor); anchor = p; }
+            else tgt.parent().insert_move_before(p, tgt);
+        }
+        return (int)ps.size();
+    }
+    // A tracked move is one named move: moveFromRange around the originals,
+    // moveToRange around the copies, sharing a name (Word's "move123456789").
+    std::string name = "move" + std::to_string(100000000 + util::random_u32() % 900000000);
+    auto range = [&](pugi::xml_node first_p, pugi::xml_node last_p, const char* qs, const char* qe) {
+        auto s = first_p.insert_child_after(qs, first_p.child("w:pPr"));
+        if (!first_p.child("w:pPr")) {
+            first_p.remove_child(s);
+            s = first_p.prepend_child(qs);
+        }
+        stamp(d, s);
+        xml::set_attr(s, "w:name", name);
+        // Word requires a date on move ranges
+        if (!s.attribute("w:date")) xml::set_attr(s, "w:date", d.date());
+        auto e = last_p.append_child(qe);
+        xml::set_attr(e, "w:id", xml::attr(s, "w:id"));
+    };
+    std::vector<pugi::xml_node> copies;
+    pugi::xml_node anchor = tgt;
+    for (auto p : ps) {
+        pugi::xml_document copy;
+        copy.append_copy(p);
+        auto np = after ? anchor.parent().insert_copy_after(copy.first_child(), anchor)
+                        : tgt.parent().insert_copy_before(copy.first_child(), tgt);
+        xml::set_attr(np, "w14:paraId", d.new_hex_id());
+        mark_paragraph_inserted(d, np, "w:moveTo");
+        copies.push_back(np);
+        if (after) anchor = np;
+    }
+    // the originals: their text and marks become w:moveFrom (own insertions
+    // just go, like deleting your own inserted text)
+    for (auto p : ps) {
+        std::function<void(pugi::xml_node)> wrap = [&](pugi::xml_node n) {
+            std::vector<pugi::xml_node> run;
+            auto flush = [&]() {
+                if (run.empty()) return;
+                auto mf = n.insert_child_before("w:moveFrom", run.front());
+                stamp(d, mf);
+                for (auto r : run) mf.append_move(r);
+                run.clear();
+            };
+            for (auto c = n.first_child(); c;) {
+                auto nx = c.next_sibling();
+                std::string_view q = c.name();
+                if (q == "w:r") run.push_back(c);
+                else if (q == "w:ins") {
+                    flush();
+                    if (mine(d, c)) n.remove_child(c);  // own insertion: nothing to move from
+                    else { wrap(c); }
+                } else if (q == "w:del" || q == "w:moveFrom") {
+                    flush();  // already gone; stays as it is
+                } else {
+                    flush();
+                    if (q == "w:hyperlink" || q == "w:fldSimple" || q == "w:smartTag" || q == "w:customXml" ||
+                        q == "w:sdt" || q == "w:sdtContent")
+                        wrap(c);
+                }
+                c = nx;
+            }
+            flush();
+        };
+        wrap(p);
+        auto rpr = schema::ensure_child(schema::ensure_child(p, "w:pPr"), "w:rPr");
+        if (!rpr.child("w:moveFrom") && !rpr.child("w:del")) stamp(d, schema::ensure_child(rpr, "w:moveFrom"));
+    }
+    range(ps.front(), ps.back(), "w:moveFromRangeStart", "w:moveFromRangeEnd");
+    range(copies.front(), copies.back(), "w:moveToRangeStart", "w:moveToRangeEnd");
+    return (int)ps.size();
 }
 
 void delete_paragraph(Document& d, pugi::xml_node p, const EditOpts& o) {

@@ -323,6 +323,44 @@ TEST(partial_accept_keeps_prop_changes) {
     CHECK_EQ(schema_issues(d), 0);
 }
 
+// a tracked move is moveFrom/moveTo with named ranges; accept puts the text
+// in its new place, reject leaves the document as it was
+TEST(tracked_move_paragraphs) {
+    auto build = []() {
+        auto d = Document::from_bytes(Document::create().to_bytes());
+        auto p0 = paragraphs(d.body())[0];
+        std::vector<pugi::xml_node> ps;
+        pugi::xml_node at = p0;
+        for (auto t : {U"One", U"Two", U"Three", U"Four"}) ps.push_back(at = insert_paragraph(d, at, true, t, "", nullptr, {false}));
+        return std::make_pair(std::move(d), ps);
+    };
+    auto texts = [](Document& d) {
+        std::string s;
+        for (auto p : paragraphs(d.body()))
+            if (auto t = analyze(p).utf8(); !t.empty()) s += t + "|";
+        return s;
+    };
+    for (bool after : {true, false}) {
+        auto [d, ps] = build();
+        CHECK_EQ(move_paragraphs(d, {ps[1], ps[2]}, after ? ps[3] : ps[0], after, {true}), 2);
+        CHECK(xml::first_descendant(d.body(), "w:moveFromRangeStart"));
+        CHECK(xml::first_descendant(d.body(), "w:moveToRangeStart"));
+        CHECK_EQ(xml::attr(xml::first_descendant(d.body(), "w:moveFromRangeStart"), "w:name"),
+                 xml::attr(xml::first_descendant(d.body(), "w:moveToRangeStart"), "w:name"));
+        CHECK_EQ(schema_issues(d), 0);
+        auto b = d.to_bytes();
+        auto a = Document::from_bytes(b);
+        accept_revisions(a, {});
+        CHECK_EQ(texts(a), std::string(after ? "One|Four|Two|Three|" : "Two|Three|One|Four|"));
+        CHECK_EQ(schema_issues(a), 0);
+        auto r = Document::from_bytes(b);
+        reject_revisions(r, {});
+        CHECK_EQ(texts(r), std::string("One|Two|Three|Four|"));
+        CHECK_EQ((int)paragraphs(r.body()).size(), 5);  // the blank first paragraph + four
+        CHECK_EQ(schema_issues(r), 0);
+    }
+}
+
 // copies of comment anchors (from edits that copy a paragraph) are dropped
 TEST(dedupe_comment_anchors) {
     auto d = sample(false);

@@ -100,7 +100,12 @@ void stamp(Document& d, pugi::xml_node rev);
 // Mark everything in paragraph p as inserted by the current author: runs are
 // wrapped in w:ins (inside hyperlinks, fields, content controls too), the
 // paragraph mark gets w:ins, old revisions are resolved to their result.
-void mark_paragraph_inserted(Document& d, pugi::xml_node p);
+void mark_paragraph_inserted(Document& d, pugi::xml_node p, const char* marker = "w:ins");
+// Move paragraphs like Word: untracked they're relocated; tracked, the
+// originals become w:moveFrom and the copies w:moveTo, each wrapped in a
+// named move range so Word shows them as one move. Returns the moved count.
+int move_paragraphs(Document& d, const std::vector<pugi::xml_node>& ps, pugi::xml_node target, bool after,
+                    const EditOpts& o);
 // Track a math run as inserted/deleted: wraps the m:r in w:ins/w:del
 // (the schema-valid form; Word's own form puts the marker inside m:r).
 void wrap_math_run(Document& d, pugi::xml_node mr, const char* q);
