@@ -1157,7 +1157,36 @@ std::vector<ToolDef> make_tools() {
              int n = 0;
              for (auto& pi : all)
                  if (pi.para == para_id(r.p)) n = pi.index;
-             return Json{{"ok", true}, {"picture", n}, {"layout", place.wrap}};
+             return Json{{"picture", n}, {"layout", place.wrap}, {"paragraph", para_id(r.p)}};
+         }});
+    add({"insert_text_box", "Insert text box",
+         "Insert a text box (Insert > Text Box): a bordered box of text that floats with text wrapped around it, for "
+         "callouts, sidebars and pull quotes. Lines in `text` become paragraphs; edit them later by the returned ids.",
+         obj({{"doc", kDoc}, {"paragraph", kPara}, {"position", integer("")}, {"text", str("Text; \\n separates paragraphs.")},
+              {"width", num("pt, default 216 (3in)")}, {"height", num("pt, default fits the text")},
+              {"fill", str("Background, RRGGBB or a name.")},
+              {"border", str("Outline color, or false for none. Object {color, size} also works.")},
+              {"shape", enm({"rect", "rounded"}, "Default rect.")}, {"alignment", enm({"left", "center", "right"}, "")},
+              {"format", kRunFmt}, {"layout", kLayout}, {"track", kTrack}},
+             {"doc", "paragraph", "text"}),
+         false, false, [](Sessions& S, const Json& a) {
+             auto& s = mut(S, a);
+             auto r = para(s, a);
+             Json style = Json::object();
+             for (auto k : {"fill", "shape", "alignment"}) if (a.contains(k)) style[k] = a[k];
+             if (a.contains("border")) {
+                 const Json& b = a["border"];
+                 if (b.is_string() && (b == "false" || b == "none")) style["border"] = false;
+                 else style["border"] = b;
+             }
+             if (a.contains("format")) style["format"] = obj_arg(a, "format");
+             Json lay = a.contains("layout") ? a["layout"] : Json("square");
+             auto place = placement_from_json(lay);
+             auto ps = insert_text_box(s.doc, r.p, pos_in(r.p, a), need(a, "text"), darg(a, "width", 0.0), darg(a, "height", 0.0),
+                                       style, track(a), place);
+             Json out = Json::array();
+             for (auto p : ps) out.push_back(para_brief(s.doc, p));
+             return Json{{"text_box", out}, {"layout", place.wrap}, {"anchored_in", para_id(r.p)}};
          }});
     add({"list_pictures", "Pictures",
          "List the pictures in the document: number, size in points, layout (inline or how text wraps), alt text and "

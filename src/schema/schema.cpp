@@ -144,6 +144,7 @@ pugi::xml_node ac_proxy(pugi::xml_node ac) {
 }
 
 int rank_of(TypeId parent, pugi::xml_node child) {
+    if (parent < 0) return -1;
     std::string_view n = child.name();
     if (n == "mc:AlternateContent") {
         auto p = ac_proxy(child);

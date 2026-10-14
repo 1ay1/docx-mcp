@@ -63,6 +63,12 @@ std::vector<PictureInfo> list_pictures(Document& d);
 // alt text of picture n (1-based, document order).
 void set_picture(Document& d, int n, double width_pt, double height_pt, const Json& placement, const Json& alt);
 void delete_picture(Document& d, int n, const EditOpts& o);
+// Insert > Text Box at visible pos of p: a floating box (wrap square unless
+// placement says otherwise) with one paragraph per line of text. style:
+// {fill, border (color | {color,size} | false), shape: rect|rounded,
+// alignment, format {bold, size...}, auto_fit}. Returns the box's paragraphs.
+std::vector<pugi::xml_node> insert_text_box(Document& d, pugi::xml_node p, int pos, const std::string& text, double width_pt,
+                                            double height_pt, const Json& style, const EditOpts& o, const Placement& place);
 
 // ── breaks ──
 void insert_break(Document& d, pugi::xml_node p, int pos, const std::string& type, const EditOpts& o);  // page|column|line

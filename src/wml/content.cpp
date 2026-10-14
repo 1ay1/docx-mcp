@@ -394,6 +394,110 @@ void make_floating(Document& d, pugi::xml_node inl, const Placement& pl) {
     set_wrap(anchor, pl);
 }
 
+// ── text boxes ────────────────────────────────────────────────────────────────
+// Insert > Text Box: a DrawingML shape (wps:wsp) whose txbx holds paragraphs.
+
+std::vector<pugi::xml_node> insert_text_box(Document& d, pugi::xml_node p, int pos, const std::string& text, double wpt,
+                                            double hpt, const Json& style, const EditOpts& o, const Placement& place_in) {
+    if (wpt <= 0) wpt = 216;  // 3in
+    auto lines = util::split(text.empty() ? std::string(" ") : text, '\n');
+    if (hpt <= 0) hpt = std::max(36.0, 18.0 * lines.size() + 14);
+    Placement place = place_in;
+    if (place.wrap == "inline") place.wrap = "square";
+    const Json st = style.is_object() ? style : Json::object();
+    long CX = std::lround(wpt * 12700), CY = std::lround(hpt * 12700);
+    int id = next_docpr_id(d);
+    pugi::xml_document tmp;
+    auto r = tmp.append_child("w:r");
+    auto drw = r.append_child("w:drawing");
+    auto inl = drw.append_child("wp:inline");
+    for (auto a : {"distT", "distB", "distL", "distR"}) inl.append_attribute(a) = "0";
+    inl.append_attribute("wp14:anchorId") = d.new_hex_id().c_str();
+    inl.append_attribute("wp14:editId") = d.new_hex_id().c_str();
+    auto ext_e = inl.append_child("wp:extent");
+    ext_e.append_attribute("cx") = std::to_string(CX).c_str();
+    ext_e.append_attribute("cy") = std::to_string(CY).c_str();
+    auto eff = inl.append_child("wp:effectExtent");
+    for (auto a : {"l", "t", "r", "b"}) eff.append_attribute(a) = "0";
+    auto dp = inl.append_child("wp:docPr");
+    dp.append_attribute("id") = id;
+    dp.append_attribute("name") = ("Text Box " + std::to_string(id)).c_str();
+    inl.append_child("wp:cNvGraphicFramePr");
+    auto gd = inl.append_child("a:graphic").append_child("a:graphicData");
+    gd.append_attribute("uri") = "http://schemas.microsoft.com/office/word/2010/wordprocessingShape";
+    auto wsp = gd.append_child("wps:wsp");
+    wsp.append_child("wps:cNvSpPr").append_attribute("txBox") = "1";
+    auto sp = wsp.append_child("wps:spPr");
+    auto xf = sp.append_child("a:xfrm");
+    auto off = xf.append_child("a:off");
+    off.append_attribute("x") = "0";
+    off.append_attribute("y") = "0";
+    auto ex2 = xf.append_child("a:ext");
+    ex2.append_attribute("cx") = std::to_string(CX).c_str();
+    ex2.append_attribute("cy") = std::to_string(CY).c_str();
+    auto geom = sp.append_child("a:prstGeom");
+    geom.append_attribute("prst") = st.value("shape", std::string("rect")) == "rounded" ? "roundRect" : "rect";
+    geom.append_child("a:avLst");
+    // fill
+    if (st.contains("fill") && !st["fill"].is_null())
+        sp.append_child("a:solidFill").append_child("a:srgbClr").append_attribute("val") = color_hex(st["fill"]).c_str();
+    else
+        sp.append_child("a:solidFill").append_child("a:schemeClr").append_attribute("val") = "lt1";
+    // outline
+    auto ln = sp.append_child("a:ln");
+    if (st.contains("border") && (st["border"].is_null() || (st["border"].is_boolean() && !st["border"].get<bool>()))) {
+        ln.append_child("a:noFill");
+    } else {
+        double bw = 0.75;
+        std::string bc = "000000";
+        if (st.contains("border") && st["border"].is_object()) {
+            bw = st["border"].value("size", 0.75);
+            if (st["border"].contains("color")) bc = color_hex(st["border"]["color"]);
+        } else if (st.contains("border") && st["border"].is_string()) {
+            bc = color_hex(st["border"]);
+        }
+        ln.append_attribute("w") = std::to_string(std::lround(bw * 12700)).c_str();
+        ln.append_child("a:solidFill").append_child("a:srgbClr").append_attribute("val") = bc.c_str();
+    }
+    // the text
+    auto content = wsp.append_child("wps:txbx").append_child("w:txbxContent");
+    for (auto& line : lines) {
+        auto np = content.append_child("w:p");
+        np.append_attribute("w14:paraId") = d.new_hex_id().c_str();
+        np.append_attribute("w14:textId") = "77777777";
+        if (st.contains("alignment")) apply_ppr_json(d, np.append_child("w:pPr"), Json{{"alignment", st["alignment"]}});
+        if (!line.empty()) {
+            auto nr = np.append_child("w:r");
+            if (st.contains("format") && st["format"].is_object() && !st["format"].empty())
+                apply_rpr_json(d, nr.append_child("w:rPr"), st["format"]);
+            append_text(nr, util::to_u32(line));
+        }
+    }
+    auto body = wsp.append_child("wps:bodyPr");
+    body.append_attribute("rot") = "0";
+    body.append_attribute("vert") = "horz";
+    body.append_attribute("wrap") = "square";
+    for (auto a : {"lIns", "rIns"}) body.append_attribute(a) = "91440";
+    for (auto a : {"tIns", "bIns"}) body.append_attribute(a) = "45720";
+    body.append_attribute("anchor") = "t";
+    body.append_attribute("anchorCtr") = "0";
+    if (st.value("auto_fit", true)) body.append_child("a:spAutoFit");
+    else body.append_child("a:noAutofit");
+    make_floating(d, inl, place);
+    auto out = place_run(d, p, pos, r, o);
+    auto root = xml::root_of(p);
+    for (auto pre : {"wp", "a", "r"}) xml::declare(root, pre);
+    xml::declare(root, "wps", true);
+    xml::declare(root, "wp14", true);
+    xml::declare(root, "w14", true);
+    // return the box's paragraphs (they live in the run just placed)
+    std::vector<pugi::xml_node> result;
+    for (auto x : out.select_nodes(".//w:txbxContent/w:p")) result.push_back(x.node());
+    if (result.empty())
+        for (auto x : p.select_nodes(".//w:txbxContent/w:p")) result.push_back(x.node());
+    return result;
+}
+
 namespace {
 // Every picture drawing in body order: the wp:inline or wp:anchor holding a pic:pic.
 std::vector<pugi::xml_node> picture_frames(Document& d) {
