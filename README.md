@@ -1,5 +1,7 @@
 # docx-mcp
 
+[![ci](https://github.com/1ay1/docx-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/1ay1/docx-mcp/actions/workflows/ci.yml)
+
 An MCP server that edits Word documents the way Word does.
 
 Agents get 85 tools that cover the Word ribbon: text, formatting, styles,
@@ -34,6 +36,9 @@ does in Word without leaving the file subtly broken:
   content in unknown namespaces is preserved.
 
 ## Quick start
+
+Download the static Linux binary from the
+[latest release](https://github.com/1ay1/docx-mcp/releases/latest), or build it:
 
 ```sh
 git clone --recursive https://github.com/1ay1/docx-mcp
