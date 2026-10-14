@@ -81,25 +81,18 @@ jobs:
           python3 tests/e2e.py ${{ matrix.exe }} "$RUNNER_TEMP/e2e"
           python3 tests/sloppy.py ${{ matrix.exe }} "$RUNNER_TEMP/sloppy"
       - name: Crash details
-        if: failure()
+        if: failure() && runner.os == 'Linux'
         shell: bash
         run: |
           cat "$RUNNER_TEMP/docx-mcp-stderr.txt" || true
-          if command -v gdb >/dev/null; then
-            python3 - > /tmp/in.txt <<'EOF'
-          import json
-          def m(i, meth, p): print(json.dumps({"jsonrpc": "2.0", "id": i, "method": meth, "params": p}))
-          m(1, "initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "x", "version": "1"}})
-          m(2, "tools/call", {"name": "create_document", "arguments": {"path": "/tmp/c.docx", "author": "A", "title": "T"}})
-          m(3, "tools/call", {"name": "insert_text", "arguments": {"doc": "doc1", "paragraph": "1", "text": "Services Agreement"}})
-          m(4, "tools/call", {"name": "apply_style", "arguments": {"doc": "doc1", "paragraphs": ["1"], "style": "Title"}})
-          m(5, "tools/call", {"name": "insert_paragraph", "arguments": {"doc": "doc1", "paragraph": "1", "text": "a\nb\nc\nd"}})
-          m(6, "tools/call", {"name": "apply_style", "arguments": {"doc": "doc1", "paragraphs": ["2", "4"], "style": "Heading 1"}})
-          m(7, "tools/call", {"name": "format_text", "arguments": {"doc": "doc1", "paragraph": "5", "match": "d", "format": {"bold": True}}})
-          m(8, "tools/call", {"name": "insert_table", "arguments": {"doc": "doc1", "paragraph": "5", "rows": [["a", "b"]], "style": "Grid Table 4 Accent 1"}})
-          EOF
-            gdb -batch -ex run -ex bt --args ${{ matrix.exe }} < /tmp/in.txt 2>&1 | grep -v '^\[' | tail -40
-          fi
+          # rebuild with sanitizers to locate the fault
+          cmake -S . -B asan -G Ninja -DCMAKE_BUILD_TYPE=Debug -DDOCX_BUILD_TESTS=OFF ${{ matrix.cmake }} -DDOCX_STATIC=OFF \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" -DCMAKE_C_FLAGS="-fsanitize=address,undefined" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+          cmake --build asan --target docx-mcp
+          python3 tests/replay.py | ASAN_OPTIONS=detect_leaks=0 ./asan/docx-mcp > /dev/null || true
+          python3 tests/e2e.py ./asan/docx-mcp "$RUNNER_TEMP/e2e-asan" || true
+          head -60 "$RUNNER_TEMP/docx-mcp-stderr.txt" || true
 
       - name: Package
         shell: bash
