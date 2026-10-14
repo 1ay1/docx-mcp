@@ -260,7 +260,7 @@ Delete the paragraph mark, joining the paragraph with the next one.
 
 ### `move_paragraphs`
 
-Cut paragraphs and paste them elsewhere (before/after a target). Untracked moves relocate the XML; tracked moves are recorded as a deletion plus an insertion.
+Cut paragraphs and paste them elsewhere (before/after a target). With Track Changes this is a real Word move: shown as moved from / moved to, accepted or rejected as one.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|

@@ -4,11 +4,12 @@
 
 An MCP server that edits Word documents the way Word does.
 
-Agents get 87 tools that cover the Word ribbon: text, formatting, styles,
-lists, tables, pictures, headers and footers, fields, tables of contents,
-footnotes, content controls, page setup, protection, and the whole
-**Review** tab: Track Changes, accept and reject, threaded comments and
-Compare.
+Agents get 94 tools that cover the Word ribbon: text, formatting, styles,
+lists, tables (merge and split, nested), pictures (inline or floating with
+text wrap), headers and footers, fields, tables of contents, captions and
+cross-references, footnotes, content controls, page setup, protection, and
+the whole **Review** tab: Track Changes (including moves), accept and reject,
+threaded comments and Compare.
 
 Every file it writes is schema-valid and is checked against Microsoft's own
 validator. Built in C++23 on [mcp-cpp](https://github.com/1ay1/mcp-cpp).
@@ -150,7 +151,7 @@ And the behaviour is checked against Word's:
 | Compare round-trips (WmlComparer corpus) | 29 / 29 |
 | Password hash vs. a file protected in Word | verified |
 | Edit battery, accept and reject on every corpus file: SDK errors | 0 in 2,256 outputs |
-| All 87 tools, tracked and untracked, on real documents: SDK errors | 0 |
+| All 94 tools, tracked and untracked, on real documents: SDK errors | 0 |
 
 Details in [docs/conformance.md](docs/conformance.md).
 

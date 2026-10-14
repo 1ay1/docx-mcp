@@ -62,6 +62,15 @@ and checks it finds the right tool for 50 everyday tasks.
 
 Checked against the code. None of these exist today.
 
+**Done in v0.3.0:** 1.1 floating pictures (`insert_picture` layout,
+`list_pictures`, `format_picture`, `delete_picture`), 1.3 captions and
+cross-references (`insert_caption`, `list_reference_targets`,
+`insert_cross_reference`), 1.7 split cells and nested tables (`split_cell`;
+tables in cells are addressable), 1.19 tracked moves as Word's
+`moveFrom`/`moveTo`. Still open from 1.7: floating tables, sort, convert
+text to/from table. Still open from 1.19: tracked table property changes,
+`rsid` stamps.
+
 | # | Feature | Word UI | What's needed |
 |---|---|---|---|
 | 1.1 | Floating pictures | Wrap Text, Position | `wp:anchor` with wrap square/tight/behind/in front, position relative to page, margin or paragraph. `insert_picture` gains `wrap` and `position`; new `move_picture`, `resize_picture`, `delete_picture`, `list_pictures` |
