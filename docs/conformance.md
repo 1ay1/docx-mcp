@@ -57,7 +57,7 @@ A valid document comes out of the repair pass unchanged.
 
 ### Every tool, every output
 
-`tests/coverage.py` calls all 94 tools, tracked and untracked, on seven real
+`tests/coverage.py` calls all 96 tools, tracked and untracked, on seven real
 documents and a blank one, then saves edited, accepted and rejected copies.
 With oxval built it fails on any Open XML SDK error an output has that its
 source didn't (`tools/oracle_regress.py`). `ROBUST_OUT=dir ./robustness
@@ -65,7 +65,7 @@ tests/corpus` does the same for an edit battery over the whole corpus.
 
 ```sh
 python3 tests/coverage.py build/docx-mcp /tmp/cov
-# 2735 calls, 94 tools / 49 outputs, 0 with new oracle errors
+# 2735 calls, 96 tools / 49 outputs, 0 with new oracle errors
 ```
 
 ## Behaviour against Word
@@ -76,7 +76,7 @@ python3 tests/coverage.py build/docx-mcp /tmp/cov
 | Compare (accept gives revised, reject gives original) | WmlComparer pairs, `tests/corpus/oxpt/WC` | 29/29 |
 | Password hash | A file protected by Word (`tests/corpus/poi/bug56076.docx`) | verified |
 | Heavy edit battery, accept and reject on every corpus file | Our validator and the SDK | 564/564, 2,256 outputs with 0 errors |
-| Every tool, tracked and untracked, on real documents | The SDK, LibreOffice | 94/94 tools, 0 errors |
+| Every tool, tracked and untracked, on real documents | The SDK, LibreOffice | 96/96 tools, 0 errors |
 | Full MCP workflow over stdio | SDK + LibreOffice | all outputs clean |
 
 Two of the 104 accept/reject expected files are PowerTools output, not Word

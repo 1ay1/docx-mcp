@@ -40,6 +40,8 @@ const std::vector<TaskGroup>& task_groups() {
           "list_comments", "reply_comment", "resolve_comment", "edit_comment", "delete_comment"}},
         {"Document", "title, author, properties, settings, restrict editing, protect or unprotect",
          {"get_properties", "set_properties", "get_settings", "set_settings", "protect_document", "unprotect_document"}},
+        {"Seeing the page", "see what pages look like, save as PDF",
+         {"render_pages", "export_pdf"}},
         {"Expert", "check validity, raw XML",
          {"validate_document", "get_xml", "set_paragraph_xml"}},
     };

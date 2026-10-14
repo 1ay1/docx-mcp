@@ -27,7 +27,7 @@ slashes (`C:/Tools/docx-mcp.exe`).
 | Flag | Env var | What it does |
 |---|---|---|
 | `--author NAME` | `DOCX_MCP_AUTHOR` | Name on tracked changes and comments |
-| `--tools PROFILE` | `DOCX_MCP_TOOLS` | `full` (94 tools, default), `core` (34), `essential` (14), `review` (28), or a comma list of tool names |
+| `--tools PROFILE` | `DOCX_MCP_TOOLS` | `full` (96 tools, default), `core` (34), `essential` (14), `review` (28), or a comma list of tool names |
 | `--root DIR` | `DOCX_MCP_ROOT` | Folder that relative paths resolve against |
 
 Every profile includes `help` and `run_tool`. `help` lists everything by task

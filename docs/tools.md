@@ -1,6 +1,6 @@
 # Tool reference
 
-Generated from `docx-mcp --list-tools` by `tools/gen_tool_docs.py`. 94 tools.
+Generated from `docx-mcp --list-tools` by `tools/gen_tool_docs.py`. 96 tools.
 
 Every tool that edits takes `doc` (a handle or a file path), and most take `track` (record as a tracked change) and `author`. Paragraphs are addressed by the `id` that `read_document` returns.
 
@@ -19,6 +19,7 @@ Every tool that edits takes `doc` (a handle or a file path), and most take `trac
 - [Page layout](#page-layout): `get_page_setup`, `set_page_setup`, `set_header_footer`, `remove_header_footer`, `read_header_footer`
 - [File](#file): `get_properties`, `set_properties`, `get_settings`, `set_settings`, `protect_document`, `unprotect_document`
 - [Expert](#expert): `validate_document`, `get_xml`, `set_paragraph_xml`
+- [Seeing the page](#seeing-the-page): `render_pages`, `export_pdf`
 - [Finding tools](#finding-tools): `help`, `run_tool`
 
 ## Documents
@@ -1112,15 +1113,37 @@ Expert escape hatch: replace a paragraph with raw WordprocessingML (one or more 
 | `paragraph` | string | yes | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
 | `xml` | string | yes |  |
 
+## Seeing the page
+
+### `render_pages`
+
+Render pages of the document as images so you can see the layout: where pictures, tables and page breaks fall, how a heading looks. Returns PNG images (and the page count). Uses LibreOffice; unsaved edits are included.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `dpi` | integer |  | Resolution, 30-300 (default 80; 150 to read small text). |
+| `page` | integer |  | First page (1-based, default 1). |
+| `to_page` | integer |  | Last page (default = page; at most 20). |
+
+### `export_pdf`
+
+Export the document to PDF (File > Save As > PDF), with the current unsaved edits. Uses LibreOffice.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `path` | string |  | Where to write the .pdf (default: next to the document). |
+
 ## Finding tools
 
 ### `help`
 
-Help for Word documents (docx files): lists everything this can do, by task, and which tool does it. Open, create, read, write and edit text and paragraphs; format font, size, bold, headings, styles; tables, rows, cells; pictures; lists and bullets; headers, footers, page numbers, margins; comments; track changes; footnotes; links; table of contents. Give a topic or tool name to see its arguments. Call this first when the Word tool you need isn't in your list, then use run_tool.
+Help for Word documents (docx files): lists everything this can do, by task, and which tool does it. Open, create, read, write and edit text and paragraphs; format font, size, bold, headings, styles; tables, rows, cells; pictures; lists and bullets; headers, footers, page numbers, margins; comments; track changes; footnotes; links; table of contents. Give tool names or tasks (comma-separated) to see how to call them. Only needed when a Word tool isn't in your list; tools you can see, call directly.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `topic` | string |  | A task ("tables", "add a comment") or a tool name. Omit for everything. |
+| `topic` | string |  | Tool names or tasks, comma-separated ("insert_table, format_text", "add a comment"). Omit for everything. |
 
 ### `run_tool`
 

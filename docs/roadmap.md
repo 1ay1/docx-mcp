@@ -106,6 +106,9 @@ Each feature lands as tools plus engine code in `src/wml`, with:
 Agents can't see layout today. Page numbers, page counts and "what does page
 3 look like" only resolve when Word opens the file.
 
+**Done in v0.3.0:** 2.1 `render_pages` (PNG pages as MCP image content) and
+2.2 `export_pdf`, through LibreOffice with pdftoppm, mutool or Ghostscript.
+
 | # | Item | Done when |
 |---|---|---|
 | 2.1 | `render_pages`: PNG of chosen pages | Rendered through LibreOffice when it's installed, with a clear error when not. Returned as MCP image content |
