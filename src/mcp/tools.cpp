@@ -24,7 +24,9 @@ namespace {
 // ── schema helpers ───────────────────────────────────────────────────────
 
 Json obj(std::initializer_list<std::pair<const std::string, Json>> props, std::vector<std::string> required = {}) {
-    Json s = {{"type", "object"}, {"properties", Json(props)}};
+    Json p = Json::object();
+    for (auto& [k, v] : props) p[k] = v;
+    Json s = {{"type", "object"}, {"properties", p}};
     if (!required.empty()) s["required"] = required;
     s["additionalProperties"] = false;
     return s;

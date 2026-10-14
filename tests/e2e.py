@@ -70,6 +70,7 @@ def main():
     names = {t["name"] for t in tools}
     for t in tools:
         assert t["inputSchema"]["type"] == "object", t["name"]
+        assert isinstance(t["inputSchema"].get("properties", {}), dict), t["name"] + ": properties must be an object"
 
     # ── draft a document ──
     path = os.path.join(work, "contract.docx")
