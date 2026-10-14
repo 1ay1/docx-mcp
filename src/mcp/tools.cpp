@@ -1066,6 +1066,20 @@ std::vector<ToolDef> make_tools() {
              merge_cells(s.doc, tbl, iarg(a, "from_row", 1) - 1, iarg(a, "from_col", 1) - 1, iarg(a, "to_row", 1) - 1, iarg(a, "to_col", 1) - 1);
              return table_json(tbl);
          }});
+    add({"split_cell", "Split cells",
+         "Split table cells: undo a merge at a cell, or split a plain cell into several side by side (cols). "
+         "row/col are 1-based.",
+         obj({{"doc", kDoc}, {"table", integer("")}, {"row", integer("")}, {"col", integer("")},
+              {"cols", integer("For a plain cell: how many cells to split it into (default 2).")}},
+             {"doc", "table", "row", "col"}),
+         false, false, [](Sessions& S, const Json& a) {
+             auto& s = mut(S, a);
+             auto tbl = table_at(s.doc, iarg(a, "table", 1));
+             int n = split_cell(s.doc, tbl, iarg(a, "row", 1) - 1, iarg(a, "col", 1) - 1, iarg(a, "cols", 2));
+             Json out = table_json(tbl);
+             out["cells"] = n;
+             return out;
+         }});
     add({"format_table", "Table properties",
          "style, alignment, width (pt|\"50%\"|auto), borders (\"all\"|\"none\"|{top,insideH,..}), indent, layout (fixed|autofit), "
          "cell_margins, header_row, first_column, last_row, last_column, banded_rows, banded_columns, repeat_header, row_height, column_widths.",

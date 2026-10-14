@@ -30,6 +30,9 @@ void delete_row(Document& d, pugi::xml_node tbl, int row, const EditOpts& o);
 void insert_column(Document& d, pugi::xml_node tbl, int at, bool after, const EditOpts& o);
 void delete_column(Document& d, pugi::xml_node tbl, int col, const EditOpts& o);
 void merge_cells(Document& d, pugi::xml_node tbl, int r1, int c1, int r2, int c2);
+// Split Cells: undo a merge at (row, col), or split a plain cell into `cols`
+// side by side (0-based row/col; cols >= 1). Returns how many cells result.
+int split_cell(Document& d, pugi::xml_node tbl, int row, int col, int cols);
 void format_table(Document& d, pugi::xml_node tbl, const Json& props, const EditOpts& o);
 void format_cell(Document& d, pugi::xml_node tc, const Json& props, const EditOpts& o);
 void delete_table(Document& d, pugi::xml_node tbl, const EditOpts& o);

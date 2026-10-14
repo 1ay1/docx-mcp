@@ -1,6 +1,6 @@
 # Tool reference
 
-Generated from `docx-mcp --list-tools` by `tools/gen_tool_docs.py`. 93 tools.
+Generated from `docx-mcp --list-tools` by `tools/gen_tool_docs.py`. 94 tools.
 
 Every tool that edits takes `doc` (a handle or a file path), and most take `track` (record as a tracked change) and `author`. Paragraphs are addressed by the `id` that `read_document` returns.
 
@@ -14,7 +14,7 @@ Every tool that edits takes `doc` (a handle or a file path), and most take `trac
 - [Lists](#lists): `apply_list`, `set_list_level`, `remove_list`, `restart_numbering`
 - [Track changes](#track-changes): `set_track_changes`, `list_revisions`, `accept_revisions`, `reject_revisions`, `compare_documents`
 - [Comments](#comments): `add_comment`, `list_comments`, `reply_comment`, `resolve_comment`, `edit_comment`, `delete_comment`
-- [Tables](#tables): `insert_table`, `read_table`, `set_cell`, `table_rows`, `table_columns`, `merge_cells`, `format_table`, `delete_table`
+- [Tables](#tables): `insert_table`, `read_table`, `set_cell`, `table_rows`, `table_columns`, `merge_cells`, `split_cell`, `format_table`, `delete_table`
 - [Insert](#insert): `insert_picture`, `list_pictures`, `format_picture`, `delete_picture`, `insert_break`, `insert_hyperlink`, `list_hyperlinks`, `remove_hyperlinks`, `add_bookmark`, `list_bookmarks`, `delete_bookmark`, `insert_note`, `list_notes`, `delete_note`, `insert_field`, `list_fields`, `update_fields`, `insert_toc`, `insert_equation`, `insert_caption`, `insert_cross_reference`, `list_reference_targets`, `add_content_control`, `list_content_controls`, `set_content_control`
 - [Page layout](#page-layout): `get_page_setup`, `set_page_setup`, `set_header_footer`, `remove_header_footer`, `read_header_footer`
 - [File](#file): `get_properties`, `set_properties`, `get_settings`, `set_settings`, `protect_document`, `unprotect_document`
@@ -630,6 +630,18 @@ Merge table cells: a rectangle of cells becomes one (1-based, inclusive).
 | `table` | integer | yes | Table number (1 = first table). |
 | `to_col` | integer | yes |  |
 | `to_row` | integer | yes |  |
+
+### `split_cell`
+
+Split table cells: undo a merge at a cell, or split a plain cell into several side by side (cols). row/col are 1-based.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `col` | integer | yes | Column number (1-based). |
+| `cols` | integer |  | For a plain cell: how many cells to split it into (default 2). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `row` | integer | yes | Row number (1-based). |
+| `table` | integer | yes | Table number (1 = first table). |
 
 ### `format_table`
 

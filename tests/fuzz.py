@@ -269,7 +269,9 @@ class Fuzz:
             return None, err
         rows = max(1, len(tb["rows"]))
         cols = max(1, tb["columns"])
-        op = r.randint(0, 6)
+        op = r.randint(0, 7)
+        if op == 7:
+            return self.call("split_cell", table=1, row=r.randint(1, rows), col=r.randint(1, cols), cols=r.randint(1, 3))
         if op == 0:
             return self.call("table_rows", table=1, action=r.choice(["insert_above", "insert_below"]), row=r.randint(1, rows), **track)
         if op == 1:

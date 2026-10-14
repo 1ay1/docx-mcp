@@ -2,6 +2,7 @@
 #include <map>
 #include <cstdio>
 #include <algorithm>
+#include <functional>
 #include <cmath>
 #include <stdexcept>
 
@@ -79,8 +80,18 @@ void track_deleted_content(Document& d, pugi::xml_node n) {
 }  // namespace
 
 std::vector<pugi::xml_node> tables(Document& d) {
+    // document order, nested tables right after the cell that holds them --
+    // the same numbering read_document shows ("table 1 r2c2/table 2 r1c1")
     std::vector<pugi::xml_node> v;
-    for (auto b : blocks(d.body())) if (std::string_view(b.name()) == "w:tbl") v.push_back(b);
+    std::function<void(pugi::xml_node)> walk = [&](pugi::xml_node c) {
+        for (auto b : blocks(c)) {
+            if (std::string_view(b.name()) != "w:tbl") continue;
+            v.push_back(b);
+            for (auto tr : b.children("w:tr"))
+                for (auto tc : tr.children("w:tc")) walk(tc);
+        }
+    };
+    walk(d.body());
     return v;
 }
 
@@ -370,6 +381,130 @@ void merge_cells(Document& d, pugi::xml_node tbl, int r1, int c1, int r2, int c2
         auto ps = xml::children(keep, "w:p");
         if (ps.size() > 1 && analyze(ps[0]).vis.empty()) keep.remove_child(ps[0]);
     }
+}
+
+namespace {
+// A new empty cell like `like` (same properties minus spans and merges).
+pugi::xml_node clone_empty_cell(Document& d, pugi::xml_node tr, pugi::xml_node like, pugi::xml_node before, long width) {
+    auto tc = before ? tr.insert_child_before("w:tc", before) : tr.append_child("w:tc");
+    if (auto pr = like.child("w:tcPr")) {
+        auto np = tc.append_copy(pr);
+        for (auto q : {"w:gridSpan", "w:vMerge", "w:hMerge", "w:cellIns", "w:cellDel", "w:cellMerge", "w:tcPrChange"})
+            np.remove_child(q);
+        if (width > 0) {
+            auto w = schema::ensure_child(np, "w:tcW");
+            xml::set_attr(w, "w:w", std::to_string(width));
+            xml::set_attr(w, "w:type", "dxa");
+        }
+    }
+    auto p = tc.append_child("w:p");
+    p.append_attribute("w14:paraId") = d.new_hex_id().c_str();
+    p.append_attribute("w14:textId") = "77777777";
+    // keep the paragraph look of the cell (alignment, style)
+    if (auto pp = like.child("w:p").child("w:pPr")) {
+        auto c = p.append_copy(pp);
+        c.remove_child("w:rPr");
+        c.remove_child("w:pPrChange");
+        c.remove_child("w:sectPr");
+    }
+    return tc;
+}
+}  // namespace
+
+int split_cell(Document& d, pugi::xml_node tbl, int row, int col, int cols) {
+    if (cols < 1 || cols > 63) throw std::runtime_error("cols must be 1 to 63");
+    auto tc = cell(tbl, row, col);
+    auto tcpr = tc.child("w:tcPr");
+    int span = span_of(tc);
+    bool vstart = xml::attr(tcpr.child("w:vMerge"), "w:val") == "restart";
+    int made = 0;
+    std::vector<pugi::xml_node> merged_rows{tc};  // cells to split horizontally
+    // 1. undo a vertical merge: the continuation cells become plain cells again
+    if (vstart || tcpr.child("w:vMerge")) {
+        // find the top of the merge (the cell asked for may be a continuation)
+        auto rows = xml::children(tbl, "w:tr");
+        int top = row;
+        while (top > 0 && xml::attr(cell(tbl, top, col).child("w:tcPr").child("w:vMerge"), "w:val") != "restart") top--;
+        merged_rows.clear();
+        for (int r = top; r < (int)rows.size(); r++) {
+            auto c = cell(tbl, r, col);
+            auto vm = c.child("w:tcPr").child("w:vMerge");
+            if (!vm || (r > top && xml::attr(vm, "w:val") == "restart")) break;
+            c.child("w:tcPr").remove_child(vm);
+            if (!c.child("w:p")) c.append_child("w:p");
+            merged_rows.push_back(c);
+            made++;
+        }
+        tc = merged_rows.front();
+        tcpr = tc.child("w:tcPr");
+    }
+    // 2. undo a horizontal merge: one cell per grid column spanned, in each row of the former merge
+    if (span > 1) {
+        auto grid = xml::children(tbl.child("w:tblGrid"), "w:gridCol");
+        for (auto mc : merged_rows) {
+            int start = 0;
+            for (auto c : xml::children(mc.parent(), "w:tc")) {
+                if (c == mc) break;
+                start += span_of(c);
+            }
+            int sp = span_of(mc);
+            auto mpr = mc.child("w:tcPr");
+            mpr.remove_child("w:gridSpan");
+            long w0 = start < (int)grid.size() ? util::to_long(xml::attr(grid[start], "w:w", "0")) : 0;
+            if (w0 > 0) {
+                auto w = schema::ensure_child(mpr, "w:tcW");
+                xml::set_attr(w, "w:w", std::to_string(w0));
+                xml::set_attr(w, "w:type", "dxa");
+            }
+            auto before = mc.next_sibling("w:tc");
+            for (int k = 1; k < sp; k++) {
+                long wk = start + k < (int)grid.size() ? util::to_long(xml::attr(grid[start + k], "w:w", "0")) : 0;
+                clone_empty_cell(d, mc.parent(), mc, before, wk);
+            }
+        }
+        return (int)merged_rows.size() * span;
+    }
+    if (made > 0) return made;
+    // 3. a plain cell: split it into `cols`, adding grid columns so the rest of the table keeps its layout
+    if (cols == 1) return 1;
+    auto gridn = tbl.child("w:tblGrid");
+    auto grid = xml::children(gridn, "w:gridCol");
+    int start = 0;
+    for (auto c : xml::children(tc.parent(), "w:tc")) {
+        if (c == tc) break;
+        start += span_of(c);
+    }
+    long total = start < (int)grid.size() ? util::to_long(xml::attr(grid[start], "w:w", "0")) : 0;
+    if (total <= 0) total = util::to_long(xml::attr(tcpr.child("w:tcW"), "w:w", "1440"));
+    long part = std::max(1L, total / cols);
+    // grid: replace column `start` with `cols` columns
+    if (start < (int)grid.size()) {
+        xml::set_attr(grid[start], "w:w", std::to_string(part));
+        for (int k = 1; k < cols; k++) {
+            auto g = gridn.insert_child_after("w:gridCol", grid[start]);
+            xml::set_attr(g, "w:w", std::to_string(k == cols - 1 ? total - part * (cols - 1) : part));
+        }
+    }
+    // other rows: the cell covering grid column `start` now spans `cols` more columns
+    for (auto tr : tbl.children("w:tr")) {
+        if (tr == tc.parent()) continue;
+        int c = 0;
+        for (auto x : xml::children(tr, "w:tc")) {
+            int sp = span_of(x);
+            if (start >= c && start < c + sp) {
+                xml::set_attr(schema::ensure_child(schema::ensure_child(x, "w:tcPr"), "w:gridSpan"), "w:val",
+                              std::to_string(sp + cols - 1));
+                break;
+            }
+            c += sp;
+        }
+    }
+    auto w = schema::ensure_child(schema::ensure_child(tc, "w:tcPr"), "w:tcW");
+    xml::set_attr(w, "w:w", std::to_string(part));
+    xml::set_attr(w, "w:type", "dxa");
+    auto before = tc.next_sibling("w:tc");
+    for (int k = 1; k < cols; k++) clone_empty_cell(d, tc.parent(), tc, before, part);
+    return cols;
 }
 
 namespace {

@@ -350,6 +350,34 @@ TEST(reject_nested_inserted_rows) {
 }
 
 // a tracked TOC wraps runs inside its hyperlinks, never the hyperlinks
+TEST(split_cells_and_nested_tables) {
+    auto d = sample(false);
+    auto t = insert_table(d, paragraphs(d.body())[0], true, {{"a", "b", "c"}, {"d", "e", "f"}, {"g", "h", "i"}},
+                          Json::object(), {});
+    // undo a 2x2 merge: back to 3x3 cells
+    merge_cells(d, t, 0, 0, 1, 1);
+    CHECK_EQ(split_cell(d, t, 1, 1, 2), 4);
+    for (auto tr : t.children("w:tr")) CHECK_EQ((int)xml::children(tr, "w:tc").size(), 3);
+    CHECK(!xml::first_descendant(t, "w:vMerge") && !xml::first_descendant(t, "w:gridSpan"));
+    // a plain cell into 3: the grid grows, other rows span the new columns
+    CHECK_EQ(split_cell(d, t, 2, 2, 3), 3);
+    CHECK_EQ((int)xml::children(t.child("w:tblGrid"), "w:gridCol").size(), 5);
+    CHECK_EQ((int)xml::children(xml::children(t, "w:tr")[0], "w:tc").size(), 3);
+    CHECK_EQ((int)xml::children(xml::children(t, "w:tr")[2], "w:tc").size(), 5);
+    // a nested table is numbered right after its outer table
+    auto inner_p = xml::children(cell(t, 1, 1), "w:p")[0];
+    auto inner = insert_table(d, inner_p, true, {{"n1", "n2"}}, Json::object(), {});
+    insert_table(d, paragraphs(d.body()).back(), true, {{"z"}}, Json::object(), {});
+    auto ts = tables(d);
+    CHECK_EQ((int)ts.size(), 3);
+    CHECK(ts[1] == inner);
+    std::string why;
+    CHECK_EQ(schema_issues(d, &why), 0);
+    if (!why.empty()) std::printf("    %s\n", why.c_str());
+    save(d, "split_cells_and_nested_tables");
+}
+
+// a tracked TOC wraps runs inside its hyperlinks, never the hyperlinks
 TEST(tracked_toc_valid) {
     auto d = sample(false);
     auto ps = paragraphs(d.body());

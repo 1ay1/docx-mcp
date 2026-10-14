@@ -48,6 +48,7 @@ TASKS = [
     ("change a cell's text", "set_cell"),
     ("add a row to a table", "table_rows"),
     ("merge table cells", "merge_cells"),
+    ("split a table cell", "split_cell"),
     ("shade a table", "format_table"),
     ("insert a picture", "insert_picture"),
     ("wrap text around an image", "format_picture"),

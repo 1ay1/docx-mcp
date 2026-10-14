@@ -193,6 +193,8 @@ def exercise(R, doc, track, work, tag):
         R.call("table_columns", doc=doc, table=ti, action="insert_left", col=1, **t)
         R.call("table_columns", doc=doc, table=ti, action="delete", col=1, **t)
         R.call("merge_cells", doc=doc, table=ti, from_row=2, from_col=1, to_row=3, to_col=2)
+        R.call("split_cell", doc=doc, table=ti, row=2, col=1)
+        R.call("split_cell", doc=doc, table=ti, row=1, col=1, cols=2)
         R.call("format_table", doc=doc, table=ti,
                format={"borders": "all", "width": 400, "alignment": "right", "cell_margins": 5,
                        "banded_rows": True, "repeat_header": True}, **t)
