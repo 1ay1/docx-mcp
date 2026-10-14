@@ -865,9 +865,20 @@ void add_bookmark(Document& d, pugi::xml_node p1, int s, pugi::xml_node p2, int 
         auto top = [&](pugi::xml_node x) { while (std::string_view(x.parent().name()) != "w:p") x = x.parent(); return x; };
         pugi::xml_node b;
         const char* q = start ? "w:bookmarkStart" : "w:bookmarkEnd";
-        if (start ? pos < n : (pos < n && pos > 0)) b = start ? p.insert_child_before(q, top(pt.atoms[pt.vis[pos]].run))
-                                                              : p.insert_child_after(q, top(pt.atoms[pt.vis[pos - 1]].run));
-        else if (!start && pos > 0 && n > 0) b = p.insert_child_after(q, top(pt.atoms[pt.vis[std::min(pos, n) - 1]].run));
+        if (start ? pos < n : (pos < n && pos > 0)) {
+            if (start) b = p.insert_child_before(q, top(pt.atoms[pt.vis[pos]].run));
+            else {
+                // ending on a field result: close after the field's end mark
+                auto last = top(pt.atoms[pt.vis[pos - 1]].run);
+                auto nx = past_field_result(last);
+                b = nx ? p.insert_child_before(q, nx) : p.append_child(q);
+            }
+        }
+        else if (!start && pos > 0 && n > 0) {
+            auto last = top(pt.atoms[pt.vis[std::min(pos, n) - 1]].run);
+            auto nx = past_field_result(last);
+            b = nx ? p.insert_child_before(q, nx) : p.append_child(q);
+        }
         else if (start && n > 0) b = p.insert_child_after(q, top(pt.atoms[pt.vis[n - 1]].run));
         else {
             auto ppr = p.child("w:pPr");

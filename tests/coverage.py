@@ -303,6 +303,9 @@ def exercise(R, doc, track, work, tag):
     R.call("run_tool", tool="get_statistics", arguments={"doc": doc})
     R.call("run_tool", tool="insert_paragraph", arguments={"doc": doc, "text": "via run_tool", **t})
     R.call("run_tool", tool="no_such_tool", arguments={}, ok_errors=("unknown tool",))
+    if os.environ.get("COVER_RENDER"):  # needs LibreOffice; slow, so opt-in
+        R.call("render_pages", doc=doc, page=1, dpi=40)
+        R.call("export_pdf", doc=doc, path=os.path.join(work, "out_%s.pdf" % tag))
 
 
 def main():
@@ -350,7 +353,8 @@ def main():
         R.call("compare_documents", original=os.path.join(work, "accepted", edited[0]),
                revised=os.path.join(work, "edited", edited[0]), output=os.path.join(work, "edited", "cmp_" + edited[0]))
     tools = json.loads(subprocess.run([exe, "--list-tools"], capture_output=True, text=True).stdout)
-    missing = sorted({t["name"] for t in tools} - R.used)
+    optional = set() if os.environ.get("COVER_RENDER") else {"render_pages", "export_pdf"}
+    missing = sorted({t["name"] for t in tools} - R.used - optional)
     if missing:
         R.fail.append("tools never called: " + ", ".join(missing))
     print("%d calls, %d tools" % (R.calls, len(R.used)))
