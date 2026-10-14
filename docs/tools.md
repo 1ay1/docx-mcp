@@ -1,6 +1,6 @@
 # Tool reference
 
-Generated from `docx-mcp --list-tools` by `tools/gen_tool_docs.py`. 85 tools.
+Generated from `docx-mcp --list-tools` by `tools/gen_tool_docs.py`. 87 tools.
 
 Every tool that edits takes `doc` (a handle or a file path), and most take `track` (record as a tracked change) and `author`. Paragraphs are addressed by the `id` that `read_document` returns.
 
@@ -19,6 +19,7 @@ Every tool that edits takes `doc` (a handle or a file path), and most take `trac
 - [Page layout](#page-layout): `get_page_setup`, `set_page_setup`, `set_header_footer`, `remove_header_footer`, `read_header_footer`
 - [File](#file): `get_properties`, `set_properties`, `get_settings`, `set_settings`, `protect_document`, `unprotect_document`
 - [Expert](#expert): `validate_document`, `get_xml`, `set_paragraph_xml`
+- [Finding tools](#finding-tools): `help`, `run_tool`
 
 ## Documents
 
@@ -100,7 +101,7 @@ The whole document as plain text or Markdown (headings, lists, tables).
 
 ### `get_outline`
 
-Heading structure (Navigation Pane).
+Show the document outline: every heading with its level and paragraph id (the Navigation Pane). Use it to see the structure and jump to a section.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
@@ -340,7 +341,7 @@ Styles in the document; include_builtin adds Word's built-ins not yet used (adde
 
 ### `get_style`
 
-A style's settings: based on, next, formatting.
+Show a style's settings: font, size, color, spacing, based on, next style. Works for Word's built-in styles too.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
@@ -394,7 +395,7 @@ Make paragraphs a bulleted or numbered list (Word's default list definitions). C
 
 ### `set_list_level`
 
-Change list level (Tab / Shift+Tab in a list).
+Indent or outdent list items: change the list level (Tab / Shift+Tab in a bulleted or numbered list).
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
@@ -405,6 +406,8 @@ Change list level (Tab / Shift+Tab in a list).
 
 ### `remove_list`
 
+Remove bullets or numbering from paragraphs, keeping the text.
+
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
@@ -413,7 +416,7 @@ Change list level (Tab / Shift+Tab in a list).
 
 ### `restart_numbering`
 
-Restart (Set Numbering Value) at a paragraph.
+Restart a numbered list at a paragraph, from 1 or any number (Set Numbering Value).
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
@@ -525,7 +528,7 @@ Mark a comment thread resolved (or reopen it).
 
 ### `edit_comment`
 
-Replace a comment's text.
+Change a comment's text.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
@@ -590,7 +593,7 @@ Replace a cell's text and/or format it. row/col are 1-based.
 
 ### `table_rows`
 
-Insert a row above/below, or delete rows. row is 1-based.
+Add a row above or below, or delete rows, in a table. row is 1-based.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
@@ -604,6 +607,8 @@ Insert a row above/below, or delete rows. row is 1-based.
 
 ### `table_columns`
 
+Add or delete table columns (insert_left, insert_right, delete). col is 1-based.
+
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `action` | `insert_left` \\| `insert_right` \\| `delete` | yes |  |
@@ -615,7 +620,7 @@ Insert a row above/below, or delete rows. row is 1-based.
 
 ### `merge_cells`
 
-Merge a rectangle of cells (1-based, inclusive).
+Merge table cells: a rectangle of cells becomes one (1-based, inclusive).
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
@@ -638,6 +643,8 @@ style, alignment, width (pt|"50%"|auto), borders ("all"|"none"|{top,insideH,..})
 | `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 
 ### `delete_table`
+
+Delete a whole table from the document.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
@@ -699,6 +706,8 @@ Link text to a URL or to a bookmark ("#name"). Wrap existing text (match) or ins
 
 ### `list_hyperlinks`
 
+List the links in the document: their text, URL or bookmark target, and paragraph.
+
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
@@ -714,7 +723,7 @@ Remove hyperlinks (keeping the text). Filter by target substring.
 
 ### `add_bookmark`
 
-Bookmark text (match/start/end) or a point.
+Add a bookmark on text (match/start/end) or at a point, for links and cross-references.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
@@ -727,12 +736,16 @@ Bookmark text (match/start/end) or a point.
 
 ### `list_bookmarks`
 
+List bookmarks with the text they mark. include_hidden adds Word's hidden _Toc/_Ref ones.
+
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `include_hidden` | boolean |  | Include _Toc/_Ref/_GoBack bookmarks. |
 
 ### `delete_bookmark`
+
+Remove a bookmark (the text stays).
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
@@ -756,11 +769,15 @@ Insert a footnote or endnote reference at a position with the note text.
 
 ### `list_notes`
 
+List footnotes and endnotes with their text and the paragraph they belong to.
+
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 
 ### `delete_note`
+
+Delete a footnote or endnote and its reference mark.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
@@ -786,6 +803,8 @@ Insert a Word field: PAGE, NUMPAGES, DATE \@ "MMMM d, yyyy", TIME, AUTHOR, TITLE
 | `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 
 ### `list_fields`
+
+List fields (PAGE, DATE, TOC, REF, MERGEFIELD...) with their codes and current results.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
@@ -848,6 +867,8 @@ Wrap text in (or insert) a content control: richText, text, checkbox, dropDown, 
 
 ### `list_content_controls`
 
+List content controls (fillable fields, checkboxes, dropdowns, dates) with tag, title, type and value.
+
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
@@ -899,6 +920,8 @@ Set a header or footer's text for a section. Use {PAGE}, {NUMPAGES}, {DATE}, {SE
 
 ### `remove_header_footer`
 
+Remove a header or footer (default, first page or even pages) from a section.
+
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
@@ -907,6 +930,8 @@ Set a header or footer's text for a section. Use {PAGE}, {NUMPAGES}, {DATE}, {SE
 | `which` | `default` \\| `first` \\| `even` |  |  |
 
 ### `read_header_footer`
+
+Read a header or footer: its paragraphs with ids you can edit (paragraph = "part#id").
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
@@ -1001,4 +1026,23 @@ Expert escape hatch: replace a paragraph with raw WordprocessingML (one or more 
 | `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `paragraph` | string | yes | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
 | `xml` | string | yes |  |
+
+## Finding tools
+
+### `help`
+
+Help for Word documents (docx files): lists everything this can do, by task, and which tool does it. Open, create, read, write and edit text and paragraphs; format font, size, bold, headings, styles; tables, rows, cells; pictures; lists and bullets; headers, footers, page numbers, margins; comments; track changes; footnotes; links; table of contents. Give a topic or tool name to see its arguments. Call this first when the Word tool you need isn't in your list, then use run_tool.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `topic` | string |  | A task ("tables", "add a comment") or a tool name. Omit for everything. |
+
+### `run_tool`
+
+Run any Word document tool by name, including ones your client didn't list (find them with help). Same arguments as calling the tool directly: edit, format, tables, comments, track changes, headers, anything.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `arguments` | object |  | That tool's arguments. |
+| `tool` | string | yes | Tool name from help, e.g. insert_table. |
 

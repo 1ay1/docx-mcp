@@ -23,6 +23,7 @@ GROUPS = [
     ("Page layout", ["get_page_setup", "set_page_setup", "set_header_footer", "remove_header_footer", "read_header_footer"]),
     ("File", ["get_properties", "set_properties", "get_settings", "set_settings", "protect_document", "unprotect_document"]),
     ("Expert", ["validate_document", "get_xml", "set_paragraph_xml"]),
+    ("Finding tools", ["help", "run_tool"]),
 ]
 
 
