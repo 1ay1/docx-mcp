@@ -178,6 +178,7 @@ cd build/tests
 python3 ../../tests/e2e.py ../docx-mcp /tmp/e2e
 python3 ../../tests/sloppy.py ../docx-mcp /tmp/sloppy
 python3 ../../tests/coverage.py ../docx-mcp /tmp/cov
+python3 ../../tests/fuzz.py ../docx-mcp /tmp/fuzz 60   # random tool-call chains, validity after every step
 ```
 
 The external checks are optional. Build oxval with

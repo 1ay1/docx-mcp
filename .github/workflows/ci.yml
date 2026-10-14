@@ -81,6 +81,7 @@ jobs:
           python3 tests/e2e.py ${{ matrix.exe }} "$RUNNER_TEMP/e2e"
           python3 tests/sloppy.py ${{ matrix.exe }} "$RUNNER_TEMP/sloppy"
           python3 tests/coverage.py ${{ matrix.exe }} "$RUNNER_TEMP/coverage"
+          python3 tests/fuzz.py ${{ matrix.exe }} "$RUNNER_TEMP/fuzz" 60 ${{ github.run_number }}
       - name: Open XML SDK oracle
         if: matrix.name == 'linux-x86_64'
         shell: bash
