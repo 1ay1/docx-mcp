@@ -1117,6 +1117,48 @@ std::vector<ToolDef> make_tools() {
              if (!sty.empty()) out["style"] = sty;
              return out;
          }});
+    add({"sort_table", "Sort table",
+         "Sort a table's rows by a column (Table > Sort). The header row stays on top. type: text, number or date.",
+         obj({{"doc", kDoc}, {"table", integer("")}, {"col", integer("Column to sort by (1-based).")},
+              {"descending", boolean("")}, {"type", enm({"text", "number", "date"}, "Default text.")},
+              {"header", boolean("First row is a header (default true).")}},
+             {"doc", "table", "col"}),
+         false, false, [](Sessions& S, const Json& a) {
+             auto& s = mut(S, a);
+             auto tbl = table_at(s.doc, iarg(a, "table", 1));
+             int n = sort_table(s.doc, tbl, iarg(a, "col", 1) - 1, barg(a, "descending", false), sarg(a, "type", "text"),
+                                barg(a, "header", true), {false});
+             Json col = Json::array();
+             for (auto& r : table_json(tbl)["rows"]) col.push_back(r.size() >= (std::size_t)iarg(a, "col", 1) ? r[iarg(a, "col", 1) - 1] : Json(""));
+             return Json{{"sorted_rows", n}, {"column_now", col}};
+         }});
+    add({"convert_table", "Convert text / table",
+         "Convert Text to Table (paragraphs -> rows, cells split on separator) or Table to Text (rows -> paragraphs).",
+         obj({{"doc", kDoc}, {"to", enm({"table", "text"}, "")}, {"paragraphs", arr(str(""), "to table: the paragraphs, in order.")},
+              {"table", integer("to text: the table.")}, {"separator", str("tab (default), comma, semicolon or any text.")},
+              {"style", str("to table: table style, e.g. Grid Table 4 Accent 1.")}, {"header_row", boolean("to table: first row is a header.")},
+              {"track", kTrack}},
+             {"doc", "to"}),
+         false, false, [](Sessions& S, const Json& a) {
+             auto& s = mut(S, a);
+             std::string sep = sarg(a, "separator", "tab");
+             if (need(a, "to") == "table") {
+                 std::vector<pugi::xml_node> ps;
+                 for (auto& id : strs(a, "paragraphs")) ps.push_back(find_para(s.doc, id).p);
+                 Json opts = {{"header_row", barg(a, "header_row", true)}};
+                 if (a.contains("style")) opts["style"] = sarg(a, "style");
+                 auto tbl = text_to_table(s.doc, ps, sep, opts, track(a));
+                 int n = 0, i = 0;
+                 for (auto t : tables(s.doc)) { i++; if (t == tbl) n = i; }
+                 return Json{{"table", n}, {"rows", xml::children(tbl, "w:tr").size()},
+                             {"columns", xml::children(tbl.child("w:tblGrid"), "w:gridCol").size()}};
+             }
+             if (need(a, "to") != "text") throw std::runtime_error("to must be table or text");
+             auto ps = table_to_text(s.doc, table_at(s.doc, iarg(a, "table", 1)), sep, track(a));
+             Json out = Json::array();
+             for (auto p : ps) out.push_back(para_brief(s.doc, p));
+             return Json{{"paragraphs", out}};
+         }});
     add({"delete_table", "Delete table", "Delete a whole table from the document.", obj({{"doc", kDoc}, {"table", integer("")}, {"track", kTrack}, {"author", str("Author of this change.")}}, {"doc", "table"}), false, true,
          [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);

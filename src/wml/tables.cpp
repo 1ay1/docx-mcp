@@ -737,4 +737,124 @@ Json table_json(pugi::xml_node tbl) {
     return j;
 }
 
+// ── Sort, Convert Text to Table, Convert Table to Text ───────────────────────────────────────
+
+namespace {
+std::string cell_text(pugi::xml_node tc) {
+    std::string t;
+    for (auto p : xml::children(tc, "w:p")) t += (t.empty() ? "" : "\n") + analyze(p).utf8();
+    return t;
+}
+
+bool row_is_simple(pugi::xml_node tr) {
+    for (auto tc : xml::children(tr, "w:tc"))
+        if (tc.child("w:tcPr").child("w:vMerge")) return false;
+    return true;
+}
+
+// Word's sort types: text (case-insensitive), number (ignores everything
+// but digits, sign and point), date (yyyy-mm-dd or m/d/yyyy).
+bool sort_less(const std::string& a, const std::string& b, const std::string& type) {
+    if (type == "number") {
+        auto num = [](const std::string& s, bool& ok) {
+            std::string n;
+            for (char c : s)
+                if (std::isdigit((unsigned char)c) || c == '.' || (c == '-' && n.empty())) n += c;
+            ok = !n.empty() && n != "-" && n != ".";
+            return ok ? std::strtod(n.c_str(), nullptr) : 0.0;
+        };
+        bool oa, ob;
+        double x = num(a, oa), y = num(b, ob);
+        if (oa != ob) return oa;  // numbers before blanks
+        return x < y;
+    }
+    if (type == "date") {
+        auto key = [](const std::string& s) {
+            int y = 0, m = 0, dd = 0;
+            if (std::sscanf(s.c_str(), "%d-%d-%d", &y, &m, &dd) == 3 && y > 31) return y * 10000 + m * 100 + dd;
+            if (std::sscanf(s.c_str(), "%d/%d/%d", &m, &dd, &y) == 3) return (y < 100 ? y + 2000 : y) * 10000 + m * 100 + dd;
+            return 0;
+        };
+        return key(a) < key(b);
+    }
+    return util::lower(a) < util::lower(b);
+}
+}  // namespace
+
+int sort_table(Document& d, pugi::xml_node tbl, int col, bool descending, const std::string& type, bool header,
+               const EditOpts& o) {
+    if (type != "text" && type != "number" && type != "date") throw std::runtime_error("type must be text, number or date");
+    auto rows = xml::children(tbl, "w:tr");
+    std::size_t first = 0;
+    // header rows stay on top: an explicit header, or rows marked to repeat
+    while (first < rows.size() && (rows[first].child("w:trPr").child("w:tblHeader") || (header && first == 0))) first++;
+    if (rows.size() - first < 2) return 0;
+    for (std::size_t i = first; i < rows.size(); i++)
+        if (!row_is_simple(rows[i])) throw std::runtime_error("can't sort a table with vertically merged cells");
+    if (tracking(d, o)) throw std::runtime_error("sorting can't be tracked (Word doesn't track it either); turn tracking off with track: false");
+    std::vector<std::pair<std::string, pugi::xml_node>> keyed;
+    for (std::size_t i = first; i < rows.size(); i++) {
+        std::string key;
+        try { key = cell_text(cell(tbl, (int)i, col)); } catch (...) {}
+        keyed.push_back({key, rows[i]});
+    }
+    std::stable_sort(keyed.begin(), keyed.end(), [&](auto& a, auto& b) {
+        return descending ? sort_less(b.first, a.first, type) : sort_less(a.first, b.first, type);
+    });
+    pugi::xml_node after = first ? rows[first - 1] : pugi::xml_node();
+    for (auto& [k, tr] : keyed) {
+        if (after) tbl.insert_move_after(tr, after);
+        else tbl.insert_move_after(tr, tbl.child("w:tblGrid"));
+        after = tr;
+    }
+    return (int)keyed.size();
+}
+
+pugi::xml_node text_to_table(Document& d, const std::vector<pugi::xml_node>& ps, const std::string& sep, const Json& opts,
+                             const EditOpts& o) {
+    if (ps.empty()) throw std::runtime_error("no paragraphs given");
+    std::string s = sep == "tab" || sep.empty() ? "\t" : sep == "comma" ? "," : sep == "semicolon" ? ";" : sep;
+    std::vector<std::vector<std::string>> rows;
+    for (auto p : ps) {
+        if (p.parent() != ps.front().parent()) throw std::runtime_error("paragraphs must be next to each other in the same place");
+        std::string t = analyze(p).utf8();
+        std::vector<std::string> cells;
+        std::size_t i = 0;
+        while (true) {
+            auto e = t.find(s, i);
+            cells.push_back(std::string(util::trim(t.substr(i, e == std::string::npos ? std::string::npos : e - i))));
+            if (e == std::string::npos) break;
+            i = e + s.size();
+        }
+        rows.push_back(cells);
+    }
+    std::size_t ncol = 0;
+    for (auto& r : rows) ncol = std::max(ncol, r.size());
+    for (auto& r : rows) r.resize(ncol);
+    auto tbl = insert_table(d, ps.front(), false, rows, opts, o);
+    for (auto p : ps) delete_paragraph(d, p, o);
+    return tbl;
+}
+
+std::vector<pugi::xml_node> table_to_text(Document& d, pugi::xml_node tbl, const std::string& sep, const EditOpts& o) {
+    std::string s = sep == "tab" || sep.empty() ? "\t" : sep == "comma" ? ", " : sep == "semicolon" ? "; " : sep;
+    std::vector<pugi::xml_node> out;
+    pugi::xml_node ref = tbl;
+    for (auto tr : xml::children(tbl, "w:tr")) {
+        std::string line;
+        bool firstc = true;
+        for (auto tc : xml::children(tr, "w:tc")) {
+            std::string t = cell_text(tc);
+            for (auto& c : t) if (c == '\n') c = ' ';
+            line += (firstc ? "" : s) + t;
+            firstc = false;
+        }
+        auto np = insert_paragraph(d, ref, true, util::to_u32(line), "Normal", nullptr, o);
+        ref = np;
+        out.push_back(np);
+    }
+    delete_table(d, tbl, o);
+    return out;
+}
+
 }  // namespace docx::wml

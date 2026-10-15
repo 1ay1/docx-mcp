@@ -216,6 +216,17 @@ def exercise(R, doc, track, work, tag):
     R.call("insert_picture", doc=doc, paragraph=p2, data_base64=base64.b64encode(png()).decode(), width=30,
            layout="behind", **t)
     R.call("list_pictures", doc=doc)
+    tp = R.call("insert_paragraph", doc=doc, paragraph=p2, text="K\tV\nb\t2\na\t10", **t)
+    tids = [x["id"] for x in (tp or {}).get("inserted", [])] if isinstance(tp, dict) else []
+    if len(tids) == 3:
+        ct = R.call("convert_table", doc=doc, to="table", paragraphs=tids, style="Grid Table 4 Accent 1", **t)
+        if isinstance(ct, dict) and ct.get("table"):
+            if track:
+                R.call("set_track_changes", doc=doc, on=False)
+            R.call("sort_table", doc=doc, table=ct["table"], col=2, type="number", descending=True)
+            if track:
+                R.call("set_track_changes", doc=doc, on=True)
+            R.call("convert_table", doc=doc, to="text", table=ct["table"], separator="comma", **t)
     R.call("insert_text_box", doc=doc, paragraph=p1, text="Callout\nsecond line", fill="DEEAF6", border="1F4E79",
            shape="rounded", format={"bold": True}, layout={"wrap": "square", "horizontal": "right"}, width=150, **t)
     R.call("insert_text_box", doc=doc, paragraph=p2, text="No border", border=False, **t)

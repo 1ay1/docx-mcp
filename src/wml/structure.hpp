@@ -37,6 +37,16 @@ void format_table(Document& d, pugi::xml_node tbl, const Json& props, const Edit
 void format_cell(Document& d, pugi::xml_node tc, const Json& props, const EditOpts& o);
 void delete_table(Document& d, pugi::xml_node tbl, const EditOpts& o);
 Json table_json(pugi::xml_node tbl);
+// Table > Sort by column `col` (0-based). Header rows (repeat_header, or
+// `header`) stay put. type: text | number | date. Returns rows sorted.
+int sort_table(Document& d, pugi::xml_node tbl, int col, bool descending, const std::string& type, bool header,
+               const EditOpts& o);
+// Convert Text to Table: one row per paragraph, cells split on sep
+// (tab | comma | semicolon | any string). The paragraphs are replaced.
+pugi::xml_node text_to_table(Document& d, const std::vector<pugi::xml_node>& ps, const std::string& sep, const Json& opts,
+                             const EditOpts& o);
+// Convert Table to Text: one paragraph per row, cells joined by sep.
+std::vector<pugi::xml_node> table_to_text(Document& d, pugi::xml_node tbl, const std::string& sep, const EditOpts& o);
 
 // ── pictures ──
 // Where a picture sits. Inline flows with the text like a character; anything
