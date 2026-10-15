@@ -100,6 +100,9 @@ void remove_header_footer(Document& d, int section, const std::string& kind, con
 // Text watermark behind every page (Design > Watermark). Returns headers touched.
 int set_watermark(Document& d, const std::string& text, const Json& opts);
 int remove_watermark(Document& d);
+// Drop Cap: kind drop | margin | none. Splits the first `letters` into their
+// own framed paragraph like Word; none joins them back. Returns the cap paragraph.
+pugi::xml_node set_drop_cap(Document& d, pugi::xml_node p, const std::string& kind, int lines, int letters, const EditOpts& o);
 
 // ── notes ──
 std::string add_note(Document& d, pugi::xml_node p, int pos, const std::string& kind, const std::string& text, const EditOpts& o);

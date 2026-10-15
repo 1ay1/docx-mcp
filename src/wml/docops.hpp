@@ -56,4 +56,12 @@ std::string to_text(Document& d, const std::string& view, bool markdown);
 // `original`. Paragraph-level LCS, then word-level diff inside matched paragraphs.
 Document compare(Document& original, Document& revised, const std::string& author, const Json& opts);
 
+// ── File > Inspect Document ──
+// Counts what a document carries beyond its visible text: comments,
+// revisions, personal info (authors, last-modified-by, template), hidden
+// text, custom XML, custom properties, invisible content (watermarks...).
+// With `remove` (a list of those keys, or "all"), cleans them out first and
+// reports what was removed.
+Json inspect_document(Document& d, const std::vector<std::string>& remove);
+
 }  // namespace docx::wml

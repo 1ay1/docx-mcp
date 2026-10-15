@@ -198,19 +198,18 @@ Json core_properties(Document& d) {
     Json j = Json::object();
     auto cp = d.core_props(false);
     if (!cp) return j;
+    // aliases (author, comments, status) share an element with the real key
+    static const std::set<std::string> aliases = {"author", "comments", "status"};
     for (auto c : cp.children()) {
         if (c.type() != pugi::node_element) continue;
         std::string n = c.name();
         for (auto& [k, q] : core_map()) {
-            if (q == n && !j.contains(k)) {
+            if (q == n && !aliases.count(k) && !j.contains(k)) {
                 j[k] = c.text().get();
                 break;
             }
         }
     }
-    j.erase("author");
-    j.erase("comments");
-    j.erase("status");
     return j;
 }
 
@@ -979,6 +978,185 @@ void Cmp::copy_deleted(pugi::xml_node ob, pugi::xml_node parent, pugi::xml_node 
         for (auto trn : nb.children("w:tr")) stamp(out, schema::ensure_child(schema::ensure_child(trn, "w:trPr"), "w:del"));
     for (auto p : is_p(nb) ? std::vector<pugi::xml_node>{nb} : xml::descendants(nb, "w:p")) track_paragraph(out, p, "w:del");
     out.ensure_para_ids(nb);
+}
+
+// ── File > Inspect Document ────────────────────────────────────────────────────────────────────
+
+namespace {
+// Runs whose text is hidden (w:vanish), outside field codes, in every story.
+std::vector<pugi::xml_node> hidden_runs(Document& d) {
+    std::vector<pugi::xml_node> v;
+    for (auto& part : d.story_parts()) {
+        if (!d.pkg().has(part)) continue;
+        for (auto r : xml::descendants(d.pkg().xml(part).document_element(), "w:r")) {
+            auto van = r.child("w:rPr").child("w:vanish");
+            if (!van || xml::attr(van, "w:val") == "0" || xml::attr(van, "w:val") == "false") continue;
+            if (r.child("w:t") || r.child("w:tab") || r.child("w:br")) v.push_back(r);
+        }
+    }
+    return v;
+}
+
+bool in_list(const std::vector<std::string>& v, const char* k) {
+    return std::find(v.begin(), v.end(), k) != v.end() || std::find(v.begin(), v.end(), "all") != v.end();
+}
+}  // namespace
+
+Json inspect_document(Document& d, const std::vector<std::string>& remove) {
+    static const std::vector<std::string> keys = {"comments", "revisions", "personal_info", "hidden_text", "custom_xml",
+                                                  "custom_properties", "watermark"};
+    for (auto& k : remove)
+        if (k != "all" && std::find(keys.begin(), keys.end(), k) == keys.end()) {
+            std::vector<std::string_view> vk(keys.begin(), keys.end());
+            vk.push_back("all");
+            throw std::runtime_error(util::unknown_key("inspect category", k, vk));
+        }
+    Json removed = Json::object();
+    // comments
+    if (in_list(remove, "comments")) removed["comments"] = delete_all_comments(d);
+    // tracked changes: accepted, the way Inspect Document leaves the current text
+    if (in_list(remove, "revisions")) removed["revisions"] = accept_revisions(d, RevFilter{});
+    // hidden text
+    if (in_list(remove, "hidden_text")) {
+        auto runs = hidden_runs(d);
+        for (auto r : runs) r.parent().remove_child(r);
+        removed["hidden_text"] = runs.size();
+    }
+    // watermarks / invisible content in headers
+    if (in_list(remove, "watermark")) removed["watermark"] = remove_watermark(d);
+    // custom XML data parts and the bindings into them
+    if (in_list(remove, "custom_xml")) {
+        int n = 0;
+        auto& rels = d.pkg().rels(d.main());
+        std::vector<std::string> ids;
+        for (auto* r : rels.by_type(opc::rt::customXml)) ids.push_back(r->id);
+        for (auto& id : ids) {
+            auto* r = rels.by_id(id);
+            std::string part = opc::Package::resolve(d.main(), r->target);
+            // the item's own properties part
+            if (d.pkg().has(part)) {
+                auto& ir = d.pkg().rels(part);
+                for (auto* pr : ir.by_type(opc::rt::customXmlProps)) {
+                    std::string pp = opc::Package::resolve(part, pr->target);
+                    if (d.pkg().has(pp)) d.pkg().remove_part(pp);
+                }
+                d.pkg().remove_part(part);
+            }
+            rels.remove(id);
+            n++;
+        }
+        for (auto& part : d.story_parts()) {
+            if (!d.pkg().has(part)) continue;
+            std::vector<pugi::xml_node> binds;
+            for (auto b : xml::descendants(d.pkg().xml(part).document_element(), "w:dataBinding")) binds.push_back(b);
+            for (auto b : binds) b.parent().remove_child(b);
+        }
+        removed["custom_xml"] = n;
+    }
+    // custom document properties
+    if (in_list(remove, "custom_properties")) {
+        int n = 0;
+        if (auto cp = d.custom_props(false)) {
+            std::vector<pugi::xml_node> ps;
+            for (auto p : cp.children()) if (p.type() == pugi::node_element) ps.push_back(p);
+            for (auto p : ps) cp.remove_child(p);
+            n = (int)ps.size();
+        }
+        removed["custom_properties"] = n;
+    }
+    // personal info: author names on properties, comments, revisions; template; rsids
+    if (in_list(remove, "personal_info")) {
+        int n = 0;
+        Json cp = core_properties(d);
+        Json clear = Json::object();
+        for (auto k : {"creator", "last_modified_by"})
+            if (cp.contains(k) && !cp[k].get<std::string>().empty()) { clear[k] = ""; n++; }
+        if (!clear.empty()) set_core_properties(d, clear);
+        if (auto app = d.app_props(false))
+            for (auto q : {"Company", "Manager", "Template"})
+                if (auto e = app.child(q); e && *e.text().get()) { e.text().set(q == std::string("Template") ? "Normal.dotm" : ""); n++; }
+        // the people who wrote comments and changes become "Author", as Word does
+        for (auto& part : d.story_parts()) {
+            if (!d.pkg().has(part)) continue;
+            for (auto e : xml::descendants(d.pkg().xml(part).document_element(), "*"))
+                if (auto a = e.attribute("w:author"); a && std::string(a.value()) != "Author") { a = "Author"; n++; }
+        }
+        if (auto cm = d.comments(false)) {
+            for (auto c : cm.children("w:comment")) {
+                if (auto a = c.attribute("w:author"); a && std::string(a.value()) != "Author") { a = "Author"; n++; }
+                if (auto a = c.attribute("w:initials")) a = "A";
+            }
+        }
+        if (auto pp = d.people(false)) {
+            std::vector<pugi::xml_node> ps;
+            for (auto p : pp.children("w15:person")) ps.push_back(p);
+            for (auto p : ps) pp.remove_child(p);
+            // one anonymous person, so any remaining comment authors resolve
+            auto p = pp.append_child("w15:person");
+            xml::set_attr(p, "w15:author", "Author");
+            auto pi = p.append_child("w15:presenceInfo");
+            xml::set_attr(pi, "w15:providerId", "None");
+            xml::set_attr(pi, "w15:userId", "Author");
+        }
+        // Word also asks to stop saving personal info from now on
+        auto st = d.settings();
+        schema::ensure_child(st, "w:removePersonalInformation");
+        schema::ensure_child(st, "w:removeDateAndTime");
+        if (auto r = st.child("w:rsids")) { st.remove_child(r); n++; }
+        removed["personal_info"] = n;
+    }
+
+    // what's (still) there
+    Json found = Json::object();
+    found["comments"] = list_comments(d).size();
+    found["revisions"] = list_revisions(d).size();
+    {
+        Json pi = Json::object();
+        Json cp = core_properties(d);
+        for (auto k : {"creator", "last_modified_by"})
+            if (cp.contains(k) && !cp[k].get<std::string>().empty()) pi[k] = cp[k];
+        std::set<std::string> authors;
+        for (auto& part : d.story_parts()) {
+            if (!d.pkg().has(part)) continue;
+            for (auto e : xml::descendants(d.pkg().xml(part).document_element(), "*"))
+                if (auto a = e.attribute("w:author")) authors.insert(a.value());
+        }
+        if (auto cm = d.comments(false))
+            for (auto c : cm.children("w:comment")) if (auto a = c.attribute("w:author")) authors.insert(a.value());
+        if (!authors.empty()) pi["authors"] = authors;
+        if (auto app = d.app_props(false))
+            for (auto q : {"Company", "Manager", "Template"})
+                if (auto e = app.child(q); e && *e.text().get() && std::string(e.text().get()) != "Normal.dotm") pi[q] = e.text().get();
+        found["personal_info"] = pi;
+    }
+    {
+        auto runs = hidden_runs(d);
+        std::string sample;
+        for (auto r : runs) {
+            for (auto t : r.children("w:t")) sample += t.text().get();
+            if (sample.size() > 80) break;
+        }
+        found["hidden_text"] = runs.empty() ? Json(0) : Json{{"runs", runs.size()}, {"sample", sample.substr(0, 80)}};
+    }
+    found["custom_xml"] = d.pkg().rels(d.main()).by_type(opc::rt::customXml).size();
+    {
+        int n = 0;
+        if (auto cp = d.custom_props(false))
+            for (auto p : cp.children()) if (p.type() == pugi::node_element) n++;
+        found["custom_properties"] = n;
+    }
+    {
+        int n = 0;
+        for (auto& part : d.story_parts()) {
+            if (!d.pkg().has(part)) continue;
+            for (auto sh : xml::descendants(d.pkg().xml(part).document_element(), "v:shape"))
+                if (std::string(xml::attr(sh, "id")).rfind("PowerPlusWaterMarkObject", 0) == 0) n++;
+        }
+        found["watermark"] = n;
+    }
+    Json out = {{"found", found}};
+    if (!removed.empty()) out["removed"] = removed;
+    return out;
 }
 
 }  // namespace docx::wml

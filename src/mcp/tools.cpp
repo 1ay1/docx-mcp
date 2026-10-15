@@ -725,6 +725,20 @@ std::vector<ToolDef> make_tools() {
              for (auto& id : strs(a, "paragraphs")) { format_paragraph(s.doc, find_para(s.doc, id).p, obj_arg(a, "format"), track(a)); n++; }
              return Json{{"formatted", n}};
          }});
+    add({"drop_cap", "Drop cap",
+         "Make the first letter of a paragraph a large drop cap (Insert > Drop Cap). kind: drop (default), margin, or none "
+         "to remove it.",
+         obj({{"doc", kDoc}, {"paragraph", kPara}, {"kind", enm({"drop", "margin", "none"}, "Default drop.")},
+              {"lines", integer("Lines to drop, default 3.")}, {"letters", integer("Default 1.")}, {"track", kTrack}},
+             {"doc", "paragraph"}),
+         false, false, [](Sessions& S, const Json& a) {
+             auto& s = mut(S, a);
+             auto r = para(s, a);
+             auto cap = set_drop_cap(s.doc, r.p, sarg(a, "kind", "drop"), iarg(a, "lines", 3), iarg(a, "letters", 1), track(a));
+             Json out = {{"kind", sarg(a, "kind", "drop")}, {"cap", para_brief(s.doc, cap)}};
+             if (auto nx = cap.next_sibling("w:p"); nx && sarg(a, "kind", "drop") != "none") out["text"] = para_brief(s.doc, nx);
+             return out;
+         }});
     add({"apply_style", "Apply style", "Apply a paragraph or character style by id or name (\"Heading 1\", \"Title\", \"Quote\", \"Strong\"...).",
          obj({{"doc", kDoc}, {"paragraphs", arr(str(""), "")}, {"style", str("")}, {"match", str("For a character style: text to style.")},
               {"track", kTrack}, {"author", str("Author of this change.")}},
@@ -1677,6 +1691,17 @@ std::vector<ToolDef> make_tools() {
          }});
 
     // ── quality ──────────────────────────────────────────────────────────
+    add({"inspect_document", "Inspect document",
+         "Check what the file carries besides its text before sharing it (File > Inspect Document): comments, tracked "
+         "changes, personal info (author names), hidden text, custom XML, custom properties, watermarks. remove: a list "
+         "of those (comments, revisions, personal_info, hidden_text, custom_xml, custom_properties, watermark) or [\"all\"] "
+         "cleans them out; revisions are accepted.",
+         obj({{"doc", kDoc}, {"remove", arr(str(""), "Categories to remove.")}}, {"doc"}),
+         false, false, [](Sessions& S, const Json& a) {
+             auto rm = strs(a, "remove");
+             auto& s = rm.empty() ? sess(S, a) : mut(S, a);
+             return inspect_document(s.doc, rm);
+         }});
     add({"validate_document", "Validate", "Check every part against the full OOXML schema (Office 2007-365 extensions) and the package's relationships.",
          obj({{"doc", kDoc}}, {"doc"}), true, false, [](Sessions& S, const Json& a) { return validate_doc(sess(S, a).doc); }});
     add({"get_xml", "Raw XML", "Inspect the raw XML of a part or one paragraph (for diagnosing unusual content).",

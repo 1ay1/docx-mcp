@@ -18,8 +18,8 @@ const std::vector<TaskGroup>& task_groups() {
          {"insert_text", "replace_text", "delete_text", "find_replace"}},
         {"Paragraphs", "add, delete, split, merge or move paragraphs; write a whole document from Markdown",
          {"insert_markdown", "insert_paragraph", "delete_paragraph", "split_paragraph", "merge_paragraphs", "move_paragraphs"}},
-        {"Formatting", "bold, italic, font, size, color, highlight; alignment, spacing, indents; styles like Heading 1",
-         {"format_text", "format_paragraph", "apply_style", "clear_formatting", "list_styles", "get_style", "modify_style",
+        {"Formatting", "bold, italic, font, size, color, highlight; alignment, spacing, indents, borders, shading; drop cap; styles like Heading 1",
+         {"format_text", "format_paragraph", "apply_style", "clear_formatting", "drop_cap", "list_styles", "get_style", "modify_style",
           "delete_style"}},
         {"Lists", "bullets, numbering, list levels, restart numbering",
          {"apply_list", "set_list_level", "remove_list", "restart_numbering"}},
@@ -42,8 +42,8 @@ const std::vector<TaskGroup>& task_groups() {
          {"get_properties", "set_properties", "get_settings", "set_settings", "protect_document", "unprotect_document"}},
         {"Seeing the page", "see what pages look like, save as PDF",
          {"render_pages", "export_pdf"}},
-        {"Expert", "check validity, raw XML",
-         {"validate_document", "get_xml", "set_paragraph_xml"}},
+        {"Expert", "check validity, inspect and clean personal info / hidden content before sharing, raw XML",
+         {"validate_document", "inspect_document", "get_xml", "set_paragraph_xml"}},
     };
     return g;
 }

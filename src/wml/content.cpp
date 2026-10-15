@@ -1007,6 +1007,61 @@ int set_watermark(Document& d, const std::string& text, const Json& opts_in) {
     return n;
 }
 
+// ── drop cap (Insert > Drop Cap) ───────────────────────────────────────────────────
+// Word splits the first letter into its own paragraph framed with
+// w:framePr dropCap, its font sized to span `lines` lines.
+
+pugi::xml_node set_drop_cap(Document& d, pugi::xml_node p, const std::string& kind, int lines, int letters, const EditOpts& o) {
+    if (kind != "drop" && kind != "margin" && kind != "none") throw std::runtime_error("drop cap kind must be drop, margin or none");
+    // already a drop cap paragraph? (this one, or the one before)
+    auto is_cap = [](pugi::xml_node x) {
+        auto f = x.child("w:pPr").child("w:framePr");
+        return f && f.attribute("w:dropCap");
+    };
+    if (!is_cap(p) && is_cap(p.previous_sibling("w:p"))) p = p.previous_sibling("w:p");
+    if (kind == "none") {
+        if (!is_cap(p)) throw std::runtime_error("paragraph has no drop cap");
+        p.child("w:pPr").remove_child("w:framePr");
+        // the letter's size came from the drop cap: clear it, then join it back
+        int n = (int)analyze(p).vis.size();
+        if (n) format_runs(d, p, 0, n, Json{{"size", nullptr}, {"position", nullptr}}, o);
+        merge_with_next(d, p, o);
+        return p;
+    }
+    if (is_cap(p)) {
+        auto f = p.child("w:pPr").child("w:framePr");
+        xml::set_attr(f, "w:dropCap", kind);
+        xml::set_attr(f, "w:lines", std::to_string(lines));
+        return p;
+    }
+    auto pt = analyze(p);
+    if (pt.text.empty()) throw std::runtime_error("paragraph is empty");
+    if (letters < 1) letters = 1;
+    letters = std::min<int>(letters, (int)pt.text.size());
+    if (lines < 1 || lines > 10) throw std::runtime_error("lines must be 1-10");
+    // font size of the body text (first run, else the style's or 11pt)
+    double body_pt = 11;
+    if (auto r0 = p.child("w:r"); r0 && r0.child("w:rPr").child("w:sz"))
+        body_pt = util::to_double(xml::attr(r0.child("w:rPr").child("w:sz"), "w:val", "22")) / 2;
+    auto rest = split_paragraph(d, p, letters, o);
+    (void)rest;
+    auto ppr = schema::ensure_child(p, "w:pPr");
+    auto f = schema::ensure_child(ppr, "w:framePr");
+    xml::set_attr(f, "w:dropCap", kind);
+    xml::set_attr(f, "w:lines", std::to_string(lines));
+    xml::set_attr(f, "w:wrap", "around");
+    xml::set_attr(f, "w:vAnchor", "text");
+    xml::set_attr(f, "w:hAnchor", kind == "margin" ? "page" : "text");
+    // one line of text sits under the drop cap exactly
+    auto sp = schema::ensure_child(ppr, "w:spacing");
+    xml::set_attr(sp, "w:after", "0");
+    xml::set_attr(sp, "w:line", std::to_string(std::lround(body_pt * 1.15 * 20 * lines)));
+    xml::set_attr(sp, "w:lineRule", "exact");
+    format_runs(d, p, 0, letters, Json{{"size", std::round(body_pt * 1.15 * lines * 0.85 * 2) / 2}, {"position", -std::round(body_pt * 0.25)}}, o);
+    schema::sort_children(ppr);
+    return p;
+}
+
 void remove_header_footer(Document& d, int section, const std::string& kind, const std::string& which) {
     auto ss = sections(d);
     if (section < 1 || section > (int)ss.size()) throw std::runtime_error("section not found");

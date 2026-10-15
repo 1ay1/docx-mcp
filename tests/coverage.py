@@ -307,6 +307,14 @@ def exercise(R, doc, track, work, tag):
         R.call("set_watermark", doc=doc, remove=True)
 
     # doc-level
+    R.call("inspect_document", doc=doc)
+    if not track:
+        R.call("inspect_document", doc=doc, remove=["hidden_text", "personal_info", "custom_properties"])
+    dc = R.call("insert_paragraph", doc=doc, paragraph=p3, text="Drop cap paragraph with some words.", **t)
+    if new_id(dc):
+        R.call("drop_cap", doc=doc, paragraph=new_id(dc), lines=2, **t)
+        if not track:
+            R.call("drop_cap", doc=doc, paragraph=new_id(dc), kind="none")
     R.call("get_properties", doc=doc)
     R.call("set_properties", doc=doc, core={"title": "Coverage <&> test", "subject": "s", "keywords": "a, b",
                                             "description": "d"},
