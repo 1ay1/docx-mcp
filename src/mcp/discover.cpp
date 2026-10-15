@@ -10,8 +10,8 @@ namespace docx::server {
 
 const std::vector<TaskGroup>& task_groups() {
     static const std::vector<TaskGroup> g = {
-        {"Files", "open, create a new blank document, save, save as, close, undo",
-         {"open_document", "create_document", "save_document", "close_document", "undo", "list_open_documents"}},
+        {"Files", "open, create a new blank document, save, save as, close, undo; many edits in one call",
+         {"open_document", "create_document", "save_document", "close_document", "undo", "list_open_documents", "batch"}},
         {"Reading", "read the document, see all paragraphs and their ids, get the text or markdown, headings, word count, search",
          {"read_document", "get_text", "get_paragraph", "get_outline", "find_text", "get_statistics"}},
         {"Text", "type, insert, replace, delete or find-and-replace text",

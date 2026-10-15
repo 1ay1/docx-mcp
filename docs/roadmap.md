@@ -8,16 +8,18 @@ The goal: an agent can do anything in a .docx that a person can do in Word,
 the file is exactly what Word itself would write, and the agent never needs
 to touch raw XML to get there.
 
-## Where we are (v0.2.1)
+## Where we are (main, after v0.3.0)
 
-85 tools cover Word's Home, Insert, Layout, References and Review tabs:
-documents, text, paragraphs, styles, lists, tables, pictures, links,
-bookmarks, notes, fields, TOC, equations, content controls, sections,
+106 tools cover Word's Home, Insert, Design, Layout, References and Review
+tabs: documents, text, paragraphs, styles, lists, tables, pictures, text
+boxes, links, bookmarks, notes, fields, TOC, table of figures, index,
+equations, content controls, sections, page borders and color, watermarks,
 headers and footers, comments, tracked changes, compare, protection,
-properties and settings.
+properties, settings and Inspect Document. `insert_markdown` writes a whole
+document in one call and `batch` runs many edits as one change.
 
 Every output is checked by Microsoft's Open XML SDK validator in CI: 564
-corpus files, 2,256 edited/accepted/rejected outputs, all 85 tools tracked
+corpus files, 2,256 edited/accepted/rejected outputs, all 106 tools tracked
 and untracked, and a fuzzer chaining random tool calls. 0 errors.
 
 ## Phase 0: make the tools reachable
@@ -62,14 +64,20 @@ and checks it finds the right tool for 50 everyday tasks.
 
 Checked against the code. None of these exist today.
 
-**Done in v0.3.0:** 1.1 floating pictures (`insert_picture` layout,
-`list_pictures`, `format_picture`, `delete_picture`), 1.3 captions and
-cross-references (`insert_caption`, `list_reference_targets`,
-`insert_cross_reference`), 1.7 split cells and nested tables (`split_cell`;
-tables in cells are addressable), 1.19 tracked moves as Word's
-`moveFrom`/`moveTo`. Still open from 1.7: floating tables, sort, convert
-text to/from table. Still open from 1.19: tracked table property changes,
-`rsid` stamps.
+**Done in v0.3.0:** 1.1 floating pictures, 1.3 captions and
+cross-references, 1.7 split cells and nested tables, 1.19 tracked moves.
+
+**Done since v0.3.0:** 1.2 text boxes (`insert_text_box`; shapes still open),
+1.4 text watermarks (`set_watermark`; picture watermarks still open), 1.5
+page color and borders, 1.6 unequal columns and a line between
+(`set_page_setup`), 1.7 sort and convert text to/from table (`sort_table`,
+`convert_table`), 1.8 table of figures (`insert_toc` with `captions`) and
+index (`mark_index_entry`, `insert_index`), 1.16 drop caps (`drop_cap`),
+1.20 Inspect Document (`inspect_document`), 3.6 Markdown import
+(`insert_markdown`), 4.4 batch edits (`batch`).
+
+Still open: floating tables, shapes, picture watermarks, tracked table
+property changes, `rsid` stamps, and the rows below not listed as done.
 
 | # | Feature | Word UI | What's needed |
 |---|---|---|---|

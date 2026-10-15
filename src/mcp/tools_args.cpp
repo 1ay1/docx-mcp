@@ -175,11 +175,11 @@ std::vector<ToolDef> select_tools(std::vector<ToolDef> all, const std::string& p
         // for clients that rank or cap tools: the everyday ones, plus help and
         // run_tool so nothing else is out of reach
         {"essential", {"open_document", "create_document", "save_document", "read_document", "find_text",
-                       "insert_text", "replace_text", "delete_text", "insert_paragraph", "delete_paragraph",
+                       "insert_text", "replace_text", "delete_text", "insert_paragraph", "insert_markdown", "delete_paragraph",
                        "format_text", "undo"}},
         {"core", {"open_document", "create_document", "save_document", "close_document", "undo",
                   "read_document", "get_text", "get_outline", "find_text",
-                  "insert_text", "replace_text", "delete_text", "find_replace", "insert_paragraph", "delete_paragraph",
+                  "insert_text", "replace_text", "delete_text", "find_replace", "insert_paragraph", "insert_markdown", "delete_paragraph",
                   "format_text", "format_paragraph", "apply_style", "apply_list",
                   "set_track_changes", "list_revisions", "accept_revisions", "reject_revisions",
                   "add_comment", "list_comments", "reply_comment", "resolve_comment",

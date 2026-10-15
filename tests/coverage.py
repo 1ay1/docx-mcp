@@ -340,6 +340,12 @@ def exercise(R, doc, track, work, tag):
     R.call("run_tool", tool="get_statistics", arguments={"doc": doc})
     R.call("run_tool", tool="insert_paragraph", arguments={"doc": doc, "text": "via run_tool", **t})
     R.call("run_tool", tool="no_such_tool", arguments={}, ok_errors=("unknown tool",))
+    R.call("batch", doc=doc, steps=[{"tool": "insert_paragraph", "arguments": {"text": "batched one", **t}},
+                                   {"tool": "insert_markdown", "markdown": "- batched\n- list"},
+                                   {"tool": "get_statistics"}])
+    R.call("batch", doc=doc, steps=[{"tool": "insert_paragraph", "arguments": {"text": "rolled back"}},
+                                   {"tool": "format_text", "arguments": {"paragraph": "ZZZZZZZZ", "format": {"bold": True}}}],
+           ok_errors=("Nothing was changed",))
     if os.environ.get("COVER_RENDER"):  # needs LibreOffice; slow, so opt-in
         R.call("render_pages", doc=doc, page=1, dpi=40)
         R.call("export_pdf", doc=doc, path=os.path.join(work, "out_%s.pdf" % tag))

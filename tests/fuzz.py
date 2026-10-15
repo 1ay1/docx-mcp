@@ -135,7 +135,38 @@ class Fuzz:
 
     def extra(self, pid, s, e, track):
         r = self.r
-        k = r.randint(0, 39)
+        k = r.randint(0, 49)
+        if k == 40:
+            return self.call("insert_markdown", paragraph=pid, markdown=r.choice([
+                "## H\n\n**b** *i* `c` [l](https://example.com)", "- a\n  - b\n1. x\n2. y", "| A | B |\n|---|--:|\n| 1 | **2** |",
+                "> q\n\n```\ncode\n```\n\n---", "plain " + self.word()]), **track)
+        if k == 41:
+            return self.call("insert_text_box", paragraph=pid, position=s, text=self.text() or "box",
+                             fill=r.choice(["DEEAF6", "yellow"]), border=r.choice(["1F4E79", False]), **track)
+        if k == 42:
+            return self.call("set_watermark", text=r.choice(["DRAFT", "A & <B>"]), remove=r.random() < 0.3)
+        if k == 43:
+            return self.call("set_page_setup", setup=r.choice([{"page_borders": "single"}, {"page_color": "FDF6E3"},
+                                                             {"columns": 2, "column_line": True}, {"column_widths": ["3in", "2in"]},
+                                                             {"page_borders": None, "page_color": None}]), **track)
+        if k == 44:
+            return self.call("drop_cap", paragraph=pid, kind=r.choice(["drop", "margin", "none"]), **track)
+        if k == 45:
+            return self.call("mark_index_entry", paragraph=pid, term=self.word(), position=s, **track)
+        if k == 46:
+            return self.call(r.choice(["insert_index", "insert_toc"]), paragraph=pid,
+                             **({"captions": "Figure"} if r.random() < 0.5 else {}), **track)
+        if k == 47:
+            return self.call("sort_table", table=1, col=r.randint(1, 3), type=r.choice(["text", "number", "date"]), track=False)
+        if k == 48:
+            if r.random() < 0.5:
+                return self.call("convert_table", to="text", table=1, **track)
+            return self.call("convert_table", to="table", paragraphs=[pid], separator=r.choice(["tab", "comma", " "]), **track)
+        if k == 49:
+            if r.random() < 0.2:
+                return self.call("inspect_document", remove=[r.choice(["comments", "hidden_text", "personal_info", "watermark", "custom_xml"])])
+            return self.call("batch", steps=[{"tool": "insert_text", "paragraph": pid, "text": self.word(), **track},
+                                             {"tool": "format_text", "paragraph": pid, "format": {"bold": True}, **track}])
         if k == 37:
             return self.call("insert_picture", paragraph=pid, position=s, data_base64=PNG, width=r.choice([20, 80]),
                              layout=r.choice(["inline", "square", "tight", "through", "top_bottom", "behind", "in_front",

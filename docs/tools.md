@@ -1,24 +1,24 @@
 # Tool reference
 
-Generated from `docx-mcp --list-tools` by `tools/gen_tool_docs.py`. 96 tools.
+Generated from `docx-mcp --list-tools` by `tools/gen_tool_docs.py`. 106 tools.
 
 Every tool that edits takes `doc` (a handle or a file path), and most take `track` (record as a tracked change) and `author`. Paragraphs are addressed by the `id` that `read_document` returns.
 
 ## Contents
 
-- [Documents](#documents): `open_document`, `create_document`, `save_document`, `close_document`, `list_open_documents`, `undo`
+- [Documents](#documents): `open_document`, `create_document`, `save_document`, `close_document`, `list_open_documents`, `undo`, `batch`
 - [Reading](#reading): `read_document`, `get_text`, `get_outline`, `get_paragraph`, `find_text`, `get_statistics`
-- [Editing text](#editing-text): `insert_text`, `replace_text`, `delete_text`, `find_replace`, `insert_paragraph`, `delete_paragraph`, `split_paragraph`, `merge_paragraphs`, `move_paragraphs`
-- [Formatting](#formatting): `format_text`, `format_paragraph`, `apply_style`, `clear_formatting`
+- [Editing text](#editing-text): `insert_text`, `replace_text`, `delete_text`, `find_replace`, `insert_paragraph`, `insert_markdown`, `delete_paragraph`, `split_paragraph`, `merge_paragraphs`, `move_paragraphs`
+- [Formatting](#formatting): `format_text`, `format_paragraph`, `apply_style`, `clear_formatting`, `drop_cap`
 - [Styles](#styles): `list_styles`, `get_style`, `modify_style`, `delete_style`
 - [Lists](#lists): `apply_list`, `set_list_level`, `remove_list`, `restart_numbering`
 - [Track changes](#track-changes): `set_track_changes`, `list_revisions`, `accept_revisions`, `reject_revisions`, `compare_documents`
 - [Comments](#comments): `add_comment`, `list_comments`, `reply_comment`, `resolve_comment`, `edit_comment`, `delete_comment`
-- [Tables](#tables): `insert_table`, `read_table`, `set_cell`, `table_rows`, `table_columns`, `merge_cells`, `split_cell`, `format_table`, `delete_table`
-- [Insert](#insert): `insert_picture`, `list_pictures`, `format_picture`, `delete_picture`, `insert_break`, `insert_hyperlink`, `list_hyperlinks`, `remove_hyperlinks`, `add_bookmark`, `list_bookmarks`, `delete_bookmark`, `insert_note`, `list_notes`, `delete_note`, `insert_field`, `list_fields`, `update_fields`, `insert_toc`, `insert_equation`, `insert_caption`, `insert_cross_reference`, `list_reference_targets`, `add_content_control`, `list_content_controls`, `set_content_control`
-- [Page layout](#page-layout): `get_page_setup`, `set_page_setup`, `set_header_footer`, `remove_header_footer`, `read_header_footer`
+- [Tables](#tables): `insert_table`, `read_table`, `set_cell`, `table_rows`, `table_columns`, `merge_cells`, `split_cell`, `format_table`, `sort_table`, `convert_table`, `delete_table`
+- [Insert](#insert): `insert_picture`, `list_pictures`, `format_picture`, `delete_picture`, `insert_text_box`, `insert_break`, `insert_hyperlink`, `list_hyperlinks`, `remove_hyperlinks`, `add_bookmark`, `list_bookmarks`, `delete_bookmark`, `insert_note`, `list_notes`, `delete_note`, `insert_field`, `list_fields`, `update_fields`, `insert_toc`, `mark_index_entry`, `insert_index`, `insert_equation`, `insert_caption`, `insert_cross_reference`, `list_reference_targets`, `add_content_control`, `list_content_controls`, `set_content_control`
+- [Page layout](#page-layout): `get_page_setup`, `set_page_setup`, `set_header_footer`, `remove_header_footer`, `read_header_footer`, `set_watermark`
 - [File](#file): `get_properties`, `set_properties`, `get_settings`, `set_settings`, `protect_document`, `unprotect_document`
-- [Expert](#expert): `validate_document`, `get_xml`, `set_paragraph_xml`
+- [Expert](#expert): `validate_document`, `inspect_document`, `get_xml`, `set_paragraph_xml`
 - [Seeing the page](#seeing-the-page): `render_pages`, `export_pdf`
 - [Finding tools](#finding-tools): `help`, `run_tool`
 
@@ -75,6 +75,16 @@ Undo the last change (repeatable, up to 30 steps).
 |---|---|---|---|
 | `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `steps` | integer |  | How many (default 1). |
+
+### `batch`
+
+Run a list of tool calls on one document in order, as one change: if any step fails, none of them apply (and undo reverts the whole batch). Each step is {tool, arguments}; `doc` is filled in for you. Results come back per step. Saves round trips when making many edits.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `steps` | array of object | yes | The calls, in order. |
+| `stop_on_error` | boolean |  | Default true: roll back everything on the first error. false: keep going and report errors per step. |
 
 ## Reading
 
@@ -223,6 +233,19 @@ Insert new paragraph(s) before or after a paragraph (or a table: pass table). Li
 | `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 | `where` | `after` \\| `before` |  | Default after. |
 
+### `insert_markdown`
+
+Write Markdown as real Word content: # headings (Heading 1-6), paragraphs with **bold**, *italic*, `code`, ~~strike~~ and [links](url), - bullets and 1. numbered lists (indent 2 spaces to nest), > quotes, ``` code blocks, | tables |, --- rules, \pagebreak. The fastest way to write a whole document. Goes after `paragraph` (or the end).
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `markdown` | string | yes | Markdown text. |
+| `paragraph` | string |  | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
+| `table` | integer |  | Anchor on this table (1-based) instead of a paragraph. |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
+| `where` | `after` \\| `before` |  | Default after. |
+
 ### `delete_paragraph`
 
 Delete whole paragraphs (text and paragraph mark).
@@ -326,6 +349,19 @@ Remove direct character formatting (and optionally paragraph formatting), like C
 | `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `paragraph_too` | boolean |  | Also reset paragraph formatting to the style. |
 | `paragraphs` | array of string | yes | Paragraph ids or numbers. |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
+
+### `drop_cap`
+
+Make the first letter of a paragraph a large drop cap (Insert > Drop Cap). kind: drop (default), margin, or none to remove it.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `kind` | `drop` \\| `margin` \\| `none` |  | Default drop. |
+| `letters` | integer |  | Default 1. |
+| `lines` | integer |  | Lines to drop, default 3. |
+| `paragraph` | string | yes | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
 | `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 
 ## Styles
@@ -655,6 +691,34 @@ style, alignment, width (pt|"50%"|auto), borders ("all"|"none"|{top,insideH,..})
 | `table` | integer | yes | Table number (1 = first table). |
 | `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 
+### `sort_table`
+
+Sort a table's rows by a column (Table > Sort). The header row stays on top. type: text, number or date.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `col` | integer | yes | Column to sort by (1-based). |
+| `descending` | boolean |  |  |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `header` | boolean |  | First row is a header (default true). |
+| `table` | integer | yes | Table number (1 = first table). |
+| `type` | `text` \\| `number` \\| `date` |  | Default text. |
+
+### `convert_table`
+
+Convert Text to Table (paragraphs -> rows, cells split on separator) or Table to Text (rows -> paragraphs).
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `header_row` | boolean |  | to table: first row is a header. |
+| `paragraphs` | array of string |  | to table: the paragraphs, in order. |
+| `separator` | string |  | tab (default), comma, semicolon or any text. |
+| `style` | string |  | to table: table style, e.g. Grid Table 4 Accent 1. |
+| `table` | integer |  | to text: the table. |
+| `to` | `table` \\| `text` | yes |  |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
+
 ### `delete_table`
 
 Delete a whole table from the document.
@@ -718,6 +782,26 @@ Delete a picture (number from list_pictures).
 | `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `picture` | integer | yes |  |
 | `track` | boolean |  | Record as a tracked change (default: the document's setting). |
+
+### `insert_text_box`
+
+Insert a text box (Insert > Text Box): a bordered box of text that floats with text wrapped around it, for callouts, sidebars and pull quotes. Lines in `text` become paragraphs; edit them later by the returned ids.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `alignment` | `left` \\| `center` \\| `right` |  |  |
+| `border` | string |  | Outline color, or false for none. Object {color, size} also works. |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `fill` | string |  | Background, RRGGBB or a name. |
+| `format` | object |  | Character formatting (Word names). null removes a property. More keys: caps, small_caps, double_strike, hidden, spacing, position, scale, kerning, language, border, shading, emboss, outline, shadow. |
+| `height` | number |  | pt, default fits the text |
+| `layout` | any |  | Layout Options. "inline" (default) flows with the text; "square", "tight", "through", "top_bottom" wrap text around it; "behind" / "in_front" float over the text. Or an object: {wrap, horizontal: left\|center\|right, vertical: top\|center\|bottom, x, y (points or "1in"), horizontal_from: margin\|page\|column\|character, vertical_from: margin\|page\|paragraph\|line, distance (gap to text, points)}. |
+| `paragraph` | string | yes | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
+| `position` | integer |  | Character offset to insert at (default end). |
+| `shape` | `rect` \\| `rounded` |  | Default rect. |
+| `text` | string | yes | Text; \n separates paragraphs. |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
+| `width` | number |  | pt, default 216 (3in) |
 
 ### `insert_break`
 
@@ -866,16 +950,43 @@ Update TOC entries, SEQ numbering and REF results now; page numbers are refreshe
 
 ### `insert_toc`
 
-Insert a table of contents (References > Table of Contents) before a paragraph, built from headings.
+Insert a table of contents (References > Table of Contents) before a paragraph, built from headings. captions: "Figure" (or Table, ...) makes a Table of Figures from those captions instead.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
+| `captions` | string |  | Caption label for a Table of Figures, e.g. Figure or Table. |
 | `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `from_level` | integer |  | Default 1. |
 | `hyperlinks` | boolean |  | Default true. |
 | `paragraph` | string | yes | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
 | `title` | string |  | Heading above the TOC (default "Contents"; empty for none). |
 | `to_level` | integer |  | Default 3. |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
+
+### `mark_index_entry`
+
+Mark a word or phrase for the index (References > Mark Entry). Put it after `match` text (or at position). sub makes a sub-entry under term. Then insert_index builds the index.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `all` | boolean |  | Mark every paragraph that contains the text (Mark All). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `match` | string |  | Mark this text (the entry goes right after it; default term). |
+| `paragraph` | string |  | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
+| `position` | integer |  | Character offset to insert at (default end). |
+| `sub` | string |  | Sub-entry under term. |
+| `term` | string | yes | Index entry text. |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
+
+### `insert_index`
+
+Insert the index (References > Insert Index) before a paragraph, from the entries marked with mark_index_entry. Page numbers fill in when Word opens the file or on render_pages/export_pdf.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `columns` | integer |  | 1-4, default 2. |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `paragraph` | string | yes | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
 | `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 
 ### `insert_equation`
@@ -981,14 +1092,14 @@ Sections with page size, orientation, margins, columns, header/footer parts.
 
 ### `set_page_setup`
 
-Set page layout of a section (1-based, default all): orientation, paper (letter|a4|legal|a3|a5|b5|executive|tabloid), page_width/page_height, margins {top,bottom,left,right,header,footer,gutter} (pt or "1in"), columns, column_space, vertical_align, line_numbers, page_numbers {start, format}, title_page (different first page), type (section start).
+Set page layout of a section (1-based, default all): orientation, paper (letter|a4|legal|a3|a5|b5|executive|tabloid), page_width/page_height, margins {top,bottom,left,right,header,footer,gutter} (pt or "1in"), columns, column_space, column_line, column_widths, page_borders, page_color, vertical_align, line_numbers, page_numbers {start, format}, title_page (different first page), type (section start).
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `even_odd_headers` | boolean |  |  |
 | `section` | integer |  | Omit for all sections. |
-| `setup` | object | yes |  |
+| `setup` | object | yes | Lengths in pt or with units ("1in", "2cm"). |
 | `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 
 ### `set_header_footer`
@@ -1025,6 +1136,21 @@ Read a header or footer: its paragraphs with ids you can edit (paragraph = "part
 | `kind` | `header` \\| `footer` | yes | Kind. |
 | `section` | integer |  |  |
 | `which` | `default` \\| `first` \\| `even` |  |  |
+
+### `set_watermark`
+
+Put a text watermark behind every page (Design > Watermark), e.g. DRAFT or CONFIDENTIAL. remove: true takes it off.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `color` | string |  | RRGGBB or a name. Default silver. |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `font` | string |  | Default Calibri. |
+| `layout` | `diagonal` \\| `horizontal` |  | Default diagonal. |
+| `opacity` | number |  | 0-1, default 0.5. |
+| `remove` | boolean |  | Remove the watermark instead. |
+| `size` | number |  | Points; default fits the page width. |
+| `text` | string |  | Watermark text. |
 
 ## File
 
@@ -1092,6 +1218,15 @@ Check every part against the full OOXML schema (Office 2007-365 extensions) and 
 |---|---|---|---|
 | `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 
+### `inspect_document`
+
+Check what the file carries besides its text before sharing it (File > Inspect Document): comments, tracked changes, personal info (author names), hidden text, custom XML, custom properties, watermarks. remove: a list of those (comments, revisions, personal_info, hidden_text, custom_xml, custom_properties, watermark) or ["all"] cleans them out; revisions are accepted.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `remove` | array of string |  | Categories to remove. |
+
 ### `get_xml`
 
 Inspect the raw XML of a part or one paragraph (for diagnosing unusual content).
@@ -1105,7 +1240,7 @@ Inspect the raw XML of a part or one paragraph (for diagnosing unusual content).
 
 ### `set_paragraph_xml`
 
-Expert escape hatch: replace a paragraph with raw WordprocessingML (one or more w:p/w:tbl). Prefixes w, r, a, m, wp, w14... are predeclared. The result is schema-validated; invalid XML is rejected.
+Expert escape hatch for things no other tool covers: replace a paragraph with raw WordprocessingML (one or more w:p/w:tbl). Prefixes w, r, a, m, wp, w14... are predeclared. Properties are put in the schema's order for you; anything still invalid is rejected with the reason. Prefer format_paragraph / format_text.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|

@@ -1811,6 +1811,86 @@ std::vector<ToolDef> make_tools() {
          "call them. Only needed when a Word tool isn't in your list; tools you can see, call directly.",
          obj({{"topic", str("Tool names or tasks, comma-separated (\"insert_table, format_text\", \"add a comment\"). Omit for everything.")}}), true, false,
          [catalog](Sessions&, const Json& a) { return Json{{"_text", help_result(*catalog, sarg(a, "topic"))}}; }});
+    add({"batch", "Run several edits at once",
+         "Run a list of tool calls on one document in order, as one change: if any step fails, none of them apply "
+         "(and undo reverts the whole batch). Each step is {tool, arguments}; `doc` is filled in for you. Results come "
+         "back per step. Saves round trips when making many edits.",
+         obj({{"doc", kDoc}, {"steps", arr(anyobj("{tool, arguments}"), "The calls, in order.")},
+              {"stop_on_error", boolean("Default true: roll back everything on the first error. false: keep going and "
+                                        "report errors per step.")}},
+             {"doc", "steps"}),
+         false, false, [catalog](Sessions& S, const Json& a) -> Json {
+             if (!a["steps"].is_array() || a["steps"].empty()) throw std::runtime_error("steps must be a non-empty list of {tool, arguments}");
+             if (a["steps"].size() > 500) throw std::runtime_error("at most 500 steps per batch");
+             auto& s = sess(S, a);
+             std::string doc = need(a, "doc");
+             bool stop = barg(a, "stop_on_error", true);
+             // one snapshot for the whole batch; the steps' own snapshots are dropped after
+             auto before = s.doc.snapshot();
+             auto saved_undo = std::move(s.undo);
+             s.undo.clear();
+             bool was_dirty = s.dirty;
+             auto restore = [&] {
+                 auto keep = s.doc.author;
+                 s.doc = Document::from_bytes(before);
+                 s.doc.author = keep;
+                 s.undo = std::move(saved_undo);
+                 s.dirty = was_dirty;
+             };
+             Json results = Json::array();
+             int ok = 0, failed = 0;
+             for (std::size_t i = 0; i < a["steps"].size(); i++) {
+                 Json step = a["steps"][i];
+                 if (step.is_string()) { try { step = Json::parse(step.get<std::string>()); } catch (...) {} }
+                 if (!step.is_object()) {
+                     restore();
+                     throw std::runtime_error("step " + std::to_string(i + 1) + " must be {tool, arguments}");
+                 }
+                 std::string name = step.value("tool", step.value("name", std::string()));
+                 Json args = step.contains("arguments") ? step["arguments"] : step.contains("args") ? step["args"] : Json::object();
+                 if (args.is_string()) { try { args = Json::parse(args.get<std::string>()); } catch (...) {} }
+                 if (!args.is_object()) args = Json::object();
+                 // the other keys of a flat step are its arguments ({tool, paragraph, text})
+                 for (auto& [k, v] : step.items())
+                     if (k != "tool" && k != "name" && k != "arguments" && k != "args" && !args.contains(k)) args[k] = v;
+                 args["doc"] = doc;
+                 const ToolDef* t = nullptr;
+                 for (auto& x : *catalog) if (x.name == name) t = &x;
+                 std::string err;
+                 if (!t) err = "unknown tool '" + name + "'";
+                 else if (name == "batch" || name == "run_tool" || name == "help" || name == "open_document" ||
+                          name == "create_document" || name == "close_document" || name == "save_document" || name == "undo")
+                     err = name + " can't run inside a batch";
+                 Json r;
+                 if (err.empty()) {
+                     try {
+                         r = call_tool(*t, S, args);
+                     } catch (const std::exception& e) {
+                         err = e.what();
+                     }
+                 }
+                 if (!err.empty()) {
+                     failed++;
+                     if (stop) {
+                         restore();
+                         throw std::runtime_error("step " + std::to_string(i + 1) + " (" + name + ") failed: " + err +
+                                                  ". Nothing was changed.");
+                     }
+                     results.push_back({{"step", i + 1}, {"tool", name}, {"error", err}});
+                     continue;
+                 }
+                 ok++;
+                 if (r.is_object() && r.contains("_text")) r = r["_text"];
+                 results.push_back({{"step", i + 1}, {"tool", name}, {"result", r}});
+             }
+             // the whole batch is one undo step
+             s.undo = std::move(saved_undo);
+             if (ok) {
+                 s.undo.push_back(std::move(before));
+                 s.dirty = true;
+             }
+             return Json{{"ok", ok}, {"failed", failed}, {"steps", results}};
+         }});
     add({"run_tool", "Run any docx tool",
          "Run any Word document tool by name, including ones your client didn't list (find them with help). Same "
          "arguments as calling the tool directly: edit, format, tables, comments, track changes, headers, anything.",
