@@ -62,45 +62,30 @@ and checks it finds the right tool for 50 everyday tasks.
 
 ## Phase 1: gaps in what Word documents commonly contain
 
-Checked against the code. None of these exist today.
+Status is checked against the code.
 
-**Done in v0.3.0:** 1.1 floating pictures, 1.3 captions and
-cross-references, 1.7 split cells and nested tables, 1.19 tracked moves.
-
-**Done since v0.3.0:** 1.2 text boxes (`insert_text_box`; shapes still open),
-1.4 text watermarks (`set_watermark`; picture watermarks still open), 1.5
-page color and borders, 1.6 unequal columns and a line between
-(`set_page_setup`), 1.7 sort and convert text to/from table (`sort_table`,
-`convert_table`), 1.8 table of figures (`insert_toc` with `captions`) and
-index (`mark_index_entry`, `insert_index`), 1.16 drop caps (`drop_cap`),
-1.20 Inspect Document (`inspect_document`), 3.6 Markdown import
-(`insert_markdown`), 4.4 batch edits (`batch`).
-
-Still open: floating tables, shapes, picture watermarks, tracked table
-property changes, `rsid` stamps, and the rows below not listed as done.
-
-| # | Feature | Word UI | What's needed |
-|---|---|---|---|
-| 1.1 | Floating pictures | Wrap Text, Position | `wp:anchor` with wrap square/tight/behind/in front, position relative to page, margin or paragraph. `insert_picture` gains `wrap` and `position`; new `move_picture`, `resize_picture`, `delete_picture`, `list_pictures` |
-| 1.2 | Text boxes and shapes | Insert > Text Box, Shapes | `wps:wsp` with `txbxContent`, plus VML fallback in `mc:AlternateContent` like Word writes. Text inside is addressable as a story (`part#id` already works for headers) |
-| 1.3 | Captions and cross-references | References > Insert Caption, Cross-reference | `insert_caption` (Figure/Table/Equation with `SEQ`; `update_fields` already renumbers them), `insert_cross_reference` to a heading, bookmark, caption or note, with `REF`/`PAGEREF`/`NOTEREF` and the hidden `_Ref` bookmark Word adds |
-| 1.4 | Watermark | Design > Watermark | Text or picture watermark in every header, as Word draws it (VML shape in the header with `PowerPlusWaterMarkObject`) |
-| 1.5 | Page color and borders | Design > Page Color, Page Borders | `w:background`, `w:displayBackgroundShape`, `w:pgBorders` through `set_page_setup` |
-| 1.6 | Columns per section with breaks | Layout > Columns | Already sets `w:cols`; add unequal widths, a line between, and column breaks that respect sections |
-| 1.7 | Table: floating, nested, cell split, header repeat | Table Layout | `w:tblpPr` positioning, `split_cell` (the reverse of merge), insert a table in a cell, vertical cell text, row height rules, `set_cell` borders per side, sort rows, table from/to text |
-| 1.8 | Table of figures, index, bibliography | References | `insert_table_of_figures` (`TOC \c "Figure"`), `mark_index_entry` (`XE`) + `insert_index` (`INDEX`), citations (`CITATION`) with the `customXml` sources part, `insert_bibliography` |
-| 1.9 | Lists: real multi-level control | Define New Multilevel List | Edit a list's levels (format, text, indent, start, restart after), picture bullets (`w:numPicBullet`), link levels to heading styles, legal numbering |
-| 1.10 | Styles: full definition | Modify Style > Format | Borders, shading, tabs, numbering, table style conditional formats (header row, banded rows), linked styles, style separators; `import_styles` from another document or template |
-| 1.11 | Themes | Design > Themes, Colors, Fonts | Read and set theme colors and fonts; resolve `themeColor`/`asciiTheme` in effective formatting |
-| 1.12 | Charts | Insert > Chart | Read the cached chart data and type; insert a basic bar/line/pie chart with its embedded workbook so Word can edit it. Start read-only |
-| 1.13 | Building blocks and templates | Quick Parts, .dotx | Read the glossary document, insert a building block, create a document from a `.dotx`, save as `.dotx` |
-| 1.14 | Mail merge and document variables | Mailings | Fill `MERGEFIELD`s from JSON rows (one document or one per row), `w:docVars`, `DOCVARIABLE` |
-| 1.15 | Form fields and data binding | Developer | Legacy form fields (`FORMTEXT`, `FORMCHECKBOX`), content controls bound to `customXml` (`w:dataBinding`), repeating sections, fill a form from JSON |
-| 1.16 | Drop caps, text effects, ruby, East Asian layout | Font dialog, Paragraph | `w:framePr` drop cap, `w14` text effects, `w:ruby`, `w:eastAsianLayout`, `w:fitText` |
-| 1.17 | Line numbering and hyphenation | Layout | Already writes the elements; expose per section and per paragraph with suppress options |
-| 1.18 | Comments: modern parts complete | Review | Mentions (`w15:people`, `@name`), comment dates in `commentsExtensible`, comments on comments in headers and notes |
-| 1.19 | Tracked formatting and moves, Word-exact | Review | Tracked moves as `w:moveFrom`/`w:moveTo` with move ranges (today a tracked move is delete + insert), track table property changes, `rsid` stamps so Word's compare merges cleanly |
-| 1.20 | Document inspection and cleanup | File > Inspect Document | Remove personal info, hidden text, comments, revisions, custom XML, document properties in one call |
+| # | Feature | Word UI | Status | What's left |
+|---|---|---|---|---|
+| 1.1 | Floating pictures | Wrap Text, Position | Done (v0.3.0) | `insert_picture` takes `layout`; `format_picture`, `delete_picture`, `list_pictures` |
+| 1.2 | Text boxes and shapes | Insert > Text Box, Shapes | Text boxes done | `insert_text_box` writes `wps:wsp` with fill, outline, rounded corners; its paragraphs edit by id. Left: other shapes, and a VML fallback for very old readers |
+| 1.3 | Captions and cross-references | References | Done (v0.3.0) | `insert_caption`, `insert_cross_reference`, `list_reference_targets` |
+| 1.4 | Watermark | Design > Watermark | Text done | `set_watermark` (diagonal or horizontal, remove). Left: picture watermarks |
+| 1.5 | Page color and borders | Design | Done | `set_page_setup` `page_color`, `page_borders` |
+| 1.6 | Columns | Layout > Columns | Done | `columns`, `column_space`, `column_line`, `column_widths`; column breaks via `insert_break` |
+| 1.7 | Tables | Table Layout | Mostly done | Split cells and nested tables (v0.3.0), `sort_table`, `convert_table`, `repeat_header`, row height. Left: floating tables (`w:tblpPr`), vertical cell text |
+| 1.8 | Table of figures, index, bibliography | References | Figures and index done | `insert_toc` with `captions`, `mark_index_entry`, `insert_index`. Left: citations and bibliography |
+| 1.9 | Lists: multi-level control | Define New Multilevel List | Open | Edit a list's level formats, picture bullets, link levels to headings, legal numbering |
+| 1.10 | Styles: full definition | Modify Style | Partly | `modify_style` sets any paragraph or run property (borders, shading, tabs, numbering). Left: table style conditional formats, `import_styles` from a template |
+| 1.11 | Themes | Design > Themes | Open | Read and set theme colors and fonts |
+| 1.12 | Charts | Insert > Chart | Open | Read cached chart data; then basic bar/line/pie |
+| 1.13 | Building blocks and templates | Quick Parts, .dotx | Open | Glossary document, create from `.dotx` |
+| 1.14 | Mail merge and document variables | Mailings | Open | Fill `MERGEFIELD`s from JSON rows, `w:docVars` |
+| 1.15 | Form fields and data binding | Developer | Partly | Content controls done. Left: legacy form fields, `w:dataBinding` to custom XML, repeating sections |
+| 1.16 | Drop caps, text effects, ruby | Font, Paragraph | Drop caps done | `drop_cap`. Left: `w14` text effects, ruby, East Asian layout |
+| 1.17 | Line numbering and hyphenation | Layout | Done | `set_page_setup` `line_numbers`, `set_settings` `auto_hyphenation`, `format_paragraph` `suppress_line_numbers` / `suppress_auto_hyphens` |
+| 1.18 | Comments: modern parts | Review | Mostly done | Threads, resolved, durable ids, people. Left: @mentions |
+| 1.19 | Tracked moves and formatting | Review | Moves done (v0.3.0) | Left: tracked table property changes, `rsid` stamps |
+| 1.20 | Document inspection | File > Inspect Document | Done | `inspect_document` reports and removes comments, changes, personal info, hidden text, custom XML, custom properties, watermarks |
 
 Each feature lands as tools plus engine code in `src/wml`, with:
 
@@ -114,8 +99,9 @@ Each feature lands as tools plus engine code in `src/wml`, with:
 Agents can't see layout today. Page numbers, page counts and "what does page
 3 look like" only resolve when Word opens the file.
 
-**Done in v0.3.0:** 2.1 `render_pages` (PNG pages as MCP image content) and
-2.2 `export_pdf`, through LibreOffice with pdftoppm, mutool or Ghostscript.
+**Done:** 2.1 `render_pages` (PNG pages as MCP image content) and 2.2
+`export_pdf`, through LibreOffice with pdftoppm, mutool or Ghostscript.
+Open: 2.3 to 2.5.
 
 | # | Item | Done when |
 |---|---|---|
@@ -130,6 +116,10 @@ Test: render each corpus file, compare against images rendered by Word
 
 ## Phase 3: formats
 
+**Done:** 3.6 Markdown in (`insert_markdown`: headings, inline formatting,
+links, nested lists, quotes, code, tables, rules, page breaks; tracked as one
+insertion). Open: `insert_html` and the rest.
+
 | # | Item | Notes |
 |---|---|---|
 | 3.1 | `.docm` and `.dotm` | Open, edit and save while keeping the VBA project bytes unchanged. Never run macros |
@@ -141,6 +131,8 @@ Test: render each corpus file, compare against images rendered by Word
 | 3.7 | Markdown out | `get_text format=markdown` covers tables, notes, comments, tracked changes |
 
 ## Phase 4: scale and speed
+
+**Done:** 4.4 `batch` (a list of calls as one undo step, all or nothing).
 
 | # | Item | Target |
 |---|---|---|
@@ -163,14 +155,15 @@ Test: render each corpus file, compare against images rendered by Word
 
 ## Order
 
-1. Phase 0 first. It fixes most of what users hit today without new engine
-   code, and every later feature depends on being discoverable.
-2. Phase 1 in this order: 1.3 captions and cross-references, 1.1 floating
-   pictures, 1.7 tables, 1.9 lists, 1.19 tracked moves, 1.10 styles, then
-   the rest. That's roughly how often real documents use them.
-3. Phase 2.1 and 2.2 alongside Phase 1: rendering is the biggest thing agents
-   can't do at all.
-4. Phases 3 to 5 after.
+Phases 0, most of 1, 2.1-2.2, 3.6 and 4.4 are done. Next, by how often real
+documents and agents need them:
+
+1. 2.4 field results computed by us (page numbers right before Word opens
+   the file) and 2.3 the page map.
+2. 1.9 multi-level lists and 1.10 table style conditional formats.
+3. 1.14 mail merge from JSON, then 1.15 data binding.
+4. 1.7 floating tables, 1.2 shapes, 1.4 picture watermarks.
+5. 3.6 `insert_html`, then Phase 4 speed work and Phase 5 proof.
 
 ## Not planned
 
