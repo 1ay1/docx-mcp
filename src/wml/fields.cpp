@@ -1332,16 +1332,16 @@ struct MathParser {
                 auto pr = n.append_child("m:naryPr");
                 std::string chr = cmd == "sum" ? "∑" : cmd == "int" ? "∫" : "∏";
                 xml::set_attr(pr.append_child("m:chr"), "m:val", chr);
-                ctrl(pr);
                 auto sub = n.append_child("m:sub");
                 auto sup = n.append_child("m:sup");
                 for (int k = 0; k < 2; k++) {
                     if (peek() == '_') { i++; arg(sub); }
                     else if (peek() == '^') { i++; arg(sup); }
                 }
-                if (!sub.first_child()) xml::set_attr(pr.prepend_child("m:subHide"), "m:val", "1");
-                if (!sup.first_child()) xml::set_attr(pr.prepend_child("m:supHide"), "m:val", "1");
-                schema::sort_children(pr);
+                // CT_NaryPr order: chr, limLoc, grow, subHide, supHide, ctrlPr
+                if (!sub.first_child()) xml::set_attr(pr.append_child("m:subHide"), "m:val", "1");
+                if (!sup.first_child()) xml::set_attr(pr.append_child("m:supHide"), "m:val", "1");
+                ctrl(pr);
                 auto e = n.append_child("m:e");
                 atom(e);
                 return;
@@ -1360,11 +1360,12 @@ struct MathParser {
         }
         if (c == '{') { arg(into); return; }
         std::u32string t;
-        bool word = std::isalnum((int)(c < 128 ? c : 'a'));
-        if (word) {
-            while (!eof() && s[i] < 128 && std::isalnum((int)s[i])) t.push_back(s[i++]);
+        auto letter = [](char32_t x) { return x >= 128 || std::isalnum((int)x); };
+        if (letter(c)) {
+            // a run of letters and digits, any script (ħ, é, Greek typed directly)
+            while (!eof() && letter(s[i]) && s[i] != 0x2061) t.push_back(s[i++]);
         } else {
-            t.push_back(s[i++]);
+            t.push_back(s[i++]);  // one symbol; stray ) } included, so we always move on
         }
         text_run(into, t);
     }
@@ -1372,6 +1373,7 @@ struct MathParser {
     void seq(pugi::xml_node into, char32_t close) {
         while (!eof() && peek() != close) {
             if (peek() == ' ') { i++; continue; }
+            std::size_t at = i;
             // base followed by ^ or _
             pugi::xml_document tmp;
             auto holder = tmp.append_child("h");
@@ -1385,6 +1387,7 @@ struct MathParser {
             }
             if (!sub && !sup) {
                 for (auto c : holder.children()) into.append_copy(c);
+                if (i == at) text_run(into, std::u32string(1, s[i++]));  // never stall
                 continue;
             }
             const char* q = sub && sup ? "m:sSubSup" : sub ? "m:sSub" : "m:sSup";

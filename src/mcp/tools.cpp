@@ -1126,7 +1126,8 @@ std::vector<ToolDef> make_tools() {
              auto tbl = table_at(s.doc, iarg(a, "table", 1));
              format_table(s.doc, tbl, obj_arg(a, "format"), track(a));
              Json out = {{"table", iarg(a, "table", 1)}, {"applied", Json::array()}};
-             for (auto& [k, _] : obj_arg(a, "format").items()) out["applied"].push_back(k);
+             const Json fmt = obj_arg(a, "format");
+             for (auto& [k, _] : fmt.items()) out["applied"].push_back(k);
              std::string sty = xml::attr(tbl.child("w:tblPr").child("w:tblStyle"), "w:val");
              if (!sty.empty()) out["style"] = sty;
              return out;
@@ -1143,7 +1144,8 @@ std::vector<ToolDef> make_tools() {
              int n = sort_table(s.doc, tbl, iarg(a, "col", 1) - 1, barg(a, "descending", false), sarg(a, "type", "text"),
                                 barg(a, "header", true), {false});
              Json col = Json::array();
-             for (auto& r : table_json(tbl)["rows"]) col.push_back(r.size() >= (std::size_t)iarg(a, "col", 1) ? r[iarg(a, "col", 1) - 1] : Json(""));
+             const Json tj = table_json(tbl);
+             for (auto& r : tj["rows"]) col.push_back(r.size() >= (std::size_t)iarg(a, "col", 1) ? r[iarg(a, "col", 1) - 1] : Json(""));
              return Json{{"sorted_rows", n}, {"column_now", col}};
          }});
     add({"convert_table", "Convert text / table",

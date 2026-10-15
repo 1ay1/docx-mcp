@@ -277,6 +277,16 @@ TEST(equation) {
     save(d, "equation");
 }
 
+// non-ASCII letters and stray closers used to loop forever
+TEST(equation_never_stalls) {
+    auto d = sample();
+    auto p = paragraphs(d.body())[1];
+    for (const char* e : {"T = \\frac{\u0127 c^3}{8\\pi G M k_B}", "\u0127", "\u65e5\u672c+1", "a)b}c", "\\", "((", "\\sqrt{x", "\\sum x"})
+        insert_equation(d, p, 0, e, false, {});
+    CHECK(xml::descendants(p, "m:oMath").size() == 8);
+    save(d, "equation_odd");
+}
+
 // tracked column edits never leave cellIns and cellDel on one cell
 TEST(tracked_column_insert_delete) {
     auto d = sample(false);
