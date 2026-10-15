@@ -132,6 +132,13 @@ void insert_toc(Document& d, pugi::xml_node p, const Json& opts, const EditOpts&
 // Recompute TOC entries, SEQ/REF/STYLEREF results that don't need layout.
 // Sets updateFields so Word refreshes page numbers on open.
 int update_fields(Document& d);
+// Mark Entry: a hidden XE field at pos naming an index term (and sub-term).
+void mark_index_entry(Document& d, pugi::xml_node p, int pos, const std::string& term, const std::string& sub,
+                      const EditOpts& o);
+// Insert Index before paragraph `before`: an INDEX field in its own
+// continuous section with `columns`, entries built from the XE marks.
+// Returns the number of entries.
+int insert_index(Document& d, pugi::xml_node before, const Json& opts, const EditOpts& o);
 
 // ── captions and cross-references (References tab) ──
 // A "Figure 3: text" caption paragraph (style Caption, SEQ field numbered like

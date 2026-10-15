@@ -1369,17 +1369,64 @@ std::vector<ToolDef> make_tools() {
     add({"update_fields", "Update fields",
          "Update TOC entries, SEQ numbering and REF results now; page numbers are refreshed by Word on open (updateFields is set).",
          obj({{"doc", kDoc}}, {"doc"}), false, false, [](Sessions& S, const Json& a) { return Json{{"updated", update_fields(mut(S, a).doc)}}; }});
-    add({"insert_toc", "Table of contents", "Insert a table of contents (References > Table of Contents) before a paragraph, built from headings.",
+    add({"insert_toc", "Table of contents",
+         "Insert a table of contents (References > Table of Contents) before a paragraph, built from headings. "
+         "captions: \"Figure\" (or Table, ...) makes a Table of Figures from those captions instead.",
          obj({{"doc", kDoc}, {"paragraph", kPara}, {"from_level", integer("Default 1.")}, {"to_level", integer("Default 3.")},
+              {"captions", str("Caption label for a Table of Figures, e.g. Figure or Table.")},
               {"title", str("Heading above the TOC (default \"Contents\"; empty for none).")}, {"hyperlinks", boolean("Default true.")}, {"track", kTrack}},
              {"doc", "paragraph"}),
          false, false, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
              Json o = Json::object();
-             for (auto k : {"from_level", "to_level", "title", "hyperlinks"}) if (a.contains(k)) o[k] = a[k];
+             for (auto k : {"from_level", "to_level", "title", "hyperlinks", "captions"}) if (a.contains(k)) o[k] = a[k];
              insert_toc(s.doc, para(s, a).p, o, track(a));
-             return Json{{"inserted", "table of contents"},
-                         {"note", "entries fill in when the document is opened in Word or rendered (render_pages, export_pdf)"}};
+             return Json{{"inserted", a.contains("captions") ? "table of figures (" + sarg(a, "captions") + ")" : "table of contents"},
+                         {"note", "page numbers fill in when the document is opened in Word or rendered (render_pages, export_pdf)"}};
+         }});
+    add({"mark_index_entry", "Mark index entry",
+         "Mark a word or phrase for the index (References > Mark Entry). Put it after `match` text (or at position). "
+         "sub makes a sub-entry under term. Then insert_index builds the index.",
+         obj({{"doc", kDoc}, {"paragraph", kPara}, {"term", str("Index entry text.")}, {"sub", str("Sub-entry under term.")},
+              {"match", str("Mark this text (the entry goes right after it; default term).")}, {"position", integer("")},
+              {"all", boolean("Mark every paragraph that contains the text (Mark All).")}, {"track", kTrack}},
+             {"doc", "term"}),
+         false, false, [](Sessions& S, const Json& a) {
+             auto& s = mut(S, a);
+             std::string term = need(a, "term"), sub = sarg(a, "sub");
+             std::string m = sarg(a, "match", term);
+             auto mark_in = [&](pugi::xml_node p) -> bool {
+                 auto text = analyze(p).text;
+                 auto u = util::to_u32(m);
+                 auto at = text.find(u);
+                 if (at == std::u32string::npos) return false;
+                 mark_index_entry(s.doc, p, (int)(at + u.size()), term, sub, track(a));
+                 return true;
+             };
+             Json marked = Json::array();
+             if (barg(a, "all", false)) {
+                 for (auto p : paragraphs(s.doc.body(), false))
+                     if (mark_in(p)) marked.push_back(para_id(p));
+             } else {
+                 if (!a.contains("paragraph")) throw std::runtime_error("give paragraph, or all: true to mark every occurrence");
+                 auto r = para(s, a);
+                 if (a.contains("position")) mark_index_entry(s.doc, r.p, pos_in(r.p, a), term, sub, track(a));
+                 else if (!mark_in(r.p)) throw std::runtime_error("'" + m + "' is not in paragraph " + para_id(r.p));
+                 marked.push_back(para_id(r.p));
+             }
+             if (marked.empty()) throw std::runtime_error("'" + m + "' was not found in the document");
+             return Json{{"term", sub.empty() ? term : term + ": " + sub}, {"marked", marked}};
+         }});
+    add({"insert_index", "Insert index",
+         "Insert the index (References > Insert Index) before a paragraph, from the entries marked with mark_index_entry. "
+         "Page numbers fill in when Word opens the file or on render_pages/export_pdf.",
+         obj({{"doc", kDoc}, {"paragraph", kPara}, {"columns", integer("1-4, default 2.")}, {"track", kTrack}}, {"doc", "paragraph"}),
+         false, false, [](Sessions& S, const Json& a) {
+             auto& s = mut(S, a);
+             Json o = Json::object();
+             if (a.contains("columns")) o["columns"] = iarg(a, "columns", 2);
+             int n = insert_index(s.doc, para(s, a).p, o, track(a));
+             return Json{{"entries", n}, {"columns", iarg(a, "columns", 2)}};
          }});
     add({"insert_caption", "Caption",
          "Add a numbered caption (References > Insert Caption): \"Figure 1: text\", \"Table 2: text\". Numbers are "

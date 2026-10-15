@@ -127,6 +127,174 @@ void insert_field(Document& d, pugi::xml_node p, int pos, const std::string& ins
     mk([](pugi::xml_node r) { xml::set_attr(r.append_child("w:fldChar"), "w:fldCharType", "end"); });
 }
 
+// ── index (References > Mark Entry / Insert Index) ───────────────────────────────────────────
+
+namespace {
+void set_update_fields(Document& d);
+}
+
+namespace {
+std::string xe_escape(const std::string& s) {
+    std::string o;
+    for (char c : s) {
+        if (c == '"') o += "\\\"";
+        else if (c == ':') o += "\\:";
+        else o += c;
+    }
+    return o;
+}
+
+// "main:sub" terms of every XE field (escaped colons come back as \x01).
+std::vector<std::string> xe_terms(Document& d) {
+    std::vector<std::string> v;
+    for (auto p : paragraphs(d.body(), true)) {
+        std::string instr;
+        bool in = false;
+        std::vector<pugi::xml_node> seq;
+        std::function<void(pugi::xml_node)> walk = [&](pugi::xml_node n) {
+            for (auto c : n.children()) {
+                std::string_view q = c.name();
+                if (q == "w:fldChar" || q == "w:instrText") seq.push_back(c);
+                else if (c.type() == pugi::node_element && q != "mc:Fallback") walk(c);
+            }
+        };
+        walk(p);
+        for (auto e : seq) {
+            if (std::string_view(e.name()) == "w:fldChar") {
+                std::string t = xml::attr(e, "w:fldCharType");
+                if (t == "begin") { in = true; instr.clear(); continue; }
+                if (!in) continue;
+                in = false;  // instruction ends at separate (or end when there's none)
+                std::string s = util::trim(instr);
+                if (!util::starts_with(s, "XE ")) continue;
+                auto a = s.find('"'), b = s.rfind('"');
+                if (a == std::string::npos || b <= a) continue;
+                std::string term;
+                for (std::size_t i = a + 1; i < b; i++) {
+                    if (s[i] == '\\' && i + 1 < b) { ++i; term += s[i] == ':' ? '\x01' : s[i]; continue; }
+                    term += s[i];
+                }
+                v.push_back(term);
+            } else if (in) {
+                instr += e.text().get();
+            }
+        }
+    }
+    return v;
+}
+
+// The section properties in force at `n` (its section's sectPr).
+pugi::xml_node section_at(Document& d, pugi::xml_node n) {
+    for (auto c = n; c; c = c.next_sibling())
+        if (auto s = c.child("w:pPr").child("w:sectPr")) return s;
+    return d.body().child("w:sectPr");
+}
+
+// A copy of `like`'s page setup as a continuous section break with `cols` columns.
+void continuous_break(pugi::xml_node p, pugi::xml_node like, int cols) {
+    auto sect = schema::ensure_child(schema::ensure_child(p, "w:pPr"), "w:sectPr");
+    for (auto q : {"w:pgSz", "w:pgMar", "w:docGrid"})
+        if (auto e = like.child(q)) sect.append_copy(e);
+    xml::set_attr(sect.append_child("w:type"), "w:val", "continuous");
+    auto c = sect.append_child("w:cols");
+    xml::set_attr(c, "w:space", "720");
+    if (cols > 1) xml::set_attr(c, "w:num", std::to_string(cols));
+    schema::sort_children(sect);
+}
+}  // namespace
+
+void mark_index_entry(Document& d, pugi::xml_node p, int pos, const std::string& term, const std::string& sub,
+                      const EditOpts& o) {
+    if (util::trim(term).empty()) throw std::runtime_error("index entry text is empty");
+    std::string instr = "XE \"" + xe_escape(term) + (sub.empty() ? "" : ":" + xe_escape(sub)) + "\"";
+    insert_field(d, p, pos, instr, "", nullptr, o);
+}
+
+int insert_index(Document& d, pugi::xml_node before, const Json& opts_in, const EditOpts& o) {
+    const Json opts = opts_in.is_object() ? opts_in : Json::object();
+    int cols = opts.value("columns", 2);
+    if (cols < 1 || cols > 4) throw std::runtime_error("columns must be 1-4");
+    // main term -> sub terms, sorted the way Word sorts an index
+    auto ci_less = [](const std::string& a, const std::string& b) { return util::lower(a) < util::lower(b); };
+    std::map<std::string, std::set<std::string, decltype(ci_less)>, decltype(ci_less)> terms(ci_less);
+    for (auto t : xe_terms(d)) {
+        auto c = t.find(':');
+        std::string main = t.substr(0, c), sub = c == std::string::npos ? "" : t.substr(c + 1);
+        for (auto* s : {&main, &sub}) for (auto& ch : *s) if (ch == '\x01') ch = ':';
+        main = util::trim(main);
+        if (main.empty()) continue;
+        auto it = terms.try_emplace(main, ci_less).first;
+        if (!util::trim(sub).empty()) it->second.insert(std::string(util::trim(sub)));
+    }
+    std::string instr = "INDEX \\c \"" + std::to_string(cols) + "\" \\z \"1033\"";
+    if (before.parent() != d.body())
+        throw std::runtime_error("the index goes between body paragraphs, not in a table, text box or header");
+    auto parent = before.parent();
+    pugi::xml_node like = section_at(d, before);
+    std::vector<pugi::xml_node> made;
+    auto new_p = [&](const std::string& style) {
+        auto np = parent.insert_child_before("w:p", before);
+        np.append_attribute("w14:paraId") = d.new_hex_id().c_str();
+        np.append_attribute("w14:textId") = "77777777";
+        if (!style.empty()) xml::set_attr(np.append_child("w:pPr").append_child("w:pStyle"), "w:val", ensure_style(d, style));
+        made.push_back(np);
+        return np;
+    };
+    auto fld = [&](pugi::xml_node p, const char* type) { xml::set_attr(p.append_child("w:r").append_child("w:fldChar"), "w:fldCharType", type); };
+    auto code = [&](pugi::xml_node p) {
+        fld(p, "begin");
+        auto it = p.append_child("w:r").append_child("w:instrText");
+        xml::set_attr(it, "xml:space", "preserve");
+        it.text().set((" " + instr + " ").c_str());
+        fld(p, "separate");
+    };
+    // the text before keeps its own section settings: end that section here
+    {
+        auto bp = new_p("");
+        auto ppr = schema::ensure_child(bp, "w:pPr");
+        auto sect = ppr.append_copy(like);
+        // header/footer references stay with the final section; drop the copies
+        for (auto q : {"w:headerReference", "w:footerReference"})
+            while (sect.child(q)) sect.remove_child(q);
+        sect.remove_child("w:sectPrChange");
+        sect.remove_attribute("w:rsidR");
+        sect.remove_attribute("w:rsidSect");
+        // the index section starts on the same page
+        xml::set_attr(schema::ensure_child(sect, "w:type"), "w:val", "continuous");
+    }
+    if (terms.empty()) {
+        auto p = new_p("");
+        code(p);
+        append_text(p.append_child("w:r"), U"No index entries found.");
+        fld(p, "end");
+    } else {
+        std::string letter;
+        bool opened = false;
+        for (auto& [main, subs] : terms) {
+            std::string l(1, char(std::toupper((unsigned char)main[0])));
+            if (l != letter) {
+                letter = l;
+                auto hp = new_p("IndexHeading");
+                if (!opened) { code(hp); opened = true; }
+                append_text(hp.append_child("w:r"), util::to_u32(letter));
+            }
+            // page numbers need layout; Word fills them in on open (updateFields)
+            append_text(new_p("Index1").append_child("w:r"), util::to_u32(main + (subs.empty() ? ", 1" : "")));
+            for (auto& s : subs) append_text(new_p("Index2").append_child("w:r"), util::to_u32(s + ", 1"));
+        }
+        fld(made.back(), "end");
+    }
+    // the index's own section ends on its last paragraph: continuous, in columns
+    continuous_break(made.back(), like, cols);
+    if (tracking(d, o))
+        for (auto mp : made) mark_paragraph_inserted(d, mp);
+    set_update_fields(d);
+    xml::declare(xml::root_of(before), "w14", true);
+    int n = 0;
+    for (auto& [m, s] : terms) n += 1 + (int)s.size();
+    return n;
+}
+
 std::vector<FieldInfo> list_fields(Document& d) {
     std::vector<FieldInfo> v;
     for (auto& part : d.story_parts()) {
@@ -244,15 +412,55 @@ long right_tab(Document& d) {
     return w - l - r;
 }
 
+struct TocEntry { pugi::xml_node p; int level; std::string text; };
+
+// Caption paragraphs whose number is a SEQ field for `label` (Table of Figures).
+std::vector<TocEntry> caption_entries(Document& d, const std::string& label) {
+    std::vector<TocEntry> v;
+    for (auto p : paragraphs(d.body(), false)) {
+        bool has = false;
+        for (auto it : xml::descendants(p, "w:instrText")) {
+            std::string s = util::trim(it.text().get());
+            if (util::starts_with(s, "SEQ ")) {
+                std::string id = util::trim(s.substr(4));
+                id = id.substr(0, id.find(' '));
+                if (util::iequals(id, label)) has = true;
+            }
+        }
+        for (auto fs : xml::descendants(p, "w:fldSimple")) {
+            std::string s = util::trim(xml::attr(fs, "w:instr"));
+            if (util::starts_with(s, "SEQ ") && util::iequals(util::trim(s.substr(4)).substr(0, label.size()), label)) has = true;
+        }
+        if (has) v.push_back({p, 1, analyze(p).utf8()});
+    }
+    return v;
+}
+
+// What a TOC field lists: headings (\o "1-3") or captions (\c "Figure").
+std::vector<TocEntry> toc_entries(Document& d, const std::string& instr) {
+    auto c = instr.find("\\c \"");
+    if (c != std::string::npos) {
+        auto e = instr.find('"', c + 4);
+        return caption_entries(d, instr.substr(c + 4, e == std::string::npos ? std::string::npos : e - c - 4));
+    }
+    int lo = 1, hi = 3;
+    auto q = instr.find("\\o \"");
+    if (q != std::string::npos) std::sscanf(instr.c_str() + q + 4, "%d-%d", &lo, &hi);
+    std::vector<TocEntry> v;
+    for (auto& h : headings(d, lo, hi)) v.push_back({h.p, h.level, h.text});
+    return v;
+}
+
 // Build the TOC entry paragraphs (between the field's separate and end).
-void build_toc_entries(Document& d, pugi::xml_node sdt_content, int lo, int hi, bool links, const std::string& instr) {
-    auto hs = headings(d, lo, hi);
+void build_toc_entries(Document& d, pugi::xml_node sdt_content, bool links, const std::string& instr) {
+    auto hs = toc_entries(d, instr);
+    bool figures = instr.find("\\c \"") != std::string::npos;
     long tab = right_tab(d);
     std::vector<pugi::xml_node> made;
     for (std::size_t i = 0; i < hs.size(); i++) {
         auto& h = hs[i];
         std::string bm = toc_bookmark(d, h.p);
-        std::string sty = ensure_style(d, "TOC" + std::to_string(h.level));
+        std::string sty = ensure_style(d, figures ? "TableofFigures" : "TOC" + std::to_string(h.level));
         auto p = sdt_content.append_child("w:p");
         p.append_attribute("w14:paraId") = d.new_hex_id().c_str();
         p.append_attribute("w14:textId") = "77777777";
@@ -321,7 +529,7 @@ void build_toc_entries(Document& d, pugi::xml_node sdt_content, int lo, int hi, 
         xml::set_attr(r3.append_child("w:fldChar"), "w:fldCharType", "separate");
         auto r4 = pe.append_child("w:r");
         r4.append_child("w:rPr").append_child("w:noProof");
-        append_text(r4, U"No table of contents entries found.");
+        append_text(r4, figures ? U"No table of figures entries found." : U"No table of contents entries found.");
     }
     auto re = pe.append_child("w:r");
     auto rp = re.append_child("w:rPr");
@@ -343,8 +551,11 @@ void insert_toc(Document& d, pugi::xml_node p, const Json& opts_in, const EditOp
     const Json opts = opts_in.is_object() ? opts_in : Json::object();
     int lo = opts.value("from_level", 1), hi = opts.value("to_level", 3);
     bool links = opts.value("hyperlinks", true);
-    std::string title = opts.value("title", std::string("Contents"));
-    std::string instr = "TOC \\o \"" + std::to_string(lo) + "-" + std::to_string(hi) + "\"" + (links ? " \\h" : "") + " \\z \\u";
+    std::string captions = opts.value("captions", std::string());
+    std::string title = opts.value("title", captions.empty() ? std::string("Contents") : std::string());
+    std::string instr = captions.empty()
+        ? "TOC \\o \"" + std::to_string(lo) + "-" + std::to_string(hi) + "\"" + (links ? " \\h" : "") + " \\z \\u"
+        : "TOC " + std::string(links ? "\\h " : "") + "\\z \\c \"" + captions + "\"";
     auto sdt = p.parent().insert_child_before("w:sdt", p);
     auto pr = sdt.append_child("w:sdtPr");
     xml::set_attr(pr.append_child("w:id"), "w:val", std::to_string((std::int32_t)util::random_u32()));
@@ -363,7 +574,7 @@ void insert_toc(Document& d, pugi::xml_node p, const Json& opts_in, const EditOp
         xml::set_attr(tp.append_child("w:pPr").append_child("w:pStyle"), "w:val", ensure_style(d, "TOCHeading"));
         append_text(tp.append_child("w:r"), util::to_u32(title));
     }
-    build_toc_entries(d, content, lo, hi, links, instr);
+    build_toc_entries(d, content, links, instr);
     if (tracking(d, o)) {
         for (auto tp : xml::descendants(content, "w:p")) mark_paragraph_inserted(d, tp);
     }
@@ -395,7 +606,7 @@ int update_fields(Document& d) {
             drop.push_back(c);
         }
         for (auto c : drop) content.remove_child(c);
-        build_toc_entries(d, content, lo, hi, links, instr);
+        build_toc_entries(d, content, links, instr);
         n++;
     }
     // SEQ fields: renumber per identifier; REF/STYLEREF results from targets

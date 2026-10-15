@@ -267,6 +267,10 @@ def exercise(R, doc, track, work, tag):
         for show in ("label_number", "text", "number", "page"):
             R.call("insert_cross_reference", doc=doc, paragraph=p3, target=cap["id"], show=show, **t)
     R.call("insert_toc", doc=doc, paragraph=p0, title="Contents", from_level=1, to_level=3, **t)
+    R.call("insert_toc", doc=doc, paragraph=p0, captions="Figure", title="Figures", **t)
+    R.call("mark_index_entry", doc=doc, paragraph=p2, term="zeta", position=0, **t)
+    R.call("mark_index_entry", doc=doc, paragraph=p3, term="alpha", sub="beta: gamma", position=1, **t)
+    R.call("insert_index", doc=doc, paragraph=p3, columns=2, **t)
     R.call("update_fields", doc=doc)
     R.call("insert_equation", doc=doc, paragraph=p2, position=1, equation="x^2 + y_1 = \\sqrt(z)/2", **t)
     R.call("insert_equation", doc=doc, paragraph=p3, equation="\\sum_(i=1)^n i", display=True, **t)
