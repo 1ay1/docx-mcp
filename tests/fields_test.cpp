@@ -295,6 +295,14 @@ TEST(page_numbers_from_layout) {
     auto pm = page_map(d);
     CHECK_EQ(pm.total, 4);
     CHECK_EQ(pm.paras.front(), 1);
+    // two sections: pages 1-2 and 3-4
+    auto mid = paragraphs(d.body())[5];
+    insert_section_break(d, mid, "nextPage", {});
+    auto s2p = paragraphs(d.body()).back();
+    insert_field(d, s2p, 0, "SECTIONPAGES", "?", nullptr, {});
+    update_fields(d, u);
+    // the second section is pages 4-5 after the break: two pages
+    CHECK_EQ(analyze(s2p).utf8().substr(0, 1), std::string("2"));
     CHECK_EQ(schema_issues(d), 0);
     save(d, "fields_pages");
 }

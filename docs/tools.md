@@ -559,13 +559,15 @@ Reject tracked changes: all, by ids, or by author.
 
 ### `compare_documents`
 
-Review > Compare: build a new document showing `revised` as tracked changes against `original`, saved to `output`.
+Review > Compare: build a new document showing `revised` as tracked changes against `original`, saved to `output`. pages=true also returns before/after images of the pages with changes (needs LibreOffice; up to 6 pages).
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `author` | string |  | Author shown for the changes. |
+| `dpi` | integer |  | Image resolution (default 60). |
 | `original` | string | yes | Path of the original .docx. |
 | `output` | string | yes | Where to write the comparison. |
+| `pages` | boolean |  | Return before/after images of the changed pages. |
 | `revised` | string | yes | Path of the revised .docx. |
 
 ## Comments

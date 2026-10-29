@@ -1117,9 +1117,11 @@ std::vector<ToolDef> make_tools() {
              return Json{{"rejected", reject_revisions(s.doc, f)}, {"remaining", list_revisions(s.doc).size()}};
          }});
     add({"compare_documents", "Compare",
-         "Review > Compare: build a new document showing `revised` as tracked changes against `original`, saved to `output`.",
+         "Review > Compare: build a new document showing `revised` as tracked changes against `original`, saved to `output`. "
+         "pages=true also returns before/after images of the pages with changes (needs LibreOffice; up to 6 pages).",
          obj({{"original", str("Path of the original .docx.")}, {"revised", str("Path of the revised .docx.")}, {"output", str("Where to write the comparison.")},
-              {"author", str("Author shown for the changes.")}},
+              {"author", str("Author shown for the changes.")}, {"pages", boolean("Return before/after images of the changed pages.")},
+              {"dpi", integer("Image resolution (default 60).")}},
              {"original", "revised", "output"}),
          false, false, [](Sessions& S, const Json& a) {
              auto o = Document::open(need(a, "original")), r = Document::open(need(a, "revised"));
@@ -1128,7 +1130,55 @@ std::vector<ToolDef> make_tools() {
              auto c = compare(o, r, sarg(a, "author", "Compare"), {});
              c.save(need(a, "output"));
              std::string h = S.open(need(a, "output"), false);
-             return Json{{"doc", h}, {"revisions", list_revisions(S.get(h).doc).size()}};
+             Json out = {{"doc", h}, {"revisions", list_revisions(S.get(h).doc).size()}};
+             if (barg(a, "pages", false)) {
+                 // the comparison laid out as "before" (changes rejected) and "after" (accepted):
+                 // same document, so page numbers line up
+                 auto& cd = S.get(h).doc;
+                 auto before = Document::from_bytes(cd.snapshot());
+                 auto after = Document::from_bytes(cd.snapshot());
+                 reject_revisions(before, {});
+                 accept_revisions(after, {});
+                 auto pb = page_map(before), pa = page_map(after);
+                 // pages holding a changed paragraph, on each side
+                 std::set<int> changed_b, changed_a;
+                 auto bps = paragraphs(before.body(), false), aps = paragraphs(after.body(), false);
+                 std::map<std::string, int> b_at, a_at;
+                 for (std::size_t i = 0; i < bps.size() && i < pb.paras.size(); i++) b_at[para_id(bps[i])] = pb.paras[i];
+                 for (std::size_t i = 0; i < aps.size() && i < pa.paras.size(); i++) a_at[para_id(aps[i])] = pa.paras[i];
+                 for (auto& rv : list_revisions(cd)) {
+                     if (rv.para.empty()) continue;
+                     if (auto it = b_at.find(rv.para); it != b_at.end()) changed_b.insert(it->second);
+                     if (auto it = a_at.find(rv.para); it != a_at.end()) changed_a.insert(it->second);
+                     // a paragraph only on one side: show the page where it would be on the other
+                     if (!b_at.count(rv.para) && a_at.count(rv.para)) changed_b.insert(std::min(a_at[rv.para], pb.total));
+                     if (!a_at.count(rv.para) && b_at.count(rv.para)) changed_a.insert(std::min(b_at[rv.para], pa.total));
+                 }
+                 int dpi = iarg(a, "dpi", 60);
+                 Json shots = Json::array(), images = Json::array();
+                 int shown = 0;
+                 std::set<int> all(changed_b.begin(), changed_b.end());
+                 all.insert(changed_a.begin(), changed_a.end());
+                 for (int pg : all) {
+                     if (shown++ >= 6) break;
+                     int tb = 0, ta = 0;
+                     Json item = {{"page", pg}};
+                     if (pg <= pb.total) {
+                         auto img = render_pages(before, pg, pg, dpi, tb);
+                         if (!img.empty()) { item["before_image"] = images.size(); images.push_back({{"data", util::base64_encode(img[0].png)}, {"mime", "image/png"}}); }
+                     }
+                     if (pg <= pa.total) {
+                         auto img = render_pages(after, pg, pg, dpi, ta);
+                         if (!img.empty()) { item["after_image"] = images.size(); images.push_back({{"data", util::base64_encode(img[0].png)}, {"mime", "image/png"}}); }
+                     }
+                     shots.push_back(item);
+                 }
+                 out["pages_before"] = pb.total;
+                 out["pages_after"] = pa.total;
+                 out["changed_pages"] = shots;
+                 out["_images"] = images;
+             }
+             return out;
          }});
 
     // ── comments ─────────────────────────────────────────────────────────

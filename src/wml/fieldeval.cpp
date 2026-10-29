@@ -748,13 +748,10 @@ private:
 
     std::string page_format(pugi::xml_node sect) { return xml::attr(sect.child("w:pgNumType"), "w:fmt", "decimal"); }
 
-    // Page number as the section numbers it (restart + format).
-    std::string page_label(int phys, pugi::xml_node at_sect) {
-        if (!pm_) return "";
-        // walk sections in order; each section starts on the page of its first paragraph
+    // First physical page of each section.
+    std::vector<int> section_starts() {
         auto ss = sections(d_);
         auto ps = paragraphs(d_.body(), false);
-        // first paragraph index of each section
         std::vector<int> start_page(ss.size(), 1);
         std::size_t si = 0;
         bool new_sec = true;
@@ -762,6 +759,14 @@ private:
             if (new_sec) { start_page[si] = i < pm_->paras.size() ? pm_->paras[i] : 1; new_sec = false; }
             if (ps[i].child("w:pPr").child("w:sectPr") == ss[si]) { si++; new_sec = true; }
         }
+        return start_page;
+    }
+
+    // Page number as the section numbers it (restart + format).
+    std::string page_label(int phys, pugi::xml_node at_sect) {
+        if (!pm_) return "";
+        auto ss = sections(d_);
+        auto start_page = section_starts();
         // which section holds page phys: the last that starts at or before it
         int sec = 0;
         if (at_sect) {
@@ -981,9 +986,19 @@ public:
             if (!pm_) return std::nullopt;
             r = std::to_string(pm_->total);
         } else if (f == "SECTIONPAGES") {
-            if (!pm_) return std::nullopt;
-            if (!body_) return std::nullopt;
-            return std::nullopt;
+            if (!pm_ || !body_) return std::nullopt;
+            auto ss = sections(d_);
+            auto starts = section_starts();
+            auto sect = section_of(para_of(fi));
+            for (std::size_t k = 0; k < ss.size(); k++) {
+                if (ss[k] != sect) continue;
+                int first = starts[k];
+                int last = k + 1 < ss.size() ? std::max(first, starts[k + 1] - 1) : pm_->total;
+                // a continuous next section shares its first page
+                if (k + 1 < ss.size() && xml::attr(ss[k + 1].child("w:type"), "w:val") == "continuous") last = starts[k + 1];
+                r = std::to_string(std::max(1, last - first + 1));
+            }
+            if (!r) return std::nullopt;
         } else if (f == "SECTION") {
             if (!body_) return std::nullopt;
             auto s = section_of(para_of(fi));

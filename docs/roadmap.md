@@ -103,7 +103,7 @@ Agents can't see layout today. Page numbers, page counts and "what does page
 `export_pdf`, through LibreOffice with pdftoppm, mutool or Ghostscript.
 2.3 and 2.4: a bookmark marks every paragraph and field in a copy, LibreOffice
 exports them as PDF destinations, and their pages become the page map.
-Open: 2.5 and SECTIONPAGES.
+Done too: 2.5 (`compare_documents pages=true` returns before/after images of the changed pages) and SECTIONPAGES.
 
 | # | Item | Done when |
 |---|---|---|

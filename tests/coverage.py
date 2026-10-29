@@ -448,6 +448,9 @@ def main():
     if edited:
         R.call("compare_documents", original=os.path.join(work, "accepted", edited[0]),
                revised=os.path.join(work, "edited", edited[0]), output=os.path.join(work, "edited", "cmp_" + edited[0]))
+        if os.environ.get("COVER_RENDER"):
+            R.call("compare_documents", original=os.path.join(work, "accepted", edited[0]),
+                   revised=os.path.join(work, "edited", edited[0]), output=os.path.join(work, "cmp2.docx"), pages=True, dpi=40)
         # File > New from a template, and Save As .dotx
         tpl = os.path.join(work, "cov_template.dotx")
         r = R.call("open_document", path=os.path.join(work, "edited", edited[0]))
