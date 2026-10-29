@@ -278,6 +278,8 @@ def exercise(R, doc, track, work, tag):
                         "total_row": {"bold": True}})
     R.call("get_style", doc=doc, style="CovTable")
     R.call("theme", doc=doc)
+    R.call("insert_html", doc=doc, paragraph=p3, html="<h3>From HTML</h3><p>Some <b>bold</b> and <a href='https://example.com'>a link</a>.</p>"
+           "<ul><li>one</li><li>two<ol><li>deep</li></ol></li></ul><table><tr><th>A</th><th>B</th></tr><tr><td colspan=2>wide</td></tr></table>", **t)
     R.call("theme", doc=doc, preset="Blue II", heading_font="Georgia", colors={"accent2": "C00000", "hyperlink": "0000FF"}, name="Cov")
     R.call("theme", doc=doc, fonts_preset="Garamond", colors_preset="Paper")
     R.call("import_styles", doc=doc, styles=["Heading 1", "ListParagraph"], **{"from": os.path.join(CORPUS, "DB007-Spec.docx")})

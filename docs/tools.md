@@ -1,6 +1,6 @@
 # Tool reference
 
-Generated from `docx-mcp --list-tools` by `tools/gen_tool_docs.py`. 113 tools.
+Generated from `docx-mcp --list-tools` by `tools/gen_tool_docs.py`. 114 tools.
 
 Every tool that edits takes `doc` (a handle or a file path), and most take `track` (record as a tracked change) and `author`. Paragraphs are addressed by the `id` that `read_document` returns.
 
@@ -8,7 +8,7 @@ Every tool that edits takes `doc` (a handle or a file path), and most take `trac
 
 - [Documents](#documents): `open_document`, `create_document`, `save_document`, `close_document`, `list_open_documents`, `undo`, `batch`
 - [Reading](#reading): `read_document`, `get_text`, `get_outline`, `get_paragraph`, `find_text`, `get_statistics`
-- [Editing text](#editing-text): `insert_text`, `replace_text`, `delete_text`, `find_replace`, `insert_paragraph`, `insert_markdown`, `delete_paragraph`, `split_paragraph`, `merge_paragraphs`, `move_paragraphs`
+- [Editing text](#editing-text): `insert_text`, `replace_text`, `delete_text`, `find_replace`, `insert_paragraph`, `insert_markdown`, `insert_html`, `delete_paragraph`, `split_paragraph`, `merge_paragraphs`, `move_paragraphs`
 - [Formatting](#formatting): `format_text`, `format_paragraph`, `apply_style`, `clear_formatting`, `drop_cap`
 - [Styles](#styles): `list_styles`, `get_style`, `modify_style`, `delete_style`, `import_styles`
 - [Lists](#lists): `apply_list`, `set_list_level`, `remove_list`, `restart_numbering`, `define_list`, `list_lists`
@@ -243,6 +243,20 @@ Write Markdown as real Word content: # headings (Heading 1-6), paragraphs with *
 |---|---|---|---|
 | `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `markdown` | string | yes | Markdown text. |
+| `paragraph` | string |  | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
+| `table` | integer |  | Anchor on this table (1-based) instead of a paragraph. |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
+| `where` | `after` \\| `before` |  | Default after. |
+
+### `insert_html`
+
+Paste HTML as real Word content (Keep Source Formatting): h1-h6, p, b/i/u/s, sup/sub, code, mark, span styles (color, background, font-size, font-family, font-weight), links, ul/ol nesting, blockquote, pre, tables (th, colspan, cell background), hr, br, img (data: URIs or local files). From a browser, email or a generator. html_file reads it from disk. Goes after `paragraph` (or the end).
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `html` | string |  | HTML text. |
+| `html_file` | string |  | Read the HTML from this file instead. |
 | `paragraph` | string |  | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
 | `table` | integer |  | Anchor on this table (1-based) instead of a paragraph. |
 | `track` | boolean |  | Record as a tracked change (default: the document's setting). |

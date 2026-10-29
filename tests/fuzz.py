@@ -135,7 +135,12 @@ class Fuzz:
 
     def extra(self, pid, s, e, track):
         r = self.r
-        k = r.randint(0, 55)
+        k = r.randint(0, 56)
+        if k == 56:
+            return self.call("insert_html", paragraph=pid, html=r.choice([
+                "<p>a <b>b</b> <i>c</i></p>", "<ul><li>x<ul><li>y</li></ul></li></ul>", "<table><tr><td>1<td colspan=3>2</table>",
+                "<h2>T</h2><blockquote>q</blockquote><pre>c\n d</pre><hr>", "<p style='color:red;font-size:20px'>" + (self.word() or "w") + "</p>",
+                "<div><p>unclosed <b>bold", "<ol><li>1<li>2<li>3</ol>"]), **track)
         if k == 55:
             return self.call("theme", **r.choice([{}, {"preset": r.choice(["Office", "Green", "Violet", "Grayscale"])},
                                                 {"colors": {"accent1": r.choice(["1F4E79", "#c00000"])}, "body_font": "Garamond"}]))

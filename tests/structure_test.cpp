@@ -7,6 +7,8 @@
 #include "util/util.hpp"
 #include "wml/document.hpp"
 #include "wml/edit.hpp"
+#include "wml/docops.hpp"
+#include "wml/markdown.hpp"
 #include "wml/structure.hpp"
 #include "wml/styles.hpp"
 #include "wml/text.hpp"
@@ -393,6 +395,31 @@ TEST(floating_table) {
     save(d, "floating_table");
     format_table(d, tbl, {{"float", nullptr}}, {});
     CHECK(!tbl.child("w:tblPr").child("w:tblpPr"));
+}
+
+TEST(insert_html_blocks) {
+    auto d = Document::create();
+    auto blocks_in = parse_html(
+        "<h2 style='text-align:center'>Title &amp; more</h2><p>a <b>b</b> <span style='color:#f00;font-size:18px'>c</span>"
+        "<a href='https://x.org'>link</a></p><ul><li>one<ol><li>sub</li></ol></li><li>two</li></ul>"
+        "<table><tr><th>H1<th>H2<tr><td colspan=2 style='background:#eee'>wide</table><blockquote>q</blockquote><pre>x\n  y</pre><hr>");
+    CHECK(blocks_in.size() >= 8);
+    auto r = insert_rich(d, paragraphs(d.body())[0], true, blocks_in, {true});
+    CHECK_EQ(r.tables, 1);
+    CHECK_EQ(r.lists, 1);
+    auto ps = paragraphs(d.body(), false);
+    CHECK_EQ(analyze(ps[1]).utf8(), std::string("Title & more"));
+    CHECK_EQ(xml::attr(ps[1].child("w:pPr").child("w:pStyle"), "w:val"), std::string("Heading2"));
+    CHECK_EQ(analyze(ps[2]).utf8(), std::string("a b clink"));
+    CHECK(!list_hyperlinks(d).empty());
+    // an <ol> nested at level 2 uses Word's level-2 format (a.)
+    CHECK_EQ(list_label(d, ps[4]), std::string("a."));
+    // tracked: everything inserted is an insertion
+    CHECK(!list_revisions(d).empty());
+    reject_revisions(d, {});
+    CHECK_EQ(to_text(d, "current", false).find("Title"), std::string::npos);
+    std::string why;
+    CHECK_EQ(schema_issues(d, &why), 0);
 }
 
 TEST(lists_tracked) {

@@ -9,7 +9,7 @@ import sys
 GROUPS = [
     ("Documents", ["open_document", "create_document", "save_document", "close_document", "list_open_documents", "undo", "batch"]),
     ("Reading", ["read_document", "get_text", "get_outline", "get_paragraph", "find_text", "get_statistics"]),
-    ("Editing text", ["insert_text", "replace_text", "delete_text", "find_replace", "insert_paragraph", "insert_markdown", "delete_paragraph",
+    ("Editing text", ["insert_text", "replace_text", "delete_text", "find_replace", "insert_paragraph", "insert_markdown", "insert_html", "delete_paragraph",
                       "split_paragraph", "merge_paragraphs", "move_paragraphs"]),
     ("Formatting", ["format_text", "format_paragraph", "apply_style", "clear_formatting", "drop_cap"]),
     ("Styles", ["list_styles", "get_style", "modify_style", "delete_style", "import_styles"]),

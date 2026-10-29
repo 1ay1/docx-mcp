@@ -76,6 +76,7 @@ TASKS = [
     ("undo the last change", "undo"),
     ("update fields", "update_fields"),
     ("mail merge letters from a csv of addresses", "mail_merge"),
+    ("paste this html into the document", "insert_html"),
     ("add a figure caption", "insert_caption"),
     ("insert a cross-reference to a figure", "insert_cross_reference"),
 ]

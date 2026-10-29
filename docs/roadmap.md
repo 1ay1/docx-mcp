@@ -10,7 +10,7 @@ to touch raw XML to get there.
 
 ## Where we are (main, after v0.3.0)
 
-113 tools cover Word's Home, Insert, Design, Layout, References, Mailings and Review
+114 tools cover Word's Home, Insert, Design, Layout, References, Mailings and Review
 tabs: documents, text, paragraphs, styles, lists, tables, pictures, text
 boxes, links, bookmarks, notes, fields, TOC, table of figures, index,
 equations, content controls, sections, page borders and color, watermarks,
@@ -120,7 +120,7 @@ Test: render each corpus file, compare against images rendered by Word
 
 **Done:** 3.6 Markdown in (`insert_markdown`: headings, inline formatting,
 links, nested lists, quotes, code, tables, rules, page breaks; tracked as one
-insertion). Open: `insert_html` and the rest.
+insertion) and HTML in (`insert_html`: the same plus span styles, colspans, cell colors and embedded images). Open: the rest.
 
 | # | Item | Notes |
 |---|---|---|
@@ -164,7 +164,7 @@ documents and agents need them:
 2. ~~1.9 multi-level lists and 1.10 table style conditional formats~~ (done).
 3. ~~1.14 mail merge~~ (done), then 1.15 data binding.
 4. ~~1.7 floating tables, 1.11 themes~~ (done), 1.2 shapes, 1.4 picture watermarks.
-5. 3.6 `insert_html`, then Phase 4 speed work and Phase 5 proof.
+5. ~~3.6 `insert_html`~~ (done), then Phase 4 speed work and Phase 5 proof.
 
 ## Not planned
 

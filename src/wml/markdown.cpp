@@ -4,8 +4,12 @@
 // primitives as the other tools, so tracking and validity come with it.
 #include "wml/markdown.hpp"
 
+#include <algorithm>
+#include <map>
 #include <stdexcept>
+#include <tuple>
 
+#include "util/fsio.hpp"
 #include "util/util.hpp"
 #include "wml/structure.hpp"
 #include "wml/styles.hpp"
@@ -227,6 +231,142 @@ public:
     int tables() const { return tables_; }
     pugi::xml_node last() const { return ref_; }
 
+    // ── rich (HTML) blocks ──
+    pugi::xml_node para_spans(const std::string& style, const std::vector<RichSpan>& spans, const Json& pfmt = nullptr) {
+        auto p = fresh(style.empty() ? "Normal" : style, U"");
+        fill_spans(p, spans);
+        if (pfmt.is_object() && !pfmt.empty()) format_paragraph(d_, p, pfmt, o_);
+        made_.push_back(p);
+        return p;
+    }
+
+    void rich_table(const RichBlock& b) {
+        if (b.rows.empty()) return;
+        // grid width: the widest row; a colspan wider than the table is clamped (browsers do)
+        std::size_t real = 0;
+        for (auto& row : b.rows) real = std::max(real, row.size());
+        std::size_t ncol = 0;
+        for (std::size_t r = 0; r < b.rows.size(); r++) {
+            std::size_t w = 0;
+            for (std::size_t c = 0; c < b.rows[r].size(); c++) {
+                int span = 1;
+                if (r < b.cell_fmt.size() && c < b.cell_fmt[r].size()) span = std::max(1, b.cell_fmt[r][c].value("colspan", 1));
+                w += span;
+            }
+            ncol = std::max(ncol, w);
+        }
+        // only honour spans other rows give columns for
+        std::size_t spanned_max = 0;
+        for (std::size_t r = 0; r < b.rows.size(); r++) {
+            bool has_span = false;
+            for (std::size_t c = 0; c < b.rows[r].size(); c++)
+                if (r < b.cell_fmt.size() && c < b.cell_fmt[r].size() && b.cell_fmt[r][c].value("colspan", 1) > 1) has_span = true;
+            if (!has_span) spanned_max = std::max(spanned_max, b.rows[r].size());
+        }
+        if (spanned_max) ncol = std::min(ncol, std::max(spanned_max, real));
+        ncol = std::min<std::size_t>(ncol, 63);
+        if (!ncol) return;
+        std::vector<std::vector<std::string>> blank(b.rows.size(), std::vector<std::string>(ncol));
+        pugi::xml_node next_before = after_ ? ref_.next_sibling() : ref_;
+        auto tbl = insert_table(d_, ref_, after_, blank, Json{{"header_row", b.header_row}}, o_);
+        if (auto np = tbl.next_sibling(); np && np != next_before && std::string_view(np.name()) == "w:p") made_.push_back(np);
+        // fill and merge: walk each row's cells, placing them at grid columns
+        std::vector<std::tuple<int, int, int>> merges;
+        for (std::size_t r = 0; r < b.rows.size(); r++) {
+            int gc = 0;
+            for (std::size_t c = 0; c < b.rows[r].size() && gc < (int)ncol; c++) {
+                Json cf = r < b.cell_fmt.size() && c < b.cell_fmt[r].size() ? b.cell_fmt[r][c] : Json::object();
+                int span = std::min<int>(std::max(1, cf.value("colspan", 1)), (int)ncol - gc);
+                auto tc = cell(tbl, (int)r, gc);
+                if (tc) {
+                    auto p = tc.child("w:p");
+                    auto spans = b.rows[r][c];
+                    if (cf.value("header", false))
+                        for (auto& s : spans) s.fmt["bold"] = true;
+                    fill_spans(p, spans);
+                    if (cf.contains("shading")) format_cell(d_, tc, Json{{"shading", cf["shading"]}}, o_);
+                    if (cf.contains("alignment")) apply_ppr_json(d_, schema::ensure_child(p, "w:pPr"), Json{{"alignment", cf["alignment"]}});
+                }
+                if (span > 1) merges.push_back({(int)r, gc, gc + span - 1});
+                gc += span;
+            }
+        }
+        // merge right to left so earlier column indices stay valid
+        std::sort(merges.begin(), merges.end(), [](auto& a, auto& b2) { return std::get<1>(a) > std::get<1>(b2); });
+        for (auto& [r, c1, c2] : merges) {
+            try { merge_cells(d_, tbl, r, c1, r, c2); } catch (std::exception&) {}
+        }
+        ref_ = tbl;
+        after_ = true;
+        tables_++;
+        table_nodes_.push_back(tbl);
+    }
+
+    void image(const RichBlock& b) {
+        Json f = {{"__img", b.image}, {"__alt", b.alt}, {"__w", b.width_pt}, {"__h", b.height_pt}};
+        auto p = para_spans("", {}, b.pfmt);
+        inline_picture(p, 0, f);
+    }
+
+    void inline_picture(pugi::xml_node p, int pos, const Json& f) {
+        util::Bytes data;
+        std::string src = f.value("__img", std::string());
+        std::string alt = f.value("__alt", std::string());
+        bool ok = false;
+        if (src.rfind("data:", 0) == 0) {
+            auto comma = src.find(',');
+            auto b64 = src.find(";base64");
+            if (comma != std::string::npos && b64 != std::string::npos && b64 < comma) {
+                std::string payload = src.substr(comma + 1);
+                payload.erase(std::remove_if(payload.begin(), payload.end(), [](char c) { return std::isspace((unsigned char)c); }), payload.end());
+                if (auto dec = util::base64_decode(payload)) { data = *dec; ok = true; }
+            }
+        } else if (src.find("://") == std::string::npos) {
+            std::string path = src.rfind("file:", 0) == 0 ? src.substr(5) : src;
+            if (util::file_exists(path)) { data = util::read_file(path); ok = true; }
+        }
+        if (ok) {
+            try {
+                insert_picture(d_, p, pos, data, f.value("__w", 0.0), f.value("__h", 0.0), alt, "", o_);
+                return;
+            } catch (std::exception&) {}
+        }
+        // remote or unreadable: keep the alt text so nothing is silently lost
+        skipped_images_++;
+        if (!alt.empty()) insert_text(d_, p, pos, util::to_u32("[image: " + alt + "]"), nullptr, o_);
+    }
+    int skipped_images() const { return skipped_images_; }
+
+    void fill_spans(pugi::xml_node p, const std::vector<RichSpan>& spans) {
+        int pos = (int)analyze(p).vis.size();
+        for (auto& sp : spans) {
+            if (sp.fmt.contains("__img")) {
+                // build in a scratch paragraph, then move the run to the end (keeps span order)
+                auto scratch = p.parent().insert_child_after("w:p", p);
+                inline_picture(scratch, 0, sp.fmt);
+                std::vector<pugi::xml_node> kids;
+                for (auto c : scratch.children()) if (!xml::name_is(c, "w:pPr")) kids.push_back(c);
+                for (auto c : kids) p.append_move(c);
+                p.parent().remove_child(scratch);
+                pos = (int)analyze(p).vis.size();
+                continue;
+            }
+            if (sp.text.empty()) continue;
+            auto u = util::to_u32(sp.text);
+            if (!sp.link.empty()) {
+                add_hyperlink(d_, p, pos, pos, sp.link, sp.text, "", o_);
+                int end = (int)analyze(p).vis.size();
+                if (!sp.fmt.empty()) format_runs(d_, p, pos, end, sp.fmt, o_);
+                pos = end;
+                continue;
+            }
+            auto r = p.append_child("w:r");
+            append_text(r, u);
+            if (!sp.fmt.empty()) apply_rpr_json(d_, schema::ensure_child(r, "w:rPr"), sp.fmt);
+            pos = (int)analyze(p).vis.size();
+        }
+    }
+
 private:
     // A paragraph with only the given style: none of the neighbour's
     // borders, numbering or run formatting.
@@ -309,6 +449,7 @@ private:
     std::vector<pugi::xml_node> table_nodes_;
     std::string code_style_;
     int tables_ = 0;
+    int skipped_images_ = 0;
 };
 
 }  // namespace
@@ -462,6 +603,72 @@ MarkdownResult insert_markdown(Document& d, pugi::xml_node ref, bool after, cons
     for (auto p : w.made()) res.paragraphs.push_back(p);
     res.tables = w.tables();
     res.last = w.last();
+    return res;
+}
+
+MarkdownResult insert_rich(Document& d, pugi::xml_node ref, bool after, const std::vector<RichBlock>& blocks, const EditOpts& o) {
+    Writer w(d, ref, after);
+    MarkdownResult res;
+    // list items grouped by list id, numbered after (like insert_markdown)
+    struct ListRun { std::vector<pugi::xml_node> paras; std::vector<int> levels; std::vector<bool> numbered; };
+    std::map<int, ListRun> runs;
+    std::vector<int> order;
+    for (auto& b : blocks) {
+        switch (b.kind) {
+            case RichBlock::Heading:
+                w.para_spans(ensure_style(d, "Heading" + std::to_string(std::clamp(b.level, 1, 6))), b.spans, b.pfmt);
+                break;
+            case RichBlock::Code: {
+                std::string text;
+                for (auto& s : b.spans) text += s.text;
+                for (auto& line : util::split(text, '\n')) w.code_para(line);
+                break;
+            }
+            case RichBlock::Quote: w.para_spans(ensure_style(d, "Quote"), b.spans, b.pfmt); break;
+            case RichBlock::Item: {
+                auto p = w.para_spans(b.style, b.spans, b.pfmt);
+                if (!runs.count(b.list)) order.push_back(b.list);
+                auto& r = runs[b.list];
+                r.paras.push_back(p);
+                r.levels.push_back(std::clamp(b.level, 0, 8));
+                r.numbered.push_back(b.numbered);
+                break;
+            }
+            case RichBlock::Table: w.rich_table(b); break;
+            case RichBlock::Rule: w.rule(); break;
+            case RichBlock::PageBreak: w.page_break(); break;
+            case RichBlock::Image: w.image(b); break;
+            default: {
+                std::string style = b.style.empty() ? "" : ensure_style(d, b.style);
+                w.para_spans(style, b.spans, b.pfmt);
+            }
+        }
+    }
+    // one numbering per list id; a list mixes bullets and numbers by level (ul inside ol)
+    for (int id : order) {
+        auto& r = runs[id];
+        std::map<bool, int> nums;
+        for (std::size_t k = 0; k < r.paras.size(); k++) {
+            bool nb = r.numbered[k];
+            Json opts = {{"continue_previous", false}};
+            if (nums[nb]) opts["num_id"] = nums[nb];
+            nums[nb] = apply_list(d, {r.paras[k]}, nb ? "number" : "bullet", r.levels[k], opts, {false});
+        }
+        res.lists++;
+    }
+    bool tracked = o.track ? *o.track : d.track_changes();
+    if (tracked) {
+        for (auto p : w.made()) mark_paragraph_inserted(d, p);
+        for (auto tbl : w.table_nodes())
+            for (auto tr : xml::children(tbl, "w:tr")) {
+                stamp(d, schema::ensure_child(schema::ensure_child(tr, "w:trPr"), "w:ins"));
+                for (auto cp : tr.select_nodes(".//w:p")) mark_paragraph_inserted(d, cp.node());
+            }
+    }
+    for (auto p : w.made()) res.paragraphs.push_back(p);
+    res.tables = w.tables();
+    res.last = w.last();
+    res.skipped_images = w.skipped_images();
     return res;
 }
 

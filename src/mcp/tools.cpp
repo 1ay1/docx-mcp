@@ -676,6 +676,45 @@ std::vector<ToolDef> make_tools() {
              }
              return Json{{"paragraphs", r.paragraphs.size()}, {"tables", r.tables}, {"lists", r.lists}, {"inserted", made}};
          }});
+    add({"insert_html", "Insert HTML",
+         "Paste HTML as real Word content (Keep Source Formatting): h1-h6, p, b/i/u/s, sup/sub, code, mark, span styles "
+         "(color, background, font-size, font-family, font-weight), links, ul/ol nesting, blockquote, pre, tables (th, colspan, "
+         "cell background), hr, br, img (data: URIs or local files). From a browser, email or a generator. "
+         "html_file reads it from disk. Goes after `paragraph` (or the end).",
+         obj({{"doc", kDoc}, {"html", str("HTML text.")}, {"html_file", str("Read the HTML from this file instead.")},
+              {"paragraph", kPara}, {"table", integer("Anchor on this table (1-based) instead of a paragraph.")},
+              {"where", enm({"after", "before"}, "Default after.")}, {"track", kTrack}},
+             {"doc"}),
+         false, false, [](Sessions& S, const Json& a) {
+             auto& s = mut(S, a);
+             std::string html;
+             if (a.contains("html_file") && !sarg(a, "html_file").empty()) {
+                 auto b = util::read_file(util::normalize_path(need(a, "html_file")));
+                 html.assign(b.begin(), b.end());
+             } else html = need(a, "html");
+             auto blocks_in = parse_html(html);
+             if (blocks_in.empty()) throw std::runtime_error("the HTML has no text, tables or images to insert");
+             pugi::xml_node ref;
+             if (a.contains("table")) ref = table_at(s.doc, iarg(a, "table", 1));
+             else if (a.contains("paragraph")) ref = para(s, a).p;
+             else ref = last_block(s.doc);
+             bool fill_blank = !a.contains("paragraph") && !a.contains("table") && blocks(s.doc.body()).size() == 1 &&
+                               std::string_view(ref.name()) == "w:p" && analyze(ref).atoms.empty() &&
+                               !ref.child("w:pPr").child("w:sectPr") && !ref.child("w:pPr").child("w:numPr");
+             auto r = insert_rich(s.doc, ref, sarg(a, "where", "after") == "after", blocks_in, track(a));
+             if (fill_blank && (r.paragraphs.size() || r.tables)) delete_paragraph(s.doc, ref, {false});
+             Json made = Json::array();
+             for (std::size_t i = 0; i < r.paragraphs.size(); i++) {
+                 if (i == 12 && r.paragraphs.size() > 14) {
+                     made.push_back("... " + std::to_string(r.paragraphs.size() - 13) + " more");
+                     i = r.paragraphs.size() - 1;
+                 }
+                 made.push_back(para_brief(s.doc, r.paragraphs[i]));
+             }
+             Json out = {{"paragraphs", r.paragraphs.size()}, {"tables", r.tables}, {"lists", r.lists}, {"inserted", made}};
+             if (r.skipped_images) out["note"] = std::to_string(r.skipped_images) + " image(s) not embedded (remote URLs or unreadable); alt text kept";
+             return out;
+         }});
     add({"delete_paragraph", "Delete paragraph", "Delete whole paragraphs (text and paragraph mark).",
          obj({{"doc", kDoc}, {"paragraphs", arr(str(""), "Paragraph ids/numbers.")}, {"track", kTrack}, {"author", str("Author of this change.")}}, {"doc", "paragraphs"}),
          false, true, [](Sessions& S, const Json& a) {
