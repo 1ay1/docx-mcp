@@ -10,7 +10,7 @@ to touch raw XML to get there.
 
 ## Where we are (main, after v0.3.0)
 
-121 tools cover Word's Home, Insert, Design, Layout, References, Mailings and Review
+123 tools cover Word's Home, Insert, Design, Layout, References, Mailings and Review
 tabs: documents, text, paragraphs, styles, lists, tables, pictures, text
 boxes, links, bookmarks, notes, fields, TOC, table of figures, index,
 equations, content controls, sections, page borders and color, watermarks,
@@ -80,7 +80,7 @@ Status is checked against the code.
 | 1.12 | Charts | Insert > Chart | Done | `list_charts` reads cached data of every chart type; `insert_chart` makes column, bar, line, pie, doughnut, area and scatter charts; `set_chart_data` edits them. Left: an embedded workbook for Edit Data |
 | 1.13 | Building blocks and templates | Quick Parts, .dotx | Templates done | `create_document template=` (File > New from a .dotx/.dotm/.docx, attachedTemplate set), Save As .dotx. Left: the glossary document (Quick Parts) |
 | 1.14 | Mail merge and document variables | Mailings | Done | `mail_merge` from records, CSV, TSV or JSON: one file per record or one document with a section each; IF, SKIPIF, NEXT, MERGEREC. `document_variables` reads and sets `w:docVars` |
-| 1.15 | Form fields and data binding | Developer | Partly | Content controls done. Left: legacy form fields, `w:dataBinding` to custom XML, repeating sections |
+| 1.15 | Form fields and data binding | Developer | Done | Content controls, `bind_content_control` to document properties or custom XML data (both sides kept in step), `repeating_section`. Left: creating legacy form fields (read and fill work through fields) |
 | 1.16 | Drop caps, text effects, ruby | Font, Paragraph | Drop caps done | `drop_cap`. Left: `w14` text effects, ruby, East Asian layout |
 | 1.17 | Line numbering and hyphenation | Layout | Done | `set_page_setup` `line_numbers`, `set_settings` `auto_hyphenation`, `format_paragraph` `suppress_line_numbers` / `suppress_auto_hyphens` |
 | 1.18 | Comments: modern parts | Review | Mostly done | Threads, resolved, durable ids, people. Left: @mentions |
@@ -162,7 +162,7 @@ documents and agents need them:
 
 1. ~~2.4 field results and 2.3 the page map~~ (done).
 2. ~~1.9 multi-level lists and 1.10 table style conditional formats~~ (done).
-3. ~~1.14 mail merge~~ (done), then 1.15 data binding.
+3. ~~1.14 mail merge, 1.15 data binding~~ (done).
 4. ~~1.7 floating tables, 1.11 themes, 1.2 shapes, 1.4 picture watermarks~~ (done).
 5. ~~3.6 `insert_html`~~ (done), then Phase 4 speed work and Phase 5 proof.
 

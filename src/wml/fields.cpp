@@ -979,6 +979,7 @@ std::vector<ControlInfo> list_content_controls(Document& d) {
         if (!d.pkg().has(part)) continue;
         for (auto sdt : xml::descendants(d.pkg().xml(part).document_element(), "w:sdt")) {
             auto pr = sdt.child("w:sdtPr");
+            if (pr.child("w15:repeatingSectionItem")) continue;  // items show through their section
             ControlInfo c;
             c.id = xml::attr(pr.child("w:id"), "w:val");
             c.tag = xml::attr(pr.child("w:tag"), "w:val");
@@ -990,6 +991,15 @@ std::vector<ControlInfo> list_content_controls(Document& d) {
             if (auto cb = pr.child("w14:checkbox")) c.checked = xml::attr(cb.child("w14:checked"), "w14:val") == "1";
             for (auto t : xml::descendants(sdt.child("w:sdtContent"), "w:t")) c.text += t.text().get();
             if (pr.child("w:showingPlcHdr")) c.text = "";
+            if (auto db = pr.child("w:dataBinding")) c.bound = xml::attr(db, "w:xpath");
+            for (auto list : {pr.child("w:dropDownList"), pr.child("w:comboBox")})
+                for (auto li : list.children("w:listItem")) c.items.push_back(xml::attr(li, "w:displayText", xml::attr(li, "w:value")));
+            if (c.type == "repeatingSection") {
+                int n = 0;
+                for (auto it : sdt.child("w:sdtContent").children("w:sdt"))
+                    if (it.child("w:sdtPr").child("w15:repeatingSectionItem")) n++;
+                c.text = std::to_string(n) + " item(s)";
+            }
             v.push_back(c);
         }
     }
@@ -1020,6 +1030,7 @@ void set_content_control(Document& d, const std::string& key, const Json& value)
             }
             if (auto dt = pr.child("w:date")) xml::set_attr(dt, "w:fullDate", text.size() == 10 ? text + "T00:00:00Z" : text);
             pr.remove_child("w:showingPlcHdr");
+            if (pr.child("w:dataBinding")) set_bound_value(d, sdt, text);
             // replace content text, keeping the first run's formatting (minus placeholder style)
             bool block = std::string_view(sdt.parent().name()) != "w:p";
             pugi::xml_node fmt;

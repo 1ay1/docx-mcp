@@ -301,6 +301,22 @@ Json app_properties(Document& d) {
     return j;
 }
 
+void set_app_property(Document& d, const std::string& name, const std::string& value) {
+    static const std::set<std::string> ok = {"Company", "Manager", "HyperlinkBase"};
+    if (!ok.count(name)) throw std::runtime_error("app property " + name + " isn't settable (Company, Manager, HyperlinkBase)");
+    auto ap = d.app_props(true);
+    std::string pre;
+    for (auto c : ap.children())
+        if (c.type() == pugi::node_element) {
+            std::string n = c.name();
+            if (auto k = n.find(':'); k != std::string::npos) pre = n.substr(0, k + 1);
+            break;
+        }
+    auto e = ap.child((pre + name).c_str());
+    if (!e) e = ap.append_child((pre + name).c_str());
+    e.text().set(util::xml_safe(value).c_str());
+}
+
 // ── settings ─────────────────────────────────────────────────────────────
 
 Json settings_json(Document& d) {

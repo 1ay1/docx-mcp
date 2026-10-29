@@ -547,6 +547,57 @@ TEST(citations_and_bibliography) {
     CHECK_EQ(list_sources(re).size(), std::size_t(2));
 }
 
+TEST(content_control_binding) {
+    auto d = Document::create();
+    auto p = paragraphs(d.body())[0];
+    insert_text(d, p, 0, U"Title: X  Client: Y  Again: Z", nullptr, {});
+    auto c1 = add_content_control(d, p, 7, 8, {{"type", "text"}, {"tag", "title"}});
+    (void)c1;
+    p = paragraphs(d.body())[0];
+    auto pos = analyze(p).utf8().find("Y");
+    add_content_control(d, p, (int)pos, (int)pos + 1, {{"type", "text"}, {"tag", "client1"}});
+    p = paragraphs(d.body())[0];
+    pos = analyze(p).utf8().find("Z");
+    add_content_control(d, p, (int)pos, (int)pos + 1, {{"type", "text"}, {"tag", "client2"}});
+    set_core_properties(d, {{"title", "Annual Plan"}});
+    bind_content_control(d, "title", "title", "");
+    bind_content_control(d, "client1", "", "client/name");
+    bind_content_control(d, "client2", "", "client/name");
+    p = paragraphs(d.body())[0];
+    CHECK(analyze(p).utf8().find("Title: Annual Plan") != std::string::npos);
+    // filling one bound control fills the store and the other
+    set_content_control(d, "client1", "Acme");
+    refresh_bound_controls(d);
+    p = paragraphs(d.body())[0];
+    CHECK(analyze(p).utf8().find("Client: Acme") != std::string::npos);
+    CHECK(analyze(p).utf8().find("Again: Acme") != std::string::npos);
+    // and the title control writes the property
+    set_content_control(d, "title", "New Title");
+    CHECK_EQ(core_properties(d)["title"].get<std::string>(), std::string("New Title"));
+    bool bad = false;
+    try { bind_content_control(d, "title", "colour", ""); } catch (std::exception&) { bad = true; }
+    CHECK(bad);
+    bad = false;
+    try { bind_content_control(d, "client1", "", "1bad/path"); } catch (std::exception&) { bad = true; }
+    CHECK(bad);
+    // repeating section around two paragraphs, then two more items
+    auto a = insert_paragraph(d, p, true, U"Item name", "", nullptr, {});
+    auto b = insert_paragraph(d, a, true, U"Item price", "", nullptr, {});
+    auto rs = add_repeating_section(d, a, b, "items");
+    CHECK_EQ(add_repeating_item(d, "items", 2), 2);
+    int items = 0;
+    for (auto it : rs.child("w:sdtContent").children("w:sdt")) (void)it, items++;
+    CHECK_EQ(items, 3);
+    CHECK_EQ(paragraphs(d.body()).size(), std::size_t(7));
+    std::string why;
+    CHECK_EQ(schema_issues(d, &why), 0);
+    save(d, "binding");
+    auto re = Document::from_bytes(d.to_bytes());
+    int bound = 0;
+    for (auto& c : list_content_controls(re)) if (!c.bound.empty()) bound++;
+    CHECK_EQ(bound, 3);
+}
+
 TEST(lists_tracked) {
     auto d = sample(true);
     auto p = paragraphs(d.body())[0];

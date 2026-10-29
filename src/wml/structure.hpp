@@ -215,9 +215,20 @@ std::vector<FieldInfo> list_fields(Document& d);
 // ── content controls ──
 // type: richText|text|checkbox|dropDown|comboBox|date|picture
 pugi::xml_node add_content_control(Document& d, pugi::xml_node p, int s, int e, const Json& opts);
-struct ControlInfo { std::string id, tag, alias, type, text; bool checked = false; };
+struct ControlInfo { std::string id, tag, alias, type, text; bool checked = false; std::string bound; std::vector<std::string> items; };
 std::vector<ControlInfo> list_content_controls(Document& d);
 void set_content_control(Document& d, const std::string& id_or_tag, const Json& value);
+// Bind a content control to a document property (title, author, subject, company, ...)
+// or to an element in a custom XML part (xpath into a store created on demand).
+// Bound controls show the stored value; setting either side updates both.
+void bind_content_control(Document& d, const std::string& id_or_tag, const std::string& property, const std::string& xpath);
+// Push stored values into every bound control (after properties or custom XML change).
+int refresh_bound_controls(Document& d);
+// Write a bound control's value into its store (property or custom XML).
+void set_bound_value(Document& d, pugi::xml_node sdt, const std::string& value);
+// A repeating section (w15:repeatingSection) around block content, and adding items to one.
+pugi::xml_node add_repeating_section(Document& d, pugi::xml_node first, pugi::xml_node last, const std::string& tag);
+int add_repeating_item(Document& d, const std::string& id_or_tag, int count);
 
 // ── lists ──
 // Make paragraphs a list: kind bullet|number (or a numFmt like lowerLetter).

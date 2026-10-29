@@ -31,6 +31,8 @@ void set_core_properties(Document& d, const Json& props);  // title, subject, cr
 Json custom_properties(Document& d);
 void set_custom_property(Document& d, const std::string& name, const Json& value);  // null removes
 Json app_properties(Document& d);
+// Company, Manager, HyperlinkBase.
+void set_app_property(Document& d, const std::string& name, const std::string& value);
 
 // ── settings ──
 Json settings_json(Document& d);

@@ -1983,10 +1983,54 @@ std::vector<ToolDef> make_tools() {
             if (!c.tag.empty()) j["tag"] = c.tag;
             if (!c.alias.empty()) j["title"] = c.alias;
             if (c.type == "checkbox") j["checked"] = c.checked;
+            if (!c.bound.empty()) j["bound_to"] = c.bound;
+            if (!c.items.empty()) j["items"] = c.items;
             v.push_back(j);
         }
         return v;
     }});
+    add({"bind_content_control", "Bind content control",
+         "Developer > XML Mapping: tie a content control to a document property (title, subject, author, company, manager, "
+         "keywords, comments, category, status) or to a named data field (data: \"client/name\"). Every control bound to the same "
+         "field shows the same value; filling one fills the others and the property. Neither given unbinds.",
+         obj({{"doc", kDoc}, {"control", str("id, tag or title")}, {"property", str("Document property name.")},
+              {"data", str("Data field path like client/name (stored in a custom XML part).")}},
+             {"doc", "control"}),
+         false, false, [](Sessions& S, const Json& a) {
+             auto& s = mut(S, a);
+             bind_content_control(s.doc, need(a, "control"), sarg(a, "property"), sarg(a, "data"));
+             int n = refresh_bound_controls(s.doc);
+             Json out = {{"control", need(a, "control")}, {"controls_refreshed", n}};
+             for (auto& c : list_content_controls(s.doc))
+                 if (c.id == need(a, "control") || c.tag == need(a, "control") || c.alias == need(a, "control")) {
+                     out["text"] = c.text;
+                     if (!c.bound.empty()) out["bound_to"] = c.bound;
+                 }
+             return out;
+         }});
+    add({"repeating_section", "Repeating section",
+         "A repeating section content control (Developer > Repeating Section): wrap paragraphs or a table (first..last) so a "
+         "form can add more of them, or add items to an existing one (control + add).",
+         obj({{"doc", kDoc}, {"first", str("First paragraph id to wrap.")}, {"last", str("Last paragraph id (default first).")},
+              {"table", integer("Wrap this table instead.")}, {"tag", str("")}, {"control", str("Existing section id, tag or title.")},
+              {"add", integer("How many items to add (copies of the last one).")}},
+             {"doc"}),
+         false, false, [](Sessions& S, const Json& a) {
+             auto& s = mut(S, a);
+             if (a.contains("control")) {
+                 int n = add_repeating_item(s.doc, need(a, "control"), iarg(a, "add", 1));
+                 return Json{{"added", n}};
+             }
+             pugi::xml_node first, last;
+             if (a.contains("table")) first = last = table_at(s.doc, iarg(a, "table", 1));
+             else {
+                 first = find_para(s.doc, need(a, "first")).p;
+                 last = a.contains("last") ? find_para(s.doc, need(a, "last")).p : first;
+             }
+             auto sdt = add_repeating_section(s.doc, first, last, sarg(a, "tag"));
+             int added = a.contains("add") ? add_repeating_item(s.doc, xml::attr(sdt.child("w:sdtPr").child("w:id"), "w:val"), iarg(a, "add", 1)) : 0;
+             return Json{{"id", xml::attr(sdt.child("w:sdtPr").child("w:id"), "w:val")}, {"added", added}};
+         }});
     add({"set_content_control", "Fill content control", "Set a content control's value (text, checkbox true/false, drop-down choice, date YYYY-MM-DD).",
          obj({{"doc", kDoc}, {"control", str("id, tag or title")}, {"value", {{"description", "string or boolean"}}}}, {"doc", "control", "value"}), false, false,
          [](Sessions& S, const Json& a) {
@@ -2128,16 +2172,28 @@ std::vector<ToolDef> make_tools() {
              return Json{{"core", core_properties(s.doc)}, {"custom", custom_properties(s.doc)}, {"app", app_properties(s.doc)}};
          }});
     add({"set_properties", "Set properties",
-         "Set core properties (title, subject, creator, keywords, description, category, content_status, language, ...) and/or "
-         "custom properties (name -> string/number/bool; null removes).",
-         obj({{"doc", kDoc}, {"core", anyobj("")}, {"custom", anyobj("")}}, {"doc"}), false, false, [](Sessions& S, const Json& a) {
+         "Set core properties (title, subject, creator, keywords, description, category, content_status, language, ...), "
+         "company / manager, and/or custom properties (name -> string/number/bool; null removes). Content controls bound to "
+         "them and DOCPROPERTY fields update.",
+         obj({{"doc", kDoc}, {"core", anyobj("")}, {"custom", anyobj("")}, {"company", str("")}, {"manager", str("")}}, {"doc"}),
+         false, false, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
              if (a.contains("core")) set_core_properties(s.doc, obj_arg(a, "core"));
              if (a.contains("custom")) {
                  Json custom = obj_arg(a, "custom");  // named: .items() on a temporary dangles before C++23 P2718
                  for (auto& [k, v] : custom.items()) set_custom_property(s.doc, k, v);
              }
-             return Json{{"core", core_properties(s.doc)}, {"custom", custom_properties(s.doc)}};
+             if (a.contains("company")) set_app_property(s.doc, "Company", sarg(a, "company"));
+             if (a.contains("manager")) set_app_property(s.doc, "Manager", sarg(a, "manager"));
+             int bound = refresh_bound_controls(s.doc);
+             // DOCPROPERTY / TITLE / AUTHOR fields show the new values
+             FieldUpdate u;
+             u.filename = s.path;
+             int fields = evaluate_fields(s.doc, u, nullptr);
+             Json out = {{"core", core_properties(s.doc)}, {"custom", custom_properties(s.doc)}};
+             if (bound) out["controls_updated"] = bound;
+             if (fields) out["fields_updated"] = fields;
+             return out;
          }});
     add({"get_settings", "Settings", "Document settings: track changes, protection, compatibility mode, tab stops, zoom, ...",
          obj({{"doc", kDoc}}, {"doc"}), true, false, [](Sessions& S, const Json& a) { return settings_json(sess(S, a).doc); }});
@@ -2280,7 +2336,7 @@ std::vector<ToolDef> make_tools() {
     // Both read the full catalog through `catalog` (set once T is complete).
     auto catalog = std::make_shared<std::vector<ToolDef>>();
     add({"help", "What can this do / which tool",
-         "Help for Word documents (docx files): lists everything this can do, by task, and which tool does it. "
+         "Help for Word documents and files (docx): lists everything this can do to work on a Word file, by task, and which tool does it. "
          "Open, create, read, write and edit text and paragraphs; format font, size, bold, headings, styles; "
          "tables, rows, cells; pictures; lists and bullets; headers, footers, page numbers, margins; comments; "
          "track changes; footnotes; links; table of contents. Give tool names or tasks (comma-separated) to see how to "

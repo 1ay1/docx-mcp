@@ -1,6 +1,6 @@
 # Tool reference
 
-Generated from `docx-mcp --list-tools` by `tools/gen_tool_docs.py`. 121 tools.
+Generated from `docx-mcp --list-tools` by `tools/gen_tool_docs.py`. 123 tools.
 
 Every tool that edits takes `doc` (a handle or a file path), and most take `track` (record as a tracked change) and `author`. Paragraphs are addressed by the `id` that `read_document` returns.
 
@@ -15,7 +15,7 @@ Every tool that edits takes `doc` (a handle or a file path), and most take `trac
 - [Track changes](#track-changes): `set_track_changes`, `list_revisions`, `accept_revisions`, `reject_revisions`, `compare_documents`
 - [Comments](#comments): `add_comment`, `list_comments`, `reply_comment`, `resolve_comment`, `edit_comment`, `delete_comment`
 - [Tables](#tables): `insert_table`, `read_table`, `set_cell`, `table_rows`, `table_columns`, `merge_cells`, `split_cell`, `format_table`, `sort_table`, `convert_table`, `delete_table`
-- [Insert](#insert): `insert_picture`, `list_pictures`, `format_picture`, `delete_picture`, `insert_text_box`, `insert_shape`, `insert_chart`, `list_charts`, `set_chart_data`, `insert_break`, `insert_hyperlink`, `list_hyperlinks`, `remove_hyperlinks`, `add_bookmark`, `list_bookmarks`, `delete_bookmark`, `insert_note`, `list_notes`, `delete_note`, `insert_field`, `list_fields`, `update_fields`, `unlink_fields`, `insert_toc`, `mark_index_entry`, `insert_index`, `insert_equation`, `insert_caption`, `insert_cross_reference`, `list_reference_targets`, `add_source`, `insert_citation`, `insert_bibliography`, `add_content_control`, `list_content_controls`, `set_content_control`
+- [Insert](#insert): `insert_picture`, `list_pictures`, `format_picture`, `delete_picture`, `insert_text_box`, `insert_shape`, `insert_chart`, `list_charts`, `set_chart_data`, `insert_break`, `insert_hyperlink`, `list_hyperlinks`, `remove_hyperlinks`, `add_bookmark`, `list_bookmarks`, `delete_bookmark`, `insert_note`, `list_notes`, `delete_note`, `insert_field`, `list_fields`, `update_fields`, `unlink_fields`, `insert_toc`, `mark_index_entry`, `insert_index`, `insert_equation`, `insert_caption`, `insert_cross_reference`, `list_reference_targets`, `add_source`, `insert_citation`, `insert_bibliography`, `add_content_control`, `list_content_controls`, `set_content_control`, `bind_content_control`, `repeating_section`
 - [Mailings](#mailings): `mail_merge`, `document_variables`
 - [Page layout](#page-layout): `get_page_setup`, `set_page_setup`, `set_header_footer`, `remove_header_footer`, `read_header_footer`, `set_watermark`, `theme`
 - [File](#file): `get_properties`, `set_properties`, `get_settings`, `set_settings`, `protect_document`, `unprotect_document`
@@ -1272,6 +1272,31 @@ Set a content control's value (text, checkbox true/false, drop-down choice, date
 | `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `value` | any | yes | string or boolean |
 
+### `bind_content_control`
+
+Developer > XML Mapping: tie a content control to a document property (title, subject, author, company, manager, keywords, comments, category, status) or to a named data field (data: "client/name"). Every control bound to the same field shows the same value; filling one fills the others and the property. Neither given unbinds.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `control` | string | yes | id, tag or title |
+| `data` | string |  | Data field path like client/name (stored in a custom XML part). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `property` | string |  | Document property name. |
+
+### `repeating_section`
+
+A repeating section content control (Developer > Repeating Section): wrap paragraphs or a table (first..last) so a form can add more of them, or add items to an existing one (control + add).
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `add` | integer |  | How many items to add (copies of the last one). |
+| `control` | string |  | Existing section id, tag or title. |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `first` | string |  | First paragraph id to wrap. |
+| `last` | string |  | Last paragraph id (default first). |
+| `table` | integer |  | Wrap this table instead. |
+| `tag` | string |  |  |
+
 ## Mailings
 
 ### `mail_merge`
@@ -1399,13 +1424,15 @@ Core (title, author, ...), custom, and application properties.
 
 ### `set_properties`
 
-Set core properties (title, subject, creator, keywords, description, category, content_status, language, ...) and/or custom properties (name -> string/number/bool; null removes).
+Set core properties (title, subject, creator, keywords, description, category, content_status, language, ...), company / manager, and/or custom properties (name -> string/number/bool; null removes). Content controls bound to them and DOCPROPERTY fields update.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
+| `company` | string |  |  |
 | `core` | object |  |  |
 | `custom` | object |  |  |
 | `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `manager` | string |  |  |
 
 ### `get_settings`
 
@@ -1509,7 +1536,7 @@ Export the document to PDF (File > Save As > PDF), with the current unsaved edit
 
 ### `help`
 
-Help for Word documents (docx files): lists everything this can do, by task, and which tool does it. Open, create, read, write and edit text and paragraphs; format font, size, bold, headings, styles; tables, rows, cells; pictures; lists and bullets; headers, footers, page numbers, margins; comments; track changes; footnotes; links; table of contents. Give tool names or tasks (comma-separated) to see how to call them. Only needed when a Word tool isn't in your list; tools you can see, call directly.
+Help for Word documents and files (docx): lists everything this can do to work on a Word file, by task, and which tool does it. Open, create, read, write and edit text and paragraphs; format font, size, bold, headings, styles; tables, rows, cells; pictures; lists and bullets; headers, footers, page numbers, margins; comments; track changes; footnotes; links; table of contents. Give tool names or tasks (comma-separated) to see how to call them. Only needed when a Word tool isn't in your list; tools you can see, call directly.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|

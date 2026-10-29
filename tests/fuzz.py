@@ -135,7 +135,12 @@ class Fuzz:
 
     def extra(self, pid, s, e, track):
         r = self.r
-        k = r.randint(0, 59)
+        k = r.randint(0, 60)
+        if k == 60:
+            if r.random() < 0.5:
+                return self.call("bind_content_control", control="t%d" % r.randint(0, 3),
+                                 **r.choice([{"property": "title"}, {"data": "a/b"}, {"property": "company"}, {}]))
+            return self.call("repeating_section", first=pid, tag="rs%d" % r.randint(0, 2), add=r.randint(0, 2))
         if k == 59:
             c = r.random()
             if c < 0.3:

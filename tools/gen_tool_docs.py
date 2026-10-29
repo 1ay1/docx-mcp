@@ -19,7 +19,7 @@ GROUPS = [
     ("Tables", ["insert_table", "read_table", "set_cell", "table_rows", "table_columns", "merge_cells", "split_cell", "format_table", "sort_table", "convert_table", "delete_table"]),
     ("Insert", ["insert_picture", "list_pictures", "format_picture", "delete_picture", "insert_text_box", "insert_shape", "insert_chart", "list_charts", "set_chart_data", "insert_break", "insert_hyperlink", "list_hyperlinks", "remove_hyperlinks", "add_bookmark",
                 "list_bookmarks", "delete_bookmark", "insert_note", "list_notes", "delete_note", "insert_field", "list_fields",
-                "update_fields", "unlink_fields", "insert_toc", "mark_index_entry", "insert_index", "insert_equation", "insert_caption", "insert_cross_reference", "list_reference_targets", "add_source", "insert_citation", "insert_bibliography", "add_content_control", "list_content_controls", "set_content_control"]),
+                "update_fields", "unlink_fields", "insert_toc", "mark_index_entry", "insert_index", "insert_equation", "insert_caption", "insert_cross_reference", "list_reference_targets", "add_source", "insert_citation", "insert_bibliography", "add_content_control", "list_content_controls", "set_content_control", "bind_content_control", "repeating_section"]),
     ("Mailings", ["mail_merge", "document_variables"]),
     ("Page layout", ["get_page_setup", "set_page_setup", "set_header_footer", "remove_header_footer", "read_header_footer", "set_watermark", "theme"]),
     ("File", ["get_properties", "set_properties", "get_settings", "set_settings", "protect_document", "unprotect_document"]),

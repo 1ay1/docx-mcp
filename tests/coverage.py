@@ -330,6 +330,14 @@ def exercise(R, doc, track, work, tag):
     for ty, v in (("text", "filled"), ("checkbox", False), ("dropDown", "Two"), ("comboBox", "custom"),
                   ("date", "2024-05-06"), ("richText", "rich")):
         R.call("set_content_control", doc=doc, control="cov_" + ty, value=v)
+    R.call("bind_content_control", doc=doc, control="cov_text", property="title")
+    R.call("bind_content_control", doc=doc, control="cov_richText", data="client/name")
+    R.call("set_content_control", doc=doc, control="cov_richText", value="Acme")
+    R.call("set_properties", doc=doc, core={"title": "Bound title"}, company="Acme Inc")
+    R.call("bind_content_control", doc=doc, control="cov_richText")
+    rs = R.call("repeating_section", doc=doc, first=p0, tag="cov_rep", add=1)
+    if rs:
+        R.call("repeating_section", doc=doc, control="cov_rep", add=2)
 
     # page, headers
     R.call("get_page_setup", doc=doc)
