@@ -12,7 +12,7 @@ GROUPS = [
     ("Editing text", ["insert_text", "replace_text", "delete_text", "find_replace", "insert_paragraph", "insert_markdown", "delete_paragraph",
                       "split_paragraph", "merge_paragraphs", "move_paragraphs"]),
     ("Formatting", ["format_text", "format_paragraph", "apply_style", "clear_formatting", "drop_cap"]),
-    ("Styles", ["list_styles", "get_style", "modify_style", "delete_style"]),
+    ("Styles", ["list_styles", "get_style", "modify_style", "delete_style", "import_styles"]),
     ("Lists", ["apply_list", "set_list_level", "remove_list", "restart_numbering", "define_list", "list_lists"]),
     ("Track changes", ["set_track_changes", "list_revisions", "accept_revisions", "reject_revisions", "compare_documents"]),
     ("Comments", ["add_comment", "list_comments", "reply_comment", "resolve_comment", "edit_comment", "delete_comment"]),

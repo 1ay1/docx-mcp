@@ -1,6 +1,6 @@
 # Tool reference
 
-Generated from `docx-mcp --list-tools` by `tools/gen_tool_docs.py`. 111 tools.
+Generated from `docx-mcp --list-tools` by `tools/gen_tool_docs.py`. 112 tools.
 
 Every tool that edits takes `doc` (a handle or a file path), and most take `track` (record as a tracked change) and `author`. Paragraphs are addressed by the `id` that `read_document` returns.
 
@@ -10,7 +10,7 @@ Every tool that edits takes `doc` (a handle or a file path), and most take `trac
 - [Reading](#reading): `read_document`, `get_text`, `get_outline`, `get_paragraph`, `find_text`, `get_statistics`
 - [Editing text](#editing-text): `insert_text`, `replace_text`, `delete_text`, `find_replace`, `insert_paragraph`, `insert_markdown`, `delete_paragraph`, `split_paragraph`, `merge_paragraphs`, `move_paragraphs`
 - [Formatting](#formatting): `format_text`, `format_paragraph`, `apply_style`, `clear_formatting`, `drop_cap`
-- [Styles](#styles): `list_styles`, `get_style`, `modify_style`, `delete_style`
+- [Styles](#styles): `list_styles`, `get_style`, `modify_style`, `delete_style`, `import_styles`
 - [Lists](#lists): `apply_list`, `set_list_level`, `remove_list`, `restart_numbering`, `define_list`, `list_lists`
 - [Track changes](#track-changes): `set_track_changes`, `list_revisions`, `accept_revisions`, `reject_revisions`, `compare_documents`
 - [Comments](#comments): `add_comment`, `list_comments`, `reply_comment`, `resolve_comment`, `edit_comment`, `delete_comment`
@@ -389,11 +389,12 @@ Show a style's settings: font, size, color, spacing, based on, next style. Works
 
 ### `modify_style`
 
-Create a new style or modify one (Modify Style dialog). Changes apply everywhere the style is used.
+Create a new style or modify one (Modify Style dialog). Changes apply everywhere the style is used. Table styles also take table (borders, shading, cell_margins, band_size) and conditional formats per part: header_row, total_row, first_column, last_column, banded_rows, banded_columns: {run, paragraph, cell: {shading, borders}}.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `based_on` | string |  |  |
+| `conditional` | object |  | Table styles: {"header_row": {"run": {"bold": true, "color": "FFFFFF"}, "cell": {"shading": "1F4E79"}}, "banded_rows": {"cell": {"shading": "DDEBF7"}}} |
 | `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `hidden` | boolean |  |  |
 | `name` | string |  | Name. |
@@ -402,6 +403,7 @@ Create a new style or modify one (Modify Style dialog). Changes apply everywhere
 | `quick_style` | boolean |  | Show in the Styles gallery. |
 | `run` | object |  | Character formatting (Word names). null removes a property. More keys: caps, small_caps, double_strike, hidden, spacing, position, scale, kerning, language, border, shading, emboss, outline, shadow. |
 | `style` | string |  | Style id or name; a new id is derived from name when creating. |
+| `table` | object |  | Table styles: whole-table borders, shading, cell_margins, alignment, band_size. |
 | `type` | `paragraph` \\| `character` \\| `table` \\| `numbering` |  | For new styles. |
 
 ### `delete_style`
@@ -412,6 +414,18 @@ Delete a style; text using it reverts to Normal / Default Paragraph Font.
 |---|---|---|---|
 | `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `style` | string | yes | Style name or id. |
+
+### `import_styles`
+
+Copy styles from another .docx or .dotx (Organizer / a template's look): named styles, or all. The styles they are based on and their list numbering come along. overwrite replaces styles with the same id (default true); defaults also copies the document defaults.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `defaults` | boolean |  | Also copy the document defaults (docDefaults). Default false. |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `from` | string | yes | Path of the template or document (or an open doc handle). |
+| `overwrite` | boolean |  | Replace existing styles with the same id. Default true. |
+| `styles` | array of string |  | Style ids or names. Omit for every style. |
 
 ## Lists
 

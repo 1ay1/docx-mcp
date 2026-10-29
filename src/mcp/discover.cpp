@@ -19,7 +19,7 @@ const std::vector<TaskGroup>& task_groups() {
         {"Paragraphs", "add, delete, split, merge or move paragraphs; write a whole document from Markdown",
          {"insert_markdown", "insert_paragraph", "delete_paragraph", "split_paragraph", "merge_paragraphs", "move_paragraphs"}},
         {"Formatting", "bold, italic, font, size, color, highlight; alignment, spacing, indents, borders, shading; drop cap; styles like Heading 1",
-         {"format_text", "format_paragraph", "apply_style", "clear_formatting", "drop_cap", "list_styles", "get_style", "modify_style",
+         {"format_text", "format_paragraph", "apply_style", "clear_formatting", "drop_cap", "list_styles", "get_style", "modify_style", "import_styles",
           "delete_style"}},
         {"Lists", "bullets, numbering, list levels, restart numbering, multilevel lists (1 / 1.1 / 1.1.1, I. A. 1.), numbered headings, chapter numbering",
          {"apply_list", "set_list_level", "remove_list", "restart_numbering", "define_list", "list_lists"}},

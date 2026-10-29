@@ -832,16 +832,23 @@ std::vector<ToolDef> make_tools() {
              bool in_doc = (bool)st;
              if (!st) st = builtin_style(need(a, "style"));
              if (!st) throw std::runtime_error("style '" + sarg(a, "style") + "' not found; list_styles shows what exists");
-             return Json{{"id", xml::attr(st, "w:styleId")}, {"name", xml::attr(st.child("w:name"), "w:val")}, {"type", xml::attr(st, "w:type")},
+             Json out = Json{{"id", xml::attr(st, "w:styleId")}, {"name", xml::attr(st.child("w:name"), "w:val")}, {"type", xml::attr(st, "w:type")},
                          {"in_document", in_doc},
                          {"based_on", xml::attr(st.child("w:basedOn"), "w:val")}, {"next", xml::attr(st.child("w:next"), "w:val")},
                          {"paragraph", ppr_to_json(st.child("w:pPr"))}, {"run", rpr_to_json(st.child("w:rPr"))}};
+             if (xml::attr(st, "w:type") == "table")
+                 for (auto& [k, v] : table_style_json(st).items()) out[k] = v;
+             return out;
          }});
     add({"modify_style", "Create / modify style",
-         "Create a new style or modify one (Modify Style dialog). Changes apply everywhere the style is used.",
+         "Create a new style or modify one (Modify Style dialog). Changes apply everywhere the style is used. Table styles "
+         "also take table (borders, shading, cell_margins, band_size) and conditional formats per part: header_row, "
+         "total_row, first_column, last_column, banded_rows, banded_columns: {run, paragraph, cell: {shading, borders}}.",
          obj({{"doc", kDoc}, {"style", str("Style id or name; a new id is derived from name when creating.")}, {"name", str("")},
               {"type", enm({"paragraph", "character", "table", "numbering"}, "For new styles.")}, {"based_on", str("")}, {"next", str("Style for the next paragraph.")},
-              {"paragraph", kParaFmt}, {"run", kRunFmt}, {"quick_style", boolean("Show in the Styles gallery.")}, {"hidden", boolean("")}},
+              {"paragraph", kParaFmt}, {"run", kRunFmt}, {"quick_style", boolean("Show in the Styles gallery.")}, {"hidden", boolean("")},
+              {"table", anyobj("Table styles: whole-table borders, shading, cell_margins, alignment, band_size.")},
+              {"conditional", anyobj("Table styles: {\"header_row\": {\"run\": {\"bold\": true, \"color\": \"FFFFFF\"}, \"cell\": {\"shading\": \"1F4E79\"}}, \"banded_rows\": {\"cell\": {\"shading\": \"DDEBF7\"}}}")}},
              {"doc"}),
          false, false, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
@@ -854,6 +861,32 @@ std::vector<ToolDef> make_tools() {
              auto& s = mut(S, a);
              delete_style(s.doc, need(a, "style"));
              return Json{{"deleted", true}};
+         }});
+    add({"import_styles", "Import styles",
+         "Copy styles from another .docx or .dotx (Organizer / a template's look): named styles, or all. The styles they are "
+         "based on and their list numbering come along. overwrite replaces styles with the same id (default true); "
+         "defaults also copies the document defaults.",
+         obj({{"doc", kDoc}, {"from", str("Path of the template or document (or an open doc handle).")},
+              {"styles", arr(str(""), "Style ids or names. Omit for every style.")},
+              {"overwrite", boolean("Replace existing styles with the same id. Default true.")},
+              {"defaults", boolean("Also copy the document defaults (docDefaults). Default false.")}},
+             {"doc", "from"}),
+         false, false, [](Sessions& S, const Json& a) {
+             auto& s = mut(S, a);
+             std::string from = need(a, "from");
+             Session* other = nullptr;
+             for (auto& [h, o] : S.all())
+                 if (h == from || o->path == util::normalize_path(from)) other = o;
+             if (other == &s) throw std::runtime_error("from is this document");
+             std::optional<Document> loaded;
+             if (!other) {
+                 std::string p = util::normalize_path(from);
+                 if (!util::file_exists(p)) throw std::runtime_error("no file at " + p);
+                 loaded = Document::open(p);
+             }
+             Document& src = other ? other->doc : *loaded;
+             auto r = import_styles(s.doc, src, strs(a, "styles"), barg(a, "overwrite", true), barg(a, "defaults", false));
+             return r;
          }});
 
     // ── lists ────────────────────────────────────────────────────────────

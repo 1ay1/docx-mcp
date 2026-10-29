@@ -36,6 +36,12 @@ void merge_cells(Document& d, pugi::xml_node tbl, int r1, int c1, int r2, int c2
 // side by side (0-based row/col; cols >= 1). Returns how many cells result.
 int split_cell(Document& d, pugi::xml_node tbl, int row, int col, int cols);
 void format_table(Document& d, pugi::xml_node tbl, const Json& props, const EditOpts& o);
+// Table style definition (Table Design > New Table Style): whole-table
+// props {borders, alignment, indent, cell_margins, shading, band_size} and
+// conditional formats {header_row, total_row, first_column, last_column,
+// banded_rows, even_rows, banded_columns, ...: {run, paragraph, cell}}.
+void apply_table_style(Document& d, pugi::xml_node style, const Json& table, const Json& conditional);
+Json table_style_json(pugi::xml_node style);
 void format_cell(Document& d, pugi::xml_node tc, const Json& props, const EditOpts& o);
 void delete_table(Document& d, pugi::xml_node tbl, const EditOpts& o);
 Json table_json(pugi::xml_node tbl);

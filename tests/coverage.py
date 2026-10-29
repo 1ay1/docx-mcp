@@ -273,6 +273,12 @@ def exercise(R, doc, track, work, tag):
     R.call("insert_index", doc=doc, paragraph=p3, columns=2, **t)
     R.call("update_fields", doc=doc)
     ml = R.call("define_list", doc=doc, preset="outline", paragraphs=[p1, p2], level=1, name="Cov outline", **t)
+    R.call("modify_style", doc=doc, name="Cov Table", type="table", table={"borders": {"style": "single", "color": "9BC2E6"}},
+           conditional={"header_row": {"run": {"bold": True}, "cell": {"shading": "1F4E79"}}, "banded_rows": {"cell": {"shading": "DDEBF7"}},
+                        "total_row": {"bold": True}})
+    R.call("get_style", doc=doc, style="CovTable")
+    R.call("import_styles", doc=doc, styles=["Heading 1", "ListParagraph"], **{"from": os.path.join(CORPUS, "DB007-Spec.docx")})
+    R.call("import_styles", doc=doc, overwrite=False, defaults=True, **{"from": os.path.join(CORPUS, "DB007-Spec.docx")})
     R.call("define_list", doc=doc, preset="numbered", levels=[{"format": "upperLetter", "text": "%1)"}, {"text": "%1.%2", "restart_after": False}])
     R.call("define_list", doc=doc, preset="headings")
     lists = R.call("list_lists", doc=doc) or {}

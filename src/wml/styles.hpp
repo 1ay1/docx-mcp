@@ -25,6 +25,10 @@ pugi::xml_node builtin_style(const std::string& id_or_name);
 // the styles it depends on. Returns the styleId. Throws if unknown.
 std::string ensure_style(Document& d, const std::string& id_or_name);
 std::vector<StyleInfo> list_styles(Document& d, bool include_latent_builtins = false);
+// Organizer: copy styles from another document (all when names is empty),
+// with the styles they build on and their list numbering. overwrite replaces
+// same-id styles; defaults also copies the document defaults (font, size).
+nlohmann::json import_styles(Document& d, Document& src, const std::vector<std::string>& names, bool overwrite, bool defaults);
 
 // Create or update a style. props: {"name","type":"paragraph|character|table|numbering",
 // "based_on","next","link","ui_priority","quick_style",

@@ -513,12 +513,16 @@ void apply_borders(pugi::xml_node container, const Json& v, bool table) {
     static const char* tsides[] = {"top", "left", "bottom", "right", "insideH", "insideV"};
     static const char* csides[] = {"top", "left", "bottom", "right"};
     Json spec = v;
+    const char* const* sides = table ? tsides : csides;
+    int nsides = table ? 6 : 4;
     if (v.is_string() || v.is_boolean()) {
         bool none = v.is_boolean() ? !v.get<bool>() : v.get<std::string>() == "none";
         spec = Json::object();
-        const char* const* sides = table ? tsides : csides;
-        int n = table ? 6 : 4;
-        for (int i = 0; i < n; i++) spec[sides[i]] = none ? Json("nil") : Json("single");
+        for (int i = 0; i < nsides; i++) spec[sides[i]] = none ? Json("nil") : Json("single");
+    } else if (v.is_object() && (v.contains("style") || v.contains("size") || v.contains("color"))) {
+        // one border for every side
+        spec = Json::object();
+        for (int i = 0; i < nsides; i++) spec[sides[i]] = v;
     }
     for (auto& [side, bv] : spec.items()) {
         auto b = schema::ensure_child(container, "w:" + side);
@@ -535,6 +539,151 @@ void apply_borders(pugi::xml_node container, const Json& v, bool table) {
     }
 }
 }  // namespace
+
+void apply_table_style(Document& d, pugi::xml_node style, const Json& table, const Json& cond) {
+    // whole table: borders, margins, alignment, cell shading
+    auto cell_props = [&](pugi::xml_node owner, const Json& c) {
+        auto tcpr = schema::ensure_child(owner, "w:tcPr");
+        for (auto& [k, v] : c.items()) {
+            if (k == "shading" || k == "fill") {
+                if (v.is_null()) { tcpr.remove_child("w:shd"); continue; }
+                auto s = schema::ensure_child(tcpr, "w:shd");
+                std::string f = v.get<std::string>();
+                if (!f.empty() && f[0] == '#') f = f.substr(1);
+                xml::set_attr(s, "w:val", "clear");
+                xml::set_attr(s, "w:color", "auto");
+                xml::set_attr(s, "w:fill", f);
+            } else if (k == "borders") apply_borders(schema::ensure_child(tcpr, "w:tcBorders"), v, true);
+            else if (k == "vertical_align") enum_attr(schema::ensure_child(tcpr, "w:vAlign"), "w:val", v.get<std::string>());
+            else throw std::runtime_error(util::unknown_key("table style cell property", k, {"shading", "borders", "vertical_align"}));
+        }
+        if (!tcpr.first_child()) owner.remove_child(tcpr);
+    };
+    if (table.is_object()) {
+        auto tblpr = schema::ensure_child(style, "w:tblPr");
+        for (auto& [k, v] : table.items()) {
+            if (k == "borders") apply_borders(schema::ensure_child(tblpr, "w:tblBorders"), v, true);
+            else if (k == "alignment") enum_attr(schema::ensure_child(tblpr, "w:jc"), "w:val", v.get<std::string>());
+            else if (k == "indent") {
+                auto i = schema::ensure_child(tblpr, "w:tblInd");
+                xml::set_attr(i, "w:w", std::to_string(twips_of(v)));
+                xml::set_attr(i, "w:type", "dxa");
+            } else if (k == "cell_margins") {
+                auto m = schema::ensure_child(tblpr, "w:tblCellMar");
+                for (auto side : {"top", "left", "bottom", "right"}) {
+                    if (v.is_object() && !v.contains(side)) continue;
+                    auto e = schema::ensure_child(m, std::string("w:") + side);
+                    xml::set_attr(e, "w:w", std::to_string(twips_of(v.is_object() ? v[side] : v)));
+                    xml::set_attr(e, "w:type", "dxa");
+                }
+            } else if (k == "band_size" || k == "banded_rows_size") {
+                xml::set_attr(schema::ensure_child(tblpr, "w:tblStyleRowBandSize"), "w:val", std::to_string(v.get<int>()));
+            } else if (k == "banded_columns_size") {
+                xml::set_attr(schema::ensure_child(tblpr, "w:tblStyleColBandSize"), "w:val", std::to_string(v.get<int>()));
+            } else if (k == "shading" || k == "vertical_align") {
+                cell_props(style, Json{{k, v}});
+            } else
+                throw std::runtime_error(util::unknown_key("table style property", k, {"borders", "alignment", "indent", "cell_margins", "shading", "vertical_align", "band_size", "banded_columns_size"}));
+        }
+        if (!tblpr.first_child()) style.remove_child(tblpr);
+    }
+    if (!cond.is_object()) return;
+    static const std::map<std::string, std::string> types = {
+        {"header_row", "firstRow"}, {"first_row", "firstRow"}, {"total_row", "lastRow"}, {"last_row", "lastRow"},
+        {"first_column", "firstCol"}, {"last_column", "lastCol"}, {"banded_rows", "band1Horz"}, {"odd_rows", "band1Horz"},
+        {"even_rows", "band2Horz"}, {"banded_columns", "band1Vert"}, {"odd_columns", "band1Vert"}, {"even_columns", "band2Vert"},
+        {"top_left_cell", "nwCell"}, {"top_right_cell", "neCell"}, {"bottom_left_cell", "swCell"}, {"bottom_right_cell", "seCell"}};
+    for (auto& [k, v] : cond.items()) {
+        auto it = types.find(k);
+        if (it == types.end()) {
+            std::vector<std::string_view> valid;
+            for (auto& [n, t] : types) valid.push_back(n);
+            throw std::runtime_error(util::unknown_key("table style part", k, valid));
+        }
+        pugi::xml_node part;
+        for (auto p : style.children("w:tblStylePr"))
+            if (xml::attr(p, "w:type") == it->second) part = p;
+        if (v.is_null()) { if (part) style.remove_child(part); continue; }
+        if (!v.is_object()) throw std::runtime_error(k + " takes {\"run\": {...}, \"paragraph\": {...}, \"cell\": {...}}");
+        if (!part) {
+            part = schema::insert_child(style, "w:tblStylePr");
+            xml::set_attr(part, "w:type", it->second);
+            // Word's order of tblStylePr types
+            static const char* order[] = {"wholeTable", "firstRow", "lastRow", "firstCol", "lastCol", "band1Vert", "band2Vert",
+                                          "band1Horz", "band2Horz", "neCell", "nwCell", "seCell", "swCell"};
+            auto rank = [&](pugi::xml_node n) {
+                std::string t = xml::attr(n, "w:type");
+                for (int i = 0; i < 13; i++) if (t == order[i]) return i;
+                return 99;
+            };
+            for (auto o : style.children("w:tblStylePr"))
+                if (o != part && rank(o) > rank(part)) { style.insert_move_before(part, o); break; }
+        }
+        for (auto& [pk, pv] : v.items()) {
+            if (pk == "run") {
+                auto rpr = schema::ensure_child(part, "w:rPr");
+                apply_rpr_json(d, rpr, pv);
+            } else if (pk == "paragraph") {
+                auto ppr = schema::ensure_child(part, "w:pPr");
+                apply_ppr_json(d, ppr, pv);
+            } else if (pk == "cell") {
+                cell_props(part, pv);
+            } else if (is_run_prop(pk)) {
+                apply_rpr_json(d, schema::ensure_child(part, "w:rPr"), Json{{pk, pv}});
+            } else if (pk == "fill" || pk == "borders" || pk == "vertical_align" || pk == "shading") {
+                // shading on a table part means the cells
+                cell_props(part, Json{{pk, pv}});
+            } else if (is_para_prop(pk)) {
+                apply_ppr_json(d, schema::ensure_child(part, "w:pPr"), Json{{pk, pv}});
+            } else
+                throw std::runtime_error(util::unknown_key("table style part property", pk, {"run", "paragraph", "cell", "bold", "color", "shading", "borders"}));
+        }
+        // tblStylePr needs its tblPr/trPr/tcPr; Word writes empty tblPr when unused
+        schema::sort_children(part);
+    }
+    schema::sort_children(style);
+}
+
+Json table_style_json(pugi::xml_node style) {
+    Json j = Json::object();
+    static const std::map<std::string, std::string> names = {
+        {"firstRow", "header_row"}, {"lastRow", "total_row"}, {"firstCol", "first_column"}, {"lastCol", "last_column"},
+        {"band1Horz", "banded_rows"}, {"band2Horz", "even_rows"}, {"band1Vert", "banded_columns"}, {"band2Vert", "even_columns"},
+        {"nwCell", "top_left_cell"}, {"neCell", "top_right_cell"}, {"swCell", "bottom_left_cell"}, {"seCell", "bottom_right_cell"}};
+    auto cell = [](pugi::xml_node tcpr) {
+        Json c = Json::object();
+        if (auto s = tcpr.child("w:shd")) c["shading"] = xml::attr(s, "w:fill");
+        if (auto b = tcpr.child("w:tcBorders")) {
+            Json bj = Json::object();
+            for (auto e : b.children()) if (e.type() == pugi::node_element) bj[std::string(e.name()).substr(2)] = xml::attr(e, "w:val");
+            c["borders"] = bj;
+        }
+        return c;
+    };
+    if (auto tblpr = style.child("w:tblPr")) {
+        Json t = Json::object();
+        if (auto b = tblpr.child("w:tblBorders")) {
+            Json bj = Json::object();
+            for (auto e : b.children()) if (e.type() == pugi::node_element) bj[std::string(e.name()).substr(2)] = xml::attr(e, "w:val");
+            t["borders"] = bj;
+        }
+        if (auto s = tblpr.child("w:tblStyleRowBandSize")) t["band_size"] = util::to_int(xml::attr(s, "w:val"));
+        if (!t.empty()) j["table"] = t;
+    }
+    if (auto tcpr = style.child("w:tcPr")) if (auto c = cell(tcpr); !c.empty()) j["cell"] = c;
+    Json cond = Json::object();
+    for (auto p : style.children("w:tblStylePr")) {
+        std::string t = xml::attr(p, "w:type");
+        auto it = names.find(t);
+        Json pj = Json::object();
+        if (auto r = p.child("w:rPr")) if (auto rj = rpr_to_json(r); !rj.empty()) pj["run"] = rj;
+        if (auto pp = p.child("w:pPr")) if (auto ppj = ppr_to_json(pp); !ppj.empty()) pj["paragraph"] = ppj;
+        if (auto tc = p.child("w:tcPr")) if (auto c = cell(tc); !c.empty()) pj["cell"] = c;
+        cond[it == names.end() ? t : it->second] = pj;
+    }
+    if (!cond.empty()) j["conditional"] = cond;
+    return j;
+}
 
 void format_table(Document& d, pugi::xml_node tbl, const Json& props, const EditOpts& o) {
     auto tblpr = schema::ensure_child(tbl, "w:tblPr");
@@ -586,11 +735,11 @@ void format_table(Document& d, pugi::xml_node tbl, const Json& props, const Edit
             } else {
                 for (auto side : {"top", "left", "bottom", "right"}) set(side, v);
             }
-        } else if (k == "header_row" || k == "first_column" || k == "last_row" || k == "last_column" || k == "banded_rows" || k == "banded_columns") {
+        } else if (k == "header_row" || k == "first_column" || k == "last_row" || k == "total_row" || k == "last_column" || k == "banded_rows" || k == "banded_columns") {
             auto look = schema::ensure_child(tblpr, "w:tblLook");
             static const std::map<std::string, std::pair<const char*, bool>> m = {
                 {"header_row", {"w:firstRow", false}}, {"first_column", {"w:firstColumn", false}},
-                {"last_row", {"w:lastRow", false}}, {"last_column", {"w:lastColumn", false}},
+                {"last_row", {"w:lastRow", false}}, {"total_row", {"w:lastRow", false}}, {"last_column", {"w:lastColumn", false}},
                 {"banded_rows", {"w:noHBand", true}}, {"banded_columns", {"w:noVBand", true}}};
             auto [a, inv] = m.at(k);
             bool on = v.get<bool>();
@@ -633,7 +782,7 @@ void format_table(Document& d, pugi::xml_node tbl, const Json& props, const Edit
             }
             xml::set_attr(schema::ensure_child(tblpr, "w:tblLayout"), "w:type", "fixed");
         } else {
-            throw std::runtime_error(util::unknown_key("table property", k, {"style", "alignment", "width", "indent", "layout", "borders", "cell_margins", "column_widths", "row_height", "header_row", "repeat_header", "first_column", "last_row", "last_column", "banded_rows", "banded_columns"}));
+            throw std::runtime_error(util::unknown_key("table property", k, {"style", "alignment", "width", "indent", "layout", "borders", "cell_margins", "column_widths", "row_height", "header_row", "repeat_header", "first_column", "last_row", "total_row", "last_column", "banded_rows", "banded_columns"}));
         }
     }
 }

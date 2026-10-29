@@ -11,6 +11,7 @@
 #include "util/assets.hpp"
 #include "util/util.hpp"
 #include "wml/edit.hpp"
+#include "wml/structure.hpp"
 #include "xml/xml.hpp"
 
 namespace docx::wml {
@@ -130,6 +131,114 @@ std::string ensure_style(Document& d, const std::string& key) {
     return xml::attr(n, "w:styleId");
 }
 
+Json import_styles(Document& d, Document& src, const std::vector<std::string>& names, bool overwrite, bool defaults) {
+    auto from = src.styles(false);
+    if (!from) throw std::runtime_error("the source document has no styles");
+    auto to = d.styles();
+    Json added = Json::array(), replaced = Json::array(), skipped = Json::array();
+    // which source styles: the named ones (by id or name) plus their basedOn / link / next chains
+    std::vector<pugi::xml_node> want;
+    std::set<std::string> seen;
+    std::function<void(pugi::xml_node)> take = [&](pugi::xml_node s) {
+        std::string id = xml::attr(s, "w:styleId");
+        if (!seen.insert(id).second) return;
+        for (auto q : {"w:basedOn", "w:link", "w:next"}) {
+            std::string dep = xml::attr(s.child(q), "w:val");
+            if (dep.empty()) continue;
+            for (auto o : from.children("w:style"))
+                if (xml::attr(o, "w:styleId") == dep) take(o);
+        }
+        want.push_back(s);
+    };
+    if (names.empty()) {
+        for (auto s : from.children("w:style")) take(s);
+    } else {
+        for (auto& n : names) {
+            pugi::xml_node hit;
+            for (auto s : from.children("w:style"))
+                if (xml::attr(s, "w:styleId") == n || norm_name(xml::attr(s.child("w:name"), "w:val")) == norm_name(n)) hit = s;
+            if (!hit) throw std::runtime_error("the source document has no style '" + n + "'");
+            take(hit);
+        }
+    }
+    // numbering a style refers to comes along with fresh ids
+    std::map<std::string, std::string> num_map;
+    auto bring_num = [&](const std::string& nid) -> std::string {
+        if (nid.empty() || nid == "0") return nid;
+        if (auto it = num_map.find(nid); it != num_map.end()) return it->second;
+        auto sn = src.numbering(false);
+        if (!sn) return "";
+        pugi::xml_node num;
+        for (auto n : sn.children("w:num")) if (xml::attr(n, "w:numId") == nid) num = n;
+        if (!num) return "";
+        std::string aid = xml::attr(num.child("w:abstractNumId"), "w:val");
+        pugi::xml_node abs;
+        for (auto a : sn.children("w:abstractNum")) if (xml::attr(a, "w:abstractNumId") == aid) abs = a;
+        if (!abs) return "";
+        auto dn = d.numbering();
+        int na = 0, nn = 1;
+        for (auto a : dn.children("w:abstractNum")) na = std::max(na, a.attribute("w:abstractNumId").as_int() + 1);
+        for (auto n : dn.children("w:num")) nn = std::max(nn, n.attribute("w:numId").as_int() + 1);
+        auto ca = schema::insert_child(dn, "w:abstractNum");
+        for (auto at : abs.attributes()) ca.append_attribute(at.name()) = at.value();
+        for (auto c : abs.children()) ca.append_copy(c);
+        xml::set_attr(ca, "w:abstractNumId", std::to_string(na));
+        // numStyleLink / styleLink point at styles we may not bring: drop them
+        if (auto l = ca.child("w:numStyleLink")) ca.remove_child(l);
+        auto cn = schema::insert_child(dn, "w:num");
+        xml::set_attr(cn, "w:numId", std::to_string(nn));
+        xml::set_attr(schema::ensure_child(cn, "w:abstractNumId"), "w:val", std::to_string(na));
+        for (auto ov : num.children("w:lvlOverride")) cn.append_copy(ov);
+        xml::fix_declarations(xml::root_of(dn));
+        return num_map[nid] = std::to_string(nn);
+    };
+    for (auto s : want) {
+        std::string id = xml::attr(s, "w:styleId");
+        pugi::xml_node existing;
+        for (auto o : to.children("w:style")) if (xml::attr(o, "w:styleId") == id) existing = o;
+        if (existing && !overwrite) { skipped.push_back(id); continue; }
+        pugi::xml_node n = existing ? to.insert_copy_after(s, existing) : to.append_copy(s);
+        if (existing) { to.remove_child(existing); replaced.push_back(id); }
+        else added.push_back(id);
+        if (auto np = n.child("w:pPr").child("w:numPr")) {
+            auto idn = np.child("w:numId");
+            std::string mapped = bring_num(xml::attr(idn, "w:val"));
+            if (mapped.empty()) n.child("w:pPr").remove_child(np);
+            else xml::set_attr(idn, "w:val", mapped);
+        }
+        // revision marks and rsids belong to the source
+        for (auto q : {"w:rsid", "w:pPrChange", "w:rPrChange"})
+            for (auto e : xml::descendants(n, q)) e.parent().remove_child(e);
+    }
+    if (defaults) {
+        if (auto dd = from.child("w:docDefaults")) {
+            if (auto old = to.child("w:docDefaults")) to.remove_child(old);
+            auto c = to.prepend_copy(dd);
+            schema::place_child(to, c);
+        }
+    }
+    // links to styles neither side has would be dangling
+    for (auto s : to.children("w:style"))
+        for (auto q : {"w:basedOn", "w:link", "w:next"}) {
+            auto e = s.child(q);
+            if (!e) continue;
+            bool ok = false;
+            for (auto o : to.children("w:style")) if (xml::attr(o, "w:styleId") == xml::attr(e, "w:val")) ok = true;
+            if (!ok) s.remove_child(e);
+        }
+    // only one default per type
+    std::set<std::string> default_types;
+    for (auto s : to.children("w:style")) {
+        if (xml::attr(s, "w:default") != "1") continue;
+        std::string t = xml::attr(s, "w:type", "paragraph");
+        if (!default_types.insert(t).second) xml::remove_attr(s, "w:default");
+    }
+    xml::fix_declarations(xml::root_of(to));
+    Json out = {{"added", added}, {"replaced", replaced}};
+    if (!skipped.empty()) out["kept_existing"] = skipped;
+    return out;
+}
+
 std::vector<StyleInfo> list_styles(Document& d, bool latent) {
     std::vector<StyleInfo> v;
     std::set<std::string> used;
@@ -229,8 +338,11 @@ std::string upsert_style(Document& d, const std::string& id_in, const Json& prop
                     if (xml::attr(o, "w:type") == type) xml::remove_attr(o, "w:default");
                 xml::set_attr(s, "w:default", "1");
             }
+        } else if (k == "table" || k == "conditional") {
+            if (xml::attr(s, "w:type") != "table") throw std::runtime_error(k + " applies to table styles (type table)");
+            apply_table_style(d, s, k == "table" ? v : Json(), k == "conditional" ? v : Json());
         } else {
-            throw std::runtime_error(util::unknown_key("style property", k, {"name", "type", "based_on", "next", "link", "ui_priority", "quick_style", "hidden", "paragraph", "run", "default"}));
+            throw std::runtime_error(util::unknown_key("style property", k, {"name", "type", "based_on", "next", "link", "ui_priority", "quick_style", "hidden", "paragraph", "run", "default", "table", "conditional"}));
         }
     }
     return xml::attr(s, "w:styleId");

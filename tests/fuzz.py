@@ -135,7 +135,13 @@ class Fuzz:
 
     def extra(self, pid, s, e, track):
         r = self.r
-        k = r.randint(0, 53)
+        k = r.randint(0, 54)
+        if k == 54:
+            name = "FT%d" % r.randint(0, 2)
+            self.call("modify_style", name=name, type="table",
+                      conditional={r.choice(["header_row", "total_row", "banded_rows", "first_column", "even_rows"]):
+                                   r.choice([{"bold": True}, {"cell": {"shading": "DDEBF7"}}, None, {"run": {"color": "FF0000"}}])})
+            return self.call("format_table", table=1, style=name, total_row=r.random() < 0.5)
         if k == 53:
             return self.call("define_list", preset=r.choice(["numbered", "legal", "outline", "headings", "chapters", "bullets", "checklist"]),
                              paragraphs=[pid], level=r.randint(0, 3),

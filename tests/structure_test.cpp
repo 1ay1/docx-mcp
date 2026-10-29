@@ -306,6 +306,70 @@ TEST(multilevel_lists) {
     save(d, "multilevel_lists");
 }
 
+TEST(table_style_conditional) {
+    auto d = Document::create();
+    auto id = upsert_style(d, "", {{"name", "Report Table"}, {"type", "table"},
+                                    {"table", {{"borders", {{"style", "single"}, {"size", 0.5}, {"color", "9BC2E6"}}}, {"band_size", 1}}},
+                                    {"conditional", {{"header_row", {{"run", {{"bold", true}, {"color", "FFFFFF"}}}, {"cell", {{"shading", "#1F4E79"}}}}},
+                                                     {"banded_rows", {{"cell", {{"shading", "DDEBF7"}}}}},
+                                                     {"total_row", {{"bold", true}, {"borders", {{"top", {{"style", "double"}}}}}}},
+                                                     {"first_column", {{"run", {{"italic", true}}}}}}}});
+    CHECK_EQ(id, std::string("ReportTable"));
+    auto st = find_style(d, id);
+    int parts = 0;
+    std::vector<std::string> order;
+    for (auto p : st.children("w:tblStylePr")) { parts++; order.push_back(xml::attr(p, "w:type")); }
+    CHECK_EQ(parts, 4);
+    if (parts == 4) {
+        CHECK_EQ(order[0], std::string("firstRow"));
+        CHECK_EQ(order[1], std::string("lastRow"));
+        CHECK_EQ(order[2], std::string("firstCol"));
+        CHECK_EQ(order[3], std::string("band1Horz"));
+    }
+    auto j = table_style_json(st);
+    CHECK_EQ(j["conditional"]["header_row"]["cell"]["shading"].get<std::string>(), std::string("1F4E79"));
+    CHECK(j["conditional"]["header_row"]["run"]["bold"].get<bool>());
+    // remove a part, use the style on a table
+    upsert_style(d, id, {{"conditional", {{"first_column", nullptr}}}});
+    CHECK(table_style_json(find_style(d, id))["conditional"].size() == 3);
+    auto tbl = insert_table(d, paragraphs(d.body())[0], true, {{"Item", "Cost"}, {"A", "1"}, {"B", "2"}, {"Total", "3"}},
+                            {{"style", id}, {"header_row", true}}, {});
+    format_table(d, tbl, {{"total_row", true}, {"banded_rows", true}}, {});
+    bool bad = false;
+    try { upsert_style(d, id, {{"conditional", {{"header", {{"bold", true}}}}}}); } catch (std::exception&) { bad = true; }
+    CHECK(bad);
+    std::string why;
+    CHECK_EQ(schema_issues(d, &why), 0);
+    save(d, "table_style_conditional");
+}
+
+TEST(import_styles_from_template) {
+    auto src = Document::create();
+    upsert_style(src, "", {{"name", "Brand Base"}, {"type", "paragraph"}, {"run", {{"font", "Georgia"}, {"color", "1F4E79"}}}});
+    upsert_style(src, "", {{"name", "Brand Title"}, {"type", "paragraph"}, {"based_on", "BrandBase"}, {"run", {{"size", 28}}}});
+    int nid = define_list(src, {{"preset", "outline"}});
+    upsert_style(src, "", {{"name", "Brand List"}, {"type", "paragraph"}, {"paragraph", {{"numbering", {{"num_id", nid}, {"level", 0}}}}}});
+    auto d = Document::create();
+    upsert_style(d, "", {{"name", "Brand Title"}, {"type", "paragraph"}, {"run", {{"size", 10}}}});
+    auto r = import_styles(d, src, {"Brand Title", "BrandList"}, false, false);
+    CHECK(find_style(d, "BrandBase"));
+    // Brand Title and Normal (its next/based-on chain) were already there
+    CHECK_EQ(r["kept_existing"].size(), std::size_t(2));
+    r = import_styles(d, src, {"Brand Title"}, true, true);
+    CHECK_EQ(r["replaced"].size(), std::size_t(3));
+    auto t = find_style(d, "BrandTitle");
+    CHECK_EQ(xml::attr(t.child("w:basedOn"), "w:val"), std::string("BrandBase"));
+    CHECK_EQ(xml::attr(t.child("w:rPr").child("w:sz"), "w:val"), std::string("56"));
+    auto p = insert_paragraph(d, paragraphs(d.body())[0], true, U"one", "BrandList", nullptr, {});
+    CHECK_EQ(list_label(d, p), std::string("I."));
+    bool bad = false;
+    try { import_styles(d, src, {"Nope"}, true, false); } catch (std::exception&) { bad = true; }
+    CHECK(bad);
+    std::string why;
+    CHECK_EQ(schema_issues(d, &why), 0);
+    save(d, "import_styles");
+}
+
 TEST(lists_tracked) {
     auto d = sample(true);
     auto p = paragraphs(d.body())[0];
