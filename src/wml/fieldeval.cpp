@@ -766,6 +766,7 @@ private:
     std::string page_label(int phys, pugi::xml_node at_sect) {
         if (!pm_) return "";
         auto ss = sections(d_);
+        if (ss.empty()) return std::to_string(phys);
         auto start_page = section_starts();
         // which section holds page phys: the last that starts at or before it
         int sec = 0;

@@ -426,9 +426,16 @@ int rebuild_bibliographies(Document& d, const std::string& want_style) {
         for (auto r : xml::children(p1, "w:r"))
             if (auto f = r.child("w:fldChar"); f && xml::attr(f, "w:fldCharType") == "separate") sep = r;
         if (!sep) continue;
-        // drop the old result: paragraphs between p1 and p2, and runs after sep / before end
+        // drop the old result: paragraphs between p1 and p2 (only when p2 really follows p1 as a sibling)
         std::vector<pugi::xml_node> kill;
-        for (auto x = p1.next_sibling(); x && x != p2; x = x.next_sibling()) kill.push_back(x);
+        if (p2 != p1 && p2.parent() == p1.parent()) {
+            bool reaches = false;
+            for (auto x = p1.next_sibling(); x; x = x.next_sibling())
+                if (x == p2) { reaches = true; break; }
+            if (reaches)
+                for (auto x = p1.next_sibling(); x && x != p2; x = x.next_sibling())
+                    if (!xml::name_is(x, "w:sectPr")) kill.push_back(x);
+        }
         for (auto x : kill) x.parent().remove_child(x);
         std::vector<pugi::xml_node> drop;
         for (auto x = sep.next_sibling(); x; x = x.next_sibling()) {

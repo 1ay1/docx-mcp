@@ -550,6 +550,17 @@ TEST(citations_and_bibliography) {
     save(d, "citations");
     auto re = Document::from_bytes(d.to_bytes());
     CHECK_EQ(list_sources(re).size(), std::size_t(2));
+    // a bibliography placed mid-document keeps everything after it and the section
+    auto d2 = Document::create();
+    auto a = paragraphs(d2.body())[0];
+    insert_text(d2, a, 0, U"First", nullptr, {});
+    auto b = insert_paragraph(d2, a, true, U"Last", "", nullptr, {});
+    add_source(d2, {{"type", "book"}, {"title", "T"}, {"authors", {"A, B"}}, {"year", "2000"}});
+    insert_bibliography(d2, a, "Refs", {});
+    rebuild_bibliographies(d2, "MLA");
+    CHECK(d2.body().child("w:sectPr"));
+    CHECK(to_text(d2, "current", false).find("Last") != std::string::npos);
+    (void)b;
 }
 
 TEST(content_control_binding) {

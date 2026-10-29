@@ -697,7 +697,12 @@ void insert_toc(Document& d, pugi::xml_node p, const Json& opts_in, const EditOp
         auto tp = content.append_child("w:p");
         tp.append_attribute("w14:paraId") = d.new_hex_id().c_str();
         tp.append_attribute("w14:textId") = "77777777";
-        xml::set_attr(tp.append_child("w:pPr").append_child("w:pStyle"), "w:val", ensure_style(d, "TOCHeading"));
+        auto tppr = tp.append_child("w:pPr");
+        xml::set_attr(tppr.append_child("w:pStyle"), "w:val", ensure_style(d, "TOCHeading"));
+        // TOC Heading is based on Heading 1; numbered headings mustn't number it
+        auto np = tppr.append_child("w:numPr");
+        xml::set_attr(np.append_child("w:ilvl"), "w:val", "0");
+        xml::set_attr(np.append_child("w:numId"), "w:val", "0");
         append_text(tp.append_child("w:r"), util::to_u32(title));
     }
     build_toc_entries(d, content, links, instr);
@@ -1539,6 +1544,15 @@ int define_list(Document& d, const Json& spec_in) {
         if (l > 0) xml::set_attr(schema::ensure_child(np, "w:ilvl"), "w:val", std::to_string(l));
         else if (auto il = np.child("w:ilvl")) np.remove_child(il);
         xml::set_attr(schema::ensure_child(np, "w:numId"), "w:val", std::to_string(nid));
+    }
+    // styles built on Heading 1 that Word never numbers (TOC Heading, Bibliography's title)
+    if (!lv[0].style.empty()) {
+        for (auto name : {"TOCHeading"}) {
+            auto st = find_style(d, name);
+            if (!st) continue;
+            auto np = schema::ensure_child(schema::ensure_child(st, "w:pPr"), "w:numPr");
+            xml::set_attr(schema::ensure_child(np, "w:numId"), "w:val", "0");
+        }
     }
     return nid;
 }
