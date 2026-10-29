@@ -9,6 +9,7 @@
 #include <stdexcept>
 
 #include "schema/schema.hpp"
+#include "util/fsio.hpp"
 #include "util/util.hpp"
 #include "wml/structure.hpp"
 #include "wml/styles.hpp"
@@ -400,8 +401,10 @@ void make_floating(Document& d, pugi::xml_node inl, const Placement& pl) {
 std::vector<pugi::xml_node> insert_text_box(Document& d, pugi::xml_node p, int pos, const std::string& text, double wpt,
                                             double hpt, const Json& style, const EditOpts& o, const Placement& place_in) {
     if (wpt <= 0) wpt = 216;  // 3in
+    const Json st0 = style.is_object() ? style : Json::object();
+    if (st0.contains("shape") && util::lower(st0["shape"].get<std::string>()) == "line" && hpt <= 0) hpt = 0.01;
     auto lines = util::split(text.empty() ? std::string(" ") : text, '\n');
-    if (hpt <= 0) hpt = std::max(36.0, 18.0 * lines.size() + 14);
+    if (hpt <= 0) hpt = st0.contains("shape") && st0["shape"] != "rect" && st0["shape"] != "rounded" ? wpt * 0.6 : std::max(36.0, 18.0 * lines.size() + 14);
     Placement place = place_in;
     if (place.wrap == "inline") place.wrap = "square";
     const Json st = style.is_object() ? style : Json::object();
@@ -421,14 +424,60 @@ std::vector<pugi::xml_node> insert_text_box(Document& d, pugi::xml_node p, int p
     for (auto a : {"l", "t", "r", "b"}) eff.append_attribute(a) = "0";
     auto dp = inl.append_child("wp:docPr");
     dp.append_attribute("id") = id;
-    dp.append_attribute("name") = ("Text Box " + std::to_string(id)).c_str();
+    dp.append_attribute("name") = ((style.is_object() && style.contains("shape") ? "Shape " : "Text Box ") + std::to_string(id)).c_str();
     inl.append_child("wp:cNvGraphicFramePr");
     auto gd = inl.append_child("a:graphic").append_child("a:graphicData");
     gd.append_attribute("uri") = "http://schemas.microsoft.com/office/word/2010/wordprocessingShape";
     auto wsp = gd.append_child("wps:wsp");
-    wsp.append_child("wps:cNvSpPr").append_attribute("txBox") = "1";
+    std::string shape = st.value("shape", std::string("rect"));
+    static const std::map<std::string, std::string> shape_alias = {
+        {"rounded", "roundRect"}, {"rounded_rectangle", "roundRect"}, {"rectangle", "rect"}, {"circle", "ellipse"}, {"oval", "ellipse"},
+        {"arrow", "rightArrow"}, {"right_arrow", "rightArrow"}, {"left_arrow", "leftArrow"}, {"up_arrow", "upArrow"},
+        {"down_arrow", "downArrow"}, {"star", "star5"}, {"callout", "wedgeRoundRectCallout"}, {"speech", "wedgeEllipseCallout"},
+        {"diamond", "diamond"}, {"triangle", "triangle"}, {"hexagon", "hexagon"}, {"pentagon", "homePlate"}, {"chevron", "chevron"},
+        {"heart", "heart"}, {"cloud", "cloud"}, {"banner", "ribbon2"}, {"line", "line"}, {"plus", "mathPlus"}, {"cylinder", "can"},
+        {"process", "flowChartProcess"}, {"decision", "flowChartDecision"}, {"terminator", "flowChartTerminator"}, {"document", "flowChartDocument"}};
+    if (auto it = shape_alias.find(util::lower(shape)); it != shape_alias.end()) shape = it->second;
+    static const std::set<std::string> presets = {
+        "line", "lineInv", "triangle", "rtTriangle", "rect", "diamond", "parallelogram", "trapezoid", "nonIsoscelesTrapezoid", "pentagon",
+        "hexagon", "heptagon", "octagon", "decagon", "dodecagon", "star4", "star5", "star6", "star7", "star8", "star10", "star12", "star16",
+        "star24", "star32", "roundRect", "round1Rect", "round2SameRect", "round2DiagRect", "snipRoundRect", "snip1Rect", "snip2SameRect",
+        "snip2DiagRect", "plaque", "ellipse", "teardrop", "homePlate", "chevron", "pieWedge", "pie", "blockArc", "donut", "noSmoking",
+        "rightArrow", "leftArrow", "upArrow", "downArrow", "stripedRightArrow", "notchedRightArrow", "bentUpArrow", "leftRightArrow",
+        "upDownArrow", "leftUpArrow", "leftRightUpArrow", "quadArrow", "leftArrowCallout", "rightArrowCallout", "upArrowCallout",
+        "downArrowCallout", "leftRightArrowCallout", "upDownArrowCallout", "quadArrowCallout", "bentArrow", "uturnArrow", "circularArrow",
+        "leftCircularArrow", "leftRightCircularArrow", "curvedRightArrow", "curvedLeftArrow", "curvedUpArrow", "curvedDownArrow", "swooshArrow",
+        "cube", "can", "lightningBolt", "heart", "sun", "moon", "smileyFace", "irregularSeal1", "irregularSeal2", "foldedCorner", "bevel",
+        "frame", "halfFrame", "corner", "diagStripe", "chord", "arc", "leftBracket", "rightBracket", "leftBrace", "rightBrace",
+        "bracketPair", "bracePair", "straightConnector1", "callout1", "callout2", "callout3", "accentCallout1", "accentCallout2",
+        "accentCallout3", "borderCallout1", "borderCallout2", "borderCallout3", "wedgeRectCallout", "wedgeRoundRectCallout",
+        "wedgeEllipseCallout", "cloudCallout", "cloud", "ribbon", "ribbon2", "ellipseRibbon", "ellipseRibbon2", "leftRightRibbon",
+        "verticalScroll", "horizontalScroll", "wave", "doubleWave", "plus", "flowChartProcess", "flowChartDecision", "flowChartInputOutput",
+        "flowChartPredefinedProcess", "flowChartInternalStorage", "flowChartDocument", "flowChartMultidocument", "flowChartTerminator",
+        "flowChartPreparation", "flowChartManualInput", "flowChartManualOperation", "flowChartConnector", "flowChartPunchedCard",
+        "flowChartPunchedTape", "flowChartSummingJunction", "flowChartOr", "flowChartCollate", "flowChartSort", "flowChartExtract",
+        "flowChartMerge", "flowChartOfflineStorage", "flowChartOnlineStorage", "flowChartMagneticTape", "flowChartMagneticDisk",
+        "flowChartMagneticDrum", "flowChartDisplay", "flowChartDelay", "flowChartAlternateProcess", "flowChartOffpageConnector",
+        "actionButtonBlank", "gear6", "gear9", "funnel", "mathPlus", "mathMinus", "mathMultiply", "mathDivide", "mathEqual", "mathNotEqual",
+        "cornerTabs", "squareTabs", "plaqueTabs", "chartX", "chartStar", "chartPlus"};
+    if (!presets.count(shape))
+        throw std::runtime_error("unknown shape '" + st.value("shape", std::string()) + "' (rect, rounded, ellipse, triangle, diamond, "
+                                 "arrow, left_arrow, up_arrow, down_arrow, star, callout, speech, hexagon, chevron, heart, cloud, line, or any "
+                                 "DrawingML preset name like flowChartDecision)");
+    bool is_line = shape == "line" || shape == "straightConnector1";
+    bool has_text = !is_line && st.value("has_text", true);
+    if (has_text && shape == "rect") wsp.append_child("wps:cNvSpPr").append_attribute("txBox") = "1";
+    else if (is_line) wsp.append_child("wps:cNvCnPr");
+    else wsp.append_child("wps:cNvSpPr");
     auto sp = wsp.append_child("wps:spPr");
     auto xf = sp.append_child("a:xfrm");
+    if (st.contains("rotation")) {
+        double deg = st["rotation"].get<double>();
+        deg = std::fmod(std::fmod(deg, 360.0) + 360.0, 360.0);
+        xf.append_attribute("rot") = std::to_string(std::lround(deg * 60000)).c_str();
+    }
+    if (st.value("flip_horizontal", false)) xf.append_attribute("flipH") = "1";
+    if (st.value("flip_vertical", false)) xf.append_attribute("flipV") = "1";
     auto off = xf.append_child("a:off");
     off.append_attribute("x") = "0";
     off.append_attribute("y") = "0";
@@ -436,42 +485,73 @@ std::vector<pugi::xml_node> insert_text_box(Document& d, pugi::xml_node p, int p
     ex2.append_attribute("cx") = std::to_string(CX).c_str();
     ex2.append_attribute("cy") = std::to_string(CY).c_str();
     auto geom = sp.append_child("a:prstGeom");
-    geom.append_attribute("prst") = st.value("shape", std::string("rect")) == "rounded" ? "roundRect" : "rect";
+    geom.append_attribute("prst") = (is_line ? std::string("line") : shape).c_str();
     geom.append_child("a:avLst");
     // fill
-    if (st.contains("fill") && !st["fill"].is_null())
+    if (is_line || (st.contains("fill") && (st["fill"].is_null() || (st["fill"].is_string() && st["fill"].get<std::string>() == "none"))))
+        sp.append_child("a:noFill");
+    else if (st.contains("fill"))
         sp.append_child("a:solidFill").append_child("a:srgbClr").append_attribute("val") = color_hex(st["fill"]).c_str();
-    else
+    else if (has_text && shape == "rect")
         sp.append_child("a:solidFill").append_child("a:schemeClr").append_attribute("val") = "lt1";
+    else
+        sp.append_child("a:solidFill").append_child("a:schemeClr").append_attribute("val") = "accent1";
     // outline
     auto ln = sp.append_child("a:ln");
     if (st.contains("border") && (st["border"].is_null() || (st["border"].is_boolean() && !st["border"].get<bool>()))) {
         ln.append_child("a:noFill");
     } else {
-        double bw = 0.75;
-        std::string bc = "000000";
+        double bw = is_line ? 1.5 : 0.75;
+        std::string bc = has_text && shape == "rect" ? "000000" : "";
+        std::string dash;
         if (st.contains("border") && st["border"].is_object()) {
-            bw = st["border"].value("size", 0.75);
+            bw = st["border"].value("size", bw);
             if (st["border"].contains("color")) bc = color_hex(st["border"]["color"]);
+            dash = st["border"].value("dash", std::string());
         } else if (st.contains("border") && st["border"].is_string()) {
             bc = color_hex(st["border"]);
         }
         ln.append_attribute("w") = std::to_string(std::lround(bw * 12700)).c_str();
-        ln.append_child("a:solidFill").append_child("a:srgbClr").append_attribute("val") = bc.c_str();
+        if (bc.empty()) {
+            auto sc = ln.append_child("a:solidFill").append_child("a:schemeClr");
+            sc.append_attribute("val") = "accent1";
+            if (!is_line) sc.append_child("a:shade").append_attribute("val") = "50000";
+        } else ln.append_child("a:solidFill").append_child("a:srgbClr").append_attribute("val") = bc.c_str();
+        if (!dash.empty()) {
+            static const std::map<std::string, std::string> dashes = {{"dash", "dash"}, {"dot", "sysDot"}, {"dash_dot", "dashDot"}, {"long_dash", "lgDash"}, {"solid", "solid"}};
+            auto it = dashes.find(dash);
+            if (it == dashes.end()) throw std::runtime_error("border dash is solid, dash, dot, dash_dot or long_dash");
+            ln.append_child("a:prstDash").append_attribute("val") = it->second.c_str();
+        }
+        // arrowheads on lines
+        auto head = [&](const char* key, const char* q) {
+            if (!st.contains(key)) return;
+            std::string k = st[key].is_boolean() ? (st[key].get<bool>() ? "triangle" : "none") : st[key].get<std::string>();
+            static const std::set<std::string> ok = {"none", "triangle", "stealth", "diamond", "oval", "arrow"};
+            if (!ok.count(k)) throw std::runtime_error(std::string(key) + " is none, triangle, stealth, diamond, oval or arrow");
+            ln.append_child(q).append_attribute("type") = k.c_str();
+        };
+        head("start_arrow", "a:headEnd");
+        head("end_arrow", "a:tailEnd");
     }
     // the text
+    if (has_text) {
     auto content = wsp.append_child("wps:txbx").append_child("w:txbxContent");
     for (auto& line : lines) {
         auto np = content.append_child("w:p");
         np.append_attribute("w14:paraId") = d.new_hex_id().c_str();
         np.append_attribute("w14:textId") = "77777777";
-        if (st.contains("alignment")) apply_ppr_json(d, np.append_child("w:pPr"), Json{{"alignment", st["alignment"]}});
+        Json al = st.contains("alignment") ? st["alignment"] : (shape != "rect" ? Json("center") : Json());
+        if (!al.is_null()) apply_ppr_json(d, np.append_child("w:pPr"), Json{{"alignment", al}});
         if (!line.empty()) {
             auto nr = np.append_child("w:r");
-            if (st.contains("format") && st["format"].is_object() && !st["format"].empty())
-                apply_rpr_json(d, nr.append_child("w:rPr"), st["format"]);
+            Json rf = st.contains("format") && st["format"].is_object() ? st["format"] : Json::object();
+            // text on a filled shape is white by default (Word's shape style)
+            if (shape != "rect" && !rf.contains("color") && !st.contains("fill")) rf["color"] = "FFFFFF";
+            if (!rf.empty()) apply_rpr_json(d, nr.append_child("w:rPr"), rf);
             append_text(nr, util::to_u32(line));
         }
+    }
     }
     auto body = wsp.append_child("wps:bodyPr");
     body.append_attribute("rot") = "0";
@@ -479,9 +559,9 @@ std::vector<pugi::xml_node> insert_text_box(Document& d, pugi::xml_node p, int p
     body.append_attribute("wrap") = "square";
     for (auto a : {"lIns", "rIns"}) body.append_attribute(a) = "91440";
     for (auto a : {"tIns", "bIns"}) body.append_attribute(a) = "45720";
-    body.append_attribute("anchor") = "t";
+    body.append_attribute("anchor") = has_text && shape != "rect" ? "ctr" : "t";
     body.append_attribute("anchorCtr") = "0";
-    if (st.value("auto_fit", true)) body.append_child("a:spAutoFit");
+    if (has_text && shape == "rect" && st.value("auto_fit", true)) body.append_child("a:spAutoFit");
     else body.append_child("a:noAutofit");
     make_floating(d, inl, place);
     auto out = place_run(d, p, pos, r, o);
@@ -493,7 +573,7 @@ std::vector<pugi::xml_node> insert_text_box(Document& d, pugi::xml_node p, int p
     // return the box's paragraphs (they live in the run just placed)
     std::vector<pugi::xml_node> result;
     for (auto x : out.select_nodes(".//w:txbxContent/w:p")) result.push_back(x.node());
-    if (result.empty())
+    if (result.empty() && has_text)
         for (auto x : p.select_nodes(".//w:txbxContent/w:p")) result.push_back(x.node());
     return result;
 }
@@ -911,8 +991,10 @@ void set_header_footer_text(Document& d, int section, const std::string& kind, c
 namespace {
 bool is_watermark_run(pugi::xml_node r) {
     for (auto pict : xml::children(r, "w:pict"))
-        for (auto sh : pict.children())
-            if (std::string(xml::attr(sh, "id")).rfind("PowerPlusWaterMarkObject", 0) == 0) return true;
+        for (auto sh : pict.children()) {
+            std::string id = xml::attr(sh, "id");
+            if (id.rfind("PowerPlusWaterMarkObject", 0) == 0 || id.rfind("WordPictureWatermark", 0) == 0) return true;
+        }
     return false;
 }
 
@@ -933,15 +1015,129 @@ int remove_watermarks_in(pugi::xml_node root) {
     for (auto r : runs) r.parent().remove_child(r);
     return (int)runs.size();
 }
+
+// Image relationships of `part` nothing in it points at any more.
+void drop_unused_images(Document& d, const std::string& part) {
+    auto* rels = d.pkg().rels_if(part);
+    if (!rels) return;
+    std::string xmltext = xml::to_string(d.pkg().xml(part).document_element());
+    std::vector<std::string> gone;
+    for (auto& r : rels->items)
+        if (r.type == opc::rt::image && xmltext.find("\"" + r.id + "\"") == std::string::npos) gone.push_back(r.id);
+    std::vector<std::string> targets;
+    for (auto& id : gone)
+        if (auto* r = rels->by_id(id)) targets.push_back(opc::Package::resolve(part, r->target));
+    for (auto& id : gone) d.pkg().rels(part).remove(id);
+    // the media part goes too when no other part still uses it
+    for (auto& t : targets) {
+        bool used = false;
+        for (auto& other : d.pkg().part_names()) {
+            auto* orels = d.pkg().rels_if(other);
+            if (!orels) continue;
+            for (auto& r : orels->items)
+                if (r.mode == opc::TargetMode::Internal && util::iequals(opc::Package::resolve(other, r.target), t)) used = true;
+        }
+        if (!used && d.pkg().has(t)) d.pkg().remove_part(t);
+    }
+}
 }  // namespace
 
 int remove_watermark(Document& d) {
     int n = 0;
-    for (auto& part : header_parts_for_watermark(d, false)) n += remove_watermarks_in(d.pkg().xml(part).document_element());
+    for (auto& part : header_parts_for_watermark(d, false)) {
+        n += remove_watermarks_in(d.pkg().xml(part).document_element());
+        drop_unused_images(d, part);
+    }
+    return n;
+}
+
+// Design > Watermark > Picture: a VML image behind the text in each header,
+// optionally washed out (Word's gain/blacklevel values).
+int set_picture_watermark(Document& d, const Json& o) {
+    util::Bytes data;
+    std::string src = o.contains("picture") ? o["picture"].get<std::string>() : o["image"].get<std::string>();
+    if (o.contains("picture_base64")) {
+        auto dec = util::base64_decode(o["picture_base64"].get<std::string>());
+        if (!dec) throw std::runtime_error("picture_base64 is not valid base64");
+        data = *dec;
+    } else if (src.rfind("data:", 0) == 0) {
+        auto comma = src.find(',');
+        auto dec = comma == std::string::npos ? std::nullopt : util::base64_decode(src.substr(comma + 1));
+        if (!dec) throw std::runtime_error("picture is not a valid base64 data: URI");
+        data = *dec;
+    } else {
+        std::string path = util::normalize_path(src);
+        if (!util::file_exists(path)) throw std::runtime_error("no picture at " + path);
+        data = util::read_file(path);
+    }
+    ImgInfo im = sniff(data);
+    if (im.ext == "svg" || im.ext == "emf" || im.ext == "wmf")
+        throw std::runtime_error("picture watermarks take PNG, JPEG, GIF, BMP or TIFF");
+    bool washout = o.value("washout", true);
+    // scale: 0 = auto (fit the text width), else a percentage of the picture's natural size
+    double scale = o.value("scale", 0.0);
+    double nat_w = im.w / im.dpi_x * 72.0, nat_h = im.h / im.dpi_y * 72.0;
+    double w = nat_w, h = nat_h;
+    if (scale > 0) { w = nat_w * scale / 100; h = nat_h * scale / 100; }
+    else {
+        double tw = 468;
+        if (auto sp = d.body().child("w:sectPr"))
+            tw = (util::to_long(xml::attr(sp.child("w:pgSz"), "w:w", "12240")) - util::to_long(xml::attr(sp.child("w:pgMar"), "w:left", "1440")) -
+                  util::to_long(xml::attr(sp.child("w:pgMar"), "w:right", "1440"))) / 20.0;
+        double k = tw / std::max(1.0, nat_w);
+        w = nat_w * k;
+        h = nat_h * k;
+    }
+    char buf[64];
+    auto num = [&](double v) { std::snprintf(buf, sizeof buf, "%.2f", v); return std::string(buf); };
+    std::string ext = im.ext == "jpeg" ? "jpeg" : im.ext;
+    std::string media = d.pkg().unique_name("/word/media/image", "." + ext);
+    d.pkg().add_part(media, im.ctype, data);
+    d.pkg().defaults.try_emplace(ext, im.ctype);
+    d.pkg().set_override(media, im.ctype);
+    int n = 0;
+    for (auto& part : header_parts_for_watermark(d, true)) {
+        auto root = d.pkg().xml(part).document_element();
+        remove_watermarks_in(root);
+        drop_unused_images(d, part);
+        xml::declare(root, "v");
+        xml::declare(root, "o");
+        xml::declare(root, "w10");
+        xml::declare(root, "r");
+        std::string rid = d.pkg().rels(part).add(opc::rt::image, opc::Package::relative(part, media));
+        std::string id = "WordPictureWatermark" + std::to_string(d.next_annotation_id());
+        std::string frag =
+            "<w:r><w:rPr><w:noProof/></w:rPr><w:pict>"
+            "<v:shapetype id=\"_x0000_t75\" coordsize=\"21600,21600\" o:spt=\"75\" o:preferrelative=\"t\" path=\"m@4@5l@4@11@9@11@9@5xe\" filled=\"f\" stroked=\"f\">"
+            "<v:stroke joinstyle=\"miter\"/><v:formulas><v:f eqn=\"if lineDrawn pixelLineWidth 0\"/><v:f eqn=\"sum @0 1 0\"/>"
+            "<v:f eqn=\"sum 0 0 @1\"/><v:f eqn=\"prod @2 1 2\"/><v:f eqn=\"prod @3 21600 pixelWidth\"/><v:f eqn=\"prod @3 21600 pixelHeight\"/>"
+            "<v:f eqn=\"sum @0 0 1\"/><v:f eqn=\"prod @6 1 2\"/><v:f eqn=\"prod @7 21600 pixelWidth\"/><v:f eqn=\"sum @8 21600 0\"/>"
+            "<v:f eqn=\"prod @7 21600 pixelHeight\"/><v:f eqn=\"sum @10 21600 0\"/></v:formulas>"
+            "<v:path o:extrusionok=\"f\" gradientshapeok=\"t\" o:connecttype=\"rect\"/><o:lock v:ext=\"edit\" aspectratio=\"t\"/></v:shapetype>"
+            "<v:shape id=\"" + id + "\" o:spid=\"_x0000_s" + std::to_string(3073 + n) + "\" type=\"#_x0000_t75\" "
+            "style=\"position:absolute;margin-left:0;margin-top:0;width:" + num(w) + "pt;height:" + num(h) + "pt;"
+            "z-index:-251656192;mso-position-horizontal:center;mso-position-horizontal-relative:margin;"
+            "mso-position-vertical:center;mso-position-vertical-relative:margin\" o:allowincell=\"f\">"
+            "<v:imagedata r:id=\"" + rid + "\" o:title=\"\"" + (washout ? " gain=\"19661f\" blacklevel=\"22938f\"" : "") + "/>"
+            "<w10:wrap anchorx=\"margin\" anchory=\"margin\"/></v:shape></w:pict></w:r>";
+        pugi::xml_document holder;
+        std::string err;
+        if (!xml::parse_fragment(frag, holder, &err)) throw std::runtime_error("watermark: " + err);
+        auto p = root.child("w:p");
+        if (!p) {
+            p = root.append_child("w:p");
+            xml::set_attr(schema::ensure_child(p, "w:pPr").append_child("w:pStyle"), "w:val", "Header");
+        }
+        pugi::xml_node before = p.child("w:pPr") ? p.child("w:pPr").next_sibling() : p.first_child();
+        for (auto c : holder.children()) xml::copy_into(p, c, before);
+        n++;
+    }
     return n;
 }
 
 int set_watermark(Document& d, const std::string& text, const Json& opts_in) {
+    const Json o0 = opts_in.is_object() ? opts_in : Json::object();
+    if (o0.contains("picture") || o0.contains("image")) return set_picture_watermark(d, o0);
     if (util::trim(text).empty()) throw std::runtime_error("watermark text is empty (use remove to take it off)");
     const Json o = opts_in.is_object() ? opts_in : Json::object();
     std::string font = o.value("font", std::string("Calibri"));
@@ -969,6 +1165,7 @@ int set_watermark(Document& d, const std::string& text, const Json& opts_in) {
     for (auto& part : header_parts_for_watermark(d, true)) {
         auto root = d.pkg().xml(part).document_element();
         remove_watermarks_in(root);
+        drop_unused_images(d, part);
         xml::declare(root, "v");
         xml::declare(root, "o");
         xml::declare(root, "w10");

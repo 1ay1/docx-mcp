@@ -278,6 +278,10 @@ def exercise(R, doc, track, work, tag):
                         "total_row": {"bold": True}})
     R.call("get_style", doc=doc, style="CovTable")
     R.call("theme", doc=doc)
+    R.call("insert_shape", doc=doc, paragraph=p2, shape="ellipse", text="Start", width=100, height=50, **t)
+    R.call("insert_shape", doc=doc, paragraph=p2, shape="line", width=40, end_arrow="triangle", border={"color": "404040", "size": 2},
+           layout={"wrap": "in_front", "x": 100, "y": 20})
+    R.call("insert_shape", doc=doc, paragraph=p3, shape="decision", text="OK?", fill="FFC000", rotation=10, border=False, **t)
     R.call("insert_html", doc=doc, paragraph=p3, html="<h3>From HTML</h3><p>Some <b>bold</b> and <a href='https://example.com'>a link</a>.</p>"
            "<ul><li>one</li><li>two<ol><li>deep</li></ol></li></ul><table><tr><th>A</th><th>B</th></tr><tr><td colspan=2>wide</td></tr></table>", **t)
     R.call("theme", doc=doc, preset="Blue II", heading_font="Georgia", colors={"accent2": "C00000", "hyperlink": "0000FF"}, name="Cov")
@@ -330,6 +334,7 @@ def exercise(R, doc, track, work, tag):
     R.call("remove_header_footer", doc=doc, kind="header", which="even")
     R.call("set_watermark", doc=doc, text="DRAFT")
     R.call("set_watermark", doc=doc, text="CONFIDENTIAL", layout="horizontal", color="red")
+    R.call("set_watermark", doc=doc, picture="data:image/png;base64," + base64.b64encode(png()).decode(), washout=True, scale=500)
     if not track:
         R.call("set_watermark", doc=doc, remove=True)
 

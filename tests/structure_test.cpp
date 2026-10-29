@@ -422,6 +422,34 @@ TEST(insert_html_blocks) {
     CHECK_EQ(schema_issues(d, &why), 0);
 }
 
+TEST(picture_watermark) {
+    auto d = Document::create();
+    insert_text(d, paragraphs(d.body())[0], 0, U"Body", nullptr, {});
+    // a tiny PNG
+    auto png = *util::base64_decode("iVBORw0KGgoAAAANSUhEUgAAAAQAAAACCAIAAADwyuo0AAAAEklEQVR4nGP4z8DAwMDAxMDAAAAeAAJYHnNBAAAAAElFTkSuQmCC");
+    std::filesystem::create_directories("out");
+    std::FILE* f = std::fopen("out/wm.png", "wb");
+    std::fwrite(png.data(), 1, png.size(), f);
+    std::fclose(f);
+    CHECK(set_watermark(d, "", {{"picture", "out/wm.png"}, {"washout", true}}) >= 1);
+    int media = 0;
+    for (auto& n : d.pkg().part_names()) if (n.find("/media/") != std::string::npos) media++;
+    CHECK_EQ(media, 1);
+    // replacing it with text drops the image
+    set_watermark(d, "DRAFT", Json::object());
+    media = 0;
+    for (auto& n : d.pkg().part_names()) if (n.find("/media/") != std::string::npos) media++;
+    CHECK_EQ(media, 0);
+    set_watermark(d, "", {{"picture", "out/wm.png"}, {"scale", 200}});
+    std::string why;
+    CHECK_EQ(schema_issues(d, &why), 0);
+    save(d, "picture_watermark");
+    CHECK_EQ(remove_watermark(d), 1);
+    bool bad = false;
+    try { set_watermark(d, "", {{"picture", "out/nope.png"}}); } catch (std::exception&) { bad = true; }
+    CHECK(bad);
+}
+
 TEST(lists_tracked) {
     auto d = sample(true);
     auto p = paragraphs(d.body())[0];

@@ -10,7 +10,7 @@ to touch raw XML to get there.
 
 ## Where we are (main, after v0.3.0)
 
-114 tools cover Word's Home, Insert, Design, Layout, References, Mailings and Review
+115 tools cover Word's Home, Insert, Design, Layout, References, Mailings and Review
 tabs: documents, text, paragraphs, styles, lists, tables, pictures, text
 boxes, links, bookmarks, notes, fields, TOC, table of figures, index,
 equations, content controls, sections, page borders and color, watermarks,
@@ -67,9 +67,9 @@ Status is checked against the code.
 | # | Feature | Word UI | Status | What's left |
 |---|---|---|---|---|
 | 1.1 | Floating pictures | Wrap Text, Position | Done (v0.3.0) | `insert_picture` takes `layout`; `format_picture`, `delete_picture`, `list_pictures` |
-| 1.2 | Text boxes and shapes | Insert > Text Box, Shapes | Text boxes done | `insert_text_box` writes `wps:wsp` with fill, outline, rounded corners; its paragraphs edit by id. Left: other shapes, and a VML fallback for very old readers |
+| 1.2 | Text boxes and shapes | Insert > Text Box, Shapes | Done | `insert_text_box`, and `insert_shape` for any DrawingML preset (arrows, stars, callouts, flowchart shapes, lines with arrowheads) with fill, outline, dash, rotation and centered text. Left: a VML fallback for very old readers |
 | 1.3 | Captions and cross-references | References | Done (v0.3.0) | `insert_caption`, `insert_cross_reference`, `list_reference_targets` |
-| 1.4 | Watermark | Design > Watermark | Text done | `set_watermark` (diagonal or horizontal, remove). Left: picture watermarks |
+| 1.4 | Watermark | Design > Watermark | Done | `set_watermark` text (diagonal or horizontal) or picture (washout, scale), remove |
 | 1.5 | Page color and borders | Design | Done | `set_page_setup` `page_color`, `page_borders` |
 | 1.6 | Columns | Layout > Columns | Done | `columns`, `column_space`, `column_line`, `column_widths`; column breaks via `insert_break` |
 | 1.7 | Tables | Table Layout | Done | Split cells and nested tables, `sort_table`, `convert_table`, `repeat_header`, row height. Floating tables (`format_table float`), `cant_split`, alt text, RTL tables, vertical cell text (`text_direction: up/down`) |
@@ -163,7 +163,7 @@ documents and agents need them:
 1. ~~2.4 field results and 2.3 the page map~~ (done).
 2. ~~1.9 multi-level lists and 1.10 table style conditional formats~~ (done).
 3. ~~1.14 mail merge~~ (done), then 1.15 data binding.
-4. ~~1.7 floating tables, 1.11 themes~~ (done), 1.2 shapes, 1.4 picture watermarks.
+4. ~~1.7 floating tables, 1.11 themes, 1.2 shapes, 1.4 picture watermarks~~ (done).
 5. ~~3.6 `insert_html`~~ (done), then Phase 4 speed work and Phase 5 proof.
 
 ## Not planned

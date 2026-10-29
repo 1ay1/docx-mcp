@@ -1,6 +1,6 @@
 # Tool reference
 
-Generated from `docx-mcp --list-tools` by `tools/gen_tool_docs.py`. 114 tools.
+Generated from `docx-mcp --list-tools` by `tools/gen_tool_docs.py`. 115 tools.
 
 Every tool that edits takes `doc` (a handle or a file path), and most take `track` (record as a tracked change) and `author`. Paragraphs are addressed by the `id` that `read_document` returns.
 
@@ -15,7 +15,7 @@ Every tool that edits takes `doc` (a handle or a file path), and most take `trac
 - [Track changes](#track-changes): `set_track_changes`, `list_revisions`, `accept_revisions`, `reject_revisions`, `compare_documents`
 - [Comments](#comments): `add_comment`, `list_comments`, `reply_comment`, `resolve_comment`, `edit_comment`, `delete_comment`
 - [Tables](#tables): `insert_table`, `read_table`, `set_cell`, `table_rows`, `table_columns`, `merge_cells`, `split_cell`, `format_table`, `sort_table`, `convert_table`, `delete_table`
-- [Insert](#insert): `insert_picture`, `list_pictures`, `format_picture`, `delete_picture`, `insert_text_box`, `insert_break`, `insert_hyperlink`, `list_hyperlinks`, `remove_hyperlinks`, `add_bookmark`, `list_bookmarks`, `delete_bookmark`, `insert_note`, `list_notes`, `delete_note`, `insert_field`, `list_fields`, `update_fields`, `unlink_fields`, `insert_toc`, `mark_index_entry`, `insert_index`, `insert_equation`, `insert_caption`, `insert_cross_reference`, `list_reference_targets`, `add_content_control`, `list_content_controls`, `set_content_control`
+- [Insert](#insert): `insert_picture`, `list_pictures`, `format_picture`, `delete_picture`, `insert_text_box`, `insert_shape`, `insert_break`, `insert_hyperlink`, `list_hyperlinks`, `remove_hyperlinks`, `add_bookmark`, `list_bookmarks`, `delete_bookmark`, `insert_note`, `list_notes`, `delete_note`, `insert_field`, `list_fields`, `update_fields`, `unlink_fields`, `insert_toc`, `mark_index_entry`, `insert_index`, `insert_equation`, `insert_caption`, `insert_cross_reference`, `list_reference_targets`, `add_content_control`, `list_content_controls`, `set_content_control`
 - [Mailings](#mailings): `mail_merge`, `document_variables`
 - [Page layout](#page-layout): `get_page_setup`, `set_page_setup`, `set_header_footer`, `remove_header_footer`, `read_header_footer`, `set_watermark`, `theme`
 - [File](#file): `get_properties`, `set_properties`, `get_settings`, `set_settings`, `protect_document`, `unprotect_document`
@@ -843,7 +843,7 @@ Insert a text box (Insert > Text Box): a bordered box of text that floats with t
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `alignment` | `left` \\| `center` \\| `right` |  |  |
-| `border` | string |  | Outline color, or false for none. Object {color, size} also works. |
+| `border` | any |  | Outline color, or false for none. Object {color, size} also works. |
 | `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `fill` | string |  | Background, RRGGBB or a name. |
 | `format` | object |  | Character formatting (Word names). null removes a property. More keys: caps, small_caps, double_strike, hidden, spacing, position, scale, kerning, language, border, shading, emboss, outline, shadow. |
@@ -851,10 +851,34 @@ Insert a text box (Insert > Text Box): a bordered box of text that floats with t
 | `layout` | any |  | Layout Options. "inline" (default) flows with the text; "square", "tight", "through", "top_bottom" wrap text around it; "behind" / "in_front" float over the text. Or an object: {wrap, horizontal: left\|center\|right, vertical: top\|center\|bottom, x, y (points or "1in"), horizontal_from: margin\|page\|column\|character, vertical_from: margin\|page\|paragraph\|line, distance (gap to text, points)}. |
 | `paragraph` | string | yes | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
 | `position` | integer |  | Character offset to insert at (default end). |
-| `shape` | `rect` \\| `rounded` |  | Default rect. |
+| `shape` | string |  | rect (default), rounded, or any insert_shape shape. |
 | `text` | string | yes | Text; \n separates paragraphs. |
 | `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 | `width` | number |  | pt, default 216 (3in) |
+
+### `insert_shape`
+
+Insert > Shapes: a floating shape anchored in a paragraph. shape: rect, rounded, ellipse, triangle, diamond, arrow (right), left_arrow, up_arrow, down_arrow, star, callout, speech, hexagon, chevron, heart, cloud, banner, cylinder, process, decision, terminator, line, or any DrawingML preset (flowChartDecision, star8, ...). Optional text sits in the middle. Lines take start_arrow / end_arrow. layout positions it (default: in front of text at the paragraph).
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `border` | any |  | Outline color, or false. Object {color, size, dash: dash\|dot\|dash_dot\|long_dash}. |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `end_arrow` | `none` \\| `triangle` \\| `stealth` \\| `diamond` \\| `oval` \\| `arrow` |  | Lines: arrowhead at the end. |
+| `fill` | string |  | RRGGBB, a name, or none. Default the theme accent. |
+| `flip_horizontal` | boolean |  |  |
+| `flip_vertical` | boolean |  |  |
+| `format` | object |  | Character formatting (Word names). null removes a property. More keys: caps, small_caps, double_strike, hidden, spacing, position, scale, kerning, language, border, shading, emboss, outline, shadow. |
+| `height` | number |  | pt, default fits the shape |
+| `layout` | any |  | Layout Options. "inline" (default) flows with the text; "square", "tight", "through", "top_bottom" wrap text around it; "behind" / "in_front" float over the text. Or an object: {wrap, horizontal: left\|center\|right, vertical: top\|center\|bottom, x, y (points or "1in"), horizontal_from: margin\|page\|column\|character, vertical_from: margin\|page\|paragraph\|line, distance (gap to text, points)}. |
+| `paragraph` | string | yes | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
+| `position` | integer |  | Character offset to insert at (default end). |
+| `rotation` | number |  | Degrees clockwise. |
+| `shape` | string |  | Shape name; default rect. |
+| `start_arrow` | `none` \\| `triangle` \\| `stealth` \\| `diamond` \\| `oval` \\| `arrow` |  | Lines: arrowhead at the start. |
+| `text` | string |  | Text inside the shape. |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
+| `width` | number |  | pt, default 144 |
 
 ### `insert_break`
 
@@ -1228,7 +1252,7 @@ Read a header or footer: its paragraphs with ids you can edit (paragraph = "part
 
 ### `set_watermark`
 
-Put a text watermark behind every page (Design > Watermark), e.g. DRAFT or CONFIDENTIAL. remove: true takes it off.
+Put a text watermark behind every page (Design > Watermark), e.g. DRAFT or CONFIDENTIAL, or a picture watermark (picture = image path or data: URI; washout fades it, scale is a percent, default fits the page). remove: true takes it off.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
@@ -1237,9 +1261,12 @@ Put a text watermark behind every page (Design > Watermark), e.g. DRAFT or CONFI
 | `font` | string |  | Default Calibri. |
 | `layout` | `diagonal` \\| `horizontal` |  | Default diagonal. |
 | `opacity` | number |  | 0-1, default 0.5. |
+| `picture` | string |  | Picture watermark: an image path or data: URI. |
 | `remove` | boolean |  | Remove the watermark instead. |
+| `scale` | number |  | Picture watermarks: percent of its size (default fits the text width). |
 | `size` | number |  | Points; default fits the page width. |
 | `text` | string |  | Watermark text. |
+| `washout` | boolean |  | Picture watermarks: fade it (default true). |
 
 ### `theme`
 

@@ -135,7 +135,13 @@ class Fuzz:
 
     def extra(self, pid, s, e, track):
         r = self.r
-        k = r.randint(0, 56)
+        k = r.randint(0, 57)
+        if k == 57:
+            if r.random() < 0.3:
+                return self.call("set_watermark", picture="data:image/png;base64," + PNG, washout=r.random() < 0.5)
+            return self.call("insert_shape", paragraph=pid, shape=r.choice(["ellipse", "line", "star", "decision", "arrow", "callout", "rect"]),
+                             text=r.choice(["", "x", self.word()]), fill=r.choice(["FFC000", "none", "red"]), rotation=r.choice([0, 45, -30]),
+                             end_arrow=r.choice(["none", "triangle"]), **track)
         if k == 56:
             return self.call("insert_html", paragraph=pid, html=r.choice([
                 "<p>a <b>b</b> <i>c</i></p>", "<ul><li>x<ul><li>y</li></ul></li></ul>", "<table><tr><td>1<td colspan=3>2</table>",

@@ -1380,8 +1380,8 @@ std::vector<ToolDef> make_tools() {
          obj({{"doc", kDoc}, {"paragraph", kPara}, {"position", integer("")}, {"text", str("Text; \\n separates paragraphs.")},
               {"width", num("pt, default 216 (3in)")}, {"height", num("pt, default fits the text")},
               {"fill", str("Background, RRGGBB or a name.")},
-              {"border", str("Outline color, or false for none. Object {color, size} also works.")},
-              {"shape", enm({"rect", "rounded"}, "Default rect.")}, {"alignment", enm({"left", "center", "right"}, "")},
+              {"border", Json{{"description", "Outline color, or false for none. Object {color, size} also works."}}},
+              {"shape", str("rect (default), rounded, or any insert_shape shape.")}, {"alignment", enm({"left", "center", "right"}, "")},
               {"format", kRunFmt}, {"layout", kLayout}, {"track", kTrack}},
              {"doc", "paragraph", "text"}),
          false, false, [](Sessions& S, const Json& a) {
@@ -1402,6 +1402,45 @@ std::vector<ToolDef> make_tools() {
              Json out = Json::array();
              for (auto p : ps) out.push_back(para_brief(s.doc, p));
              return Json{{"text_box", out}, {"layout", place.wrap}, {"anchored_in", para_id(r.p)}};
+         }});
+    add({"insert_shape", "Insert shape",
+         "Insert > Shapes: a floating shape anchored in a paragraph. shape: rect, rounded, ellipse, triangle, diamond, arrow "
+         "(right), left_arrow, up_arrow, down_arrow, star, callout, speech, hexagon, chevron, heart, cloud, banner, cylinder, "
+         "process, decision, terminator, line, or any DrawingML preset (flowChartDecision, star8, ...). Optional text sits in the "
+         "middle. Lines take start_arrow / end_arrow. layout positions it (default: in front of text at the paragraph).",
+         obj({{"doc", kDoc}, {"paragraph", kPara}, {"position", integer("")}, {"shape", str("Shape name; default rect.")},
+              {"text", str("Text inside the shape.")}, {"width", num("pt, default 144")}, {"height", num("pt, default fits the shape")},
+              {"fill", str("RRGGBB, a name, or none. Default the theme accent.")},
+              {"border", Json{{"description", "Outline color, or false. Object {color, size, dash: dash|dot|dash_dot|long_dash}."}}},
+              {"rotation", num("Degrees clockwise.")}, {"flip_horizontal", boolean("")}, {"flip_vertical", boolean("")},
+              {"start_arrow", enm({"none", "triangle", "stealth", "diamond", "oval", "arrow"}, "Lines: arrowhead at the start.")},
+              {"end_arrow", enm({"none", "triangle", "stealth", "diamond", "oval", "arrow"}, "Lines: arrowhead at the end.")},
+              {"format", kRunFmt}, {"layout", kLayout}, {"track", kTrack}},
+             {"doc", "paragraph"}),
+         false, false, [](Sessions& S, const Json& a) {
+             auto& s = mut(S, a);
+             auto r = para(s, a);
+             Json style = {{"shape", sarg(a, "shape", "rect")}, {"has_text", a.contains("text") && !sarg(a, "text").empty()}};
+             for (auto k : {"fill", "rotation", "flip_horizontal", "flip_vertical", "start_arrow", "end_arrow"}) if (a.contains(k)) style[k] = a[k];
+             if (a.contains("border")) {
+                 const Json& b = a["border"];
+                 if (b.is_string() && (b == "false" || b == "none")) style["border"] = false;
+                 else style["border"] = b;
+             }
+             if (a.contains("format")) style["format"] = obj_arg(a, "format");
+             // shapes default to a shape's own look: no auto-fit, centered text
+             style["auto_fit"] = false;
+             Json lay = a.contains("layout") ? a["layout"] : Json("in_front");
+             auto place = placement_from_json(lay);
+             double w = darg(a, "width", 144.0);
+             auto ps = insert_text_box(s.doc, r.p, pos_in(r.p, a), sarg(a, "text"), w, darg(a, "height", 0.0), style, track(a), place);
+             Json out = {{"shape", style["shape"]}, {"layout", place.wrap}, {"anchored_in", para_id(r.p)}};
+             if (!ps.empty()) {
+                 Json tx = Json::array();
+                 for (auto p : ps) tx.push_back(para_brief(s.doc, p));
+                 out["text"] = tx;
+             }
+             return out;
          }});
     add({"list_pictures", "Pictures",
          "List the pictures in the document: number, size in points, layout (inline or how text wraps), alt text and "
@@ -1920,15 +1959,23 @@ std::vector<ToolDef> make_tools() {
              return theme_json(s.doc);
          }});
     add({"set_watermark", "Watermark",
-         "Put a text watermark behind every page (Design > Watermark), e.g. DRAFT or CONFIDENTIAL. remove: true takes it off.",
+         "Put a text watermark behind every page (Design > Watermark), e.g. DRAFT or CONFIDENTIAL, or a picture watermark "
+         "(picture = image path or data: URI; washout fades it, scale is a percent, default fits the page). remove: true takes it off.",
          obj({{"doc", kDoc}, {"text", str("Watermark text.")}, {"remove", boolean("Remove the watermark instead.")},
               {"layout", enm({"diagonal", "horizontal"}, "Default diagonal.")}, {"color", str("RRGGBB or a name. Default silver.")},
               {"font", str("Default Calibri.")}, {"size", num("Points; default fits the page width.")},
-              {"opacity", num("0-1, default 0.5.")}},
+              {"opacity", num("0-1, default 0.5.")},
+              {"picture", str("Picture watermark: an image path or data: URI.")},
+              {"washout", boolean("Picture watermarks: fade it (default true).")},
+              {"scale", num("Picture watermarks: percent of its size (default fits the text width).")}},
              {"doc"}),
          false, false, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
              if (barg(a, "remove", false)) return Json{{"removed", remove_watermark(s.doc)}};
+             if (a.contains("picture")) {
+                 int n = set_watermark(s.doc, "", a);
+                 return Json{{"watermark", "picture"}, {"headers", n}, {"washout", barg(a, "washout", true)}};
+             }
              int n = set_watermark(s.doc, need(a, "text"), a);
              return Json{{"watermark", need(a, "text")}, {"headers", n}, {"layout", sarg(a, "layout", "diagonal")}};
          }});

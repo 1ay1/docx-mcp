@@ -887,7 +887,11 @@ void validate_semantic(Ctx& c, pugi::xml_node root) {
                             // like GetAttrNumVal: hexBinary values parse as hex
                             bool hexv = !v.empty() && std::all_of(v.begin(), v.end(), [](char ch) { return std::isxdigit((unsigned char)ch); }) &&
                                         std::any_of(v.begin(), v.end(), [](char ch) { return std::isalpha((unsigned char)ch); });
-                            if (hexv) d = (long double)std::stoull(v, nullptr, 16);
+                            // VML fixed point: "22938f" is 22938/65536
+                            bool fixed = v.size() > 1 && v.back() == 'f' &&
+                                         std::all_of(v.begin(), v.end() - 1, [](char ch) { return std::isdigit((unsigned char)ch) || ch == '-'; });
+                            if (fixed) d = std::strtold(v.c_str(), nullptr) / 65536.0L;
+                            else if (hexv) d = (long double)std::stoull(v, nullptr, 16);
                             else if (!parse_float(v, d)) break;
                             long double lo = std::strtold(S(s->a), nullptr), hi = std::strtold(S(s->b), nullptr);
                             bool ok = (s->f1 ? d >= lo : d > lo) && (s->f2 ? d <= hi : d < hi);
