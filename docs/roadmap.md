@@ -127,8 +127,8 @@ insertion) and HTML in (`insert_html`: the same plus span styles, colspans, cell
 | 3.1 | `.docm` and `.dotm` | Done: VBA bytes kept unchanged; Save As .docx/.dotx drops them like Word. Never run macros |
 | 3.2 | `.dotx` | Done: open, edit, save as template, new document from one |
 | 3.3 | Strict OOXML | Already read; add writing Strict when the input was Strict |
-| 3.4 | Flat OPC (`.xml` Word documents) | Read and write the single-file form |
-| 3.5 | `.doc` (Word 97-2003) | Convert in through LibreOffice when present; we don't write `.doc` |
+| 3.4 | Flat OPC (`.xml` Word documents) | Done: open and Save As `.xml`; every corpus file round-trips with the same text |
+| 3.5 | `.doc` (Word 97-2003) | Done: `.doc`, `.rtf`, `.odt`, Word 2003 XML convert in through LibreOffice to a new `.docx` beside the original; we don't write `.doc` |
 | 3.6 | Markdown and HTML in | `insert_markdown` turns Markdown into real headings, lists, tables, links and code with Word styles; `insert_html` for pasted HTML (`w:altChunk` as a fallback Word expands on open) |
 | 3.7 | Markdown out | `get_text format=markdown` covers tables, notes, comments, tracked changes |
 

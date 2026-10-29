@@ -82,7 +82,7 @@ Document Document::create() {
 
 Document Document::from_bytes(const util::Bytes& b) {
     Document d;
-    d.pkg_ = opc::Package::from_bytes(b);
+    d.pkg_ = opc::Package::is_flat_opc(b) ? opc::Package::from_flat_opc(b) : opc::Package::from_bytes(b);
     d.pkg_.normalizer = [](pugi::xml_document& x) { xml::normalize(x); };
     d.main_ = d.pkg_.main_part();
     if (d.main_.empty() || !d.pkg_.has(d.main_)) throw std::runtime_error("package has no main document part");
@@ -100,10 +100,7 @@ Document Document::from_bytes(const util::Bytes& b) {
     return d;
 }
 
-Document Document::open(const std::string& path) {
-    auto pkg = opc::Package::open(path);
-    return from_bytes(pkg.to_bytes());
-}
+Document Document::open(const std::string& path) { return from_bytes(util::read_file(path)); }
 
 util::Bytes Document::to_bytes() {
     finalize();
@@ -189,6 +186,12 @@ Document Document::from_template(const std::string& path) {
 
 void Document::save(const std::string& path) {
     finalize();
+    std::string ext = util::lower(path.size() >= 4 ? path.substr(path.size() - 4) : "");
+    if (ext == ".xml") {
+        std::string flat = pkg_.to_flat_opc();
+        util::write_file_atomic(path, util::Bytes(flat.begin(), flat.end()));
+        return;
+    }
     pkg_.save(path);
 }
 

@@ -12,6 +12,7 @@ namespace docx::server {
 
 struct Session {
     std::string path;          // where it came from / saves to
+    std::string converted_from;  // the .doc/.rtf/... it was converted from, if any
     wml::Document doc;
     bool dirty = false;
     int baseline_issues = 0;  // schema issues present when opened (-1: not counted yet)

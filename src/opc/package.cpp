@@ -231,7 +231,8 @@ Package Package::open(const std::string& path) {
 
 Package Package::from_bytes(const util::Bytes& zip) {
     if (zip.size() >= 8 && zip[0] == 0xD0 && zip[1] == 0xCF && zip[2] == 0x11 && zip[3] == 0xE0)
-        throw std::runtime_error("file is an OLE compound file (encrypted .docx or legacy .doc), not an OPC zip package");
+        throw std::runtime_error("file is an OLE compound file: a password-protected .docx (remove the password in Word first) or a "
+                                 "legacy .doc saved with a .docx name (rename it to .doc to have it converted)");
     mz_zip_archive za{};
     if (!mz_zip_reader_init_mem(&za, zip.data(), zip.size(), 0))
         throw std::runtime_error("not a zip package (is this really a .docx?)");
@@ -358,6 +359,140 @@ util::Bytes Package::to_bytes(int level) const {
 }
 
 void Package::save(const std::string& path) const { util::write_file_atomic(path, to_bytes()); }
+
+// ── Flat OPC ──
+// <pkg:package xmlns:pkg="http://schemas.microsoft.com/office/2006/xmlPackage">
+//   <pkg:part pkg:name="/word/document.xml" pkg:contentType="..."><pkg:xmlData>...</pkg:xmlData></pkg:part>
+//   <pkg:part pkg:name="/word/media/image1.png" pkg:contentType="image/png" pkg:compression="store"><pkg:binaryData>base64</pkg:binaryData></pkg:part>
+
+namespace {
+constexpr const char* NS_PKG = "http://schemas.microsoft.com/office/2006/xmlPackage";
+}
+
+bool Package::is_flat_opc(const util::Bytes& data) {
+    // a zip starts with PK; flat OPC is XML mentioning the xmlPackage namespace early on
+    if (data.size() < 32 || (data[0] == 'P' && data[1] == 'K')) return false;
+    std::string head(data.begin(), data.begin() + std::min<std::size_t>(data.size(), 4096));
+    return head.find(NS_PKG) != std::string::npos;
+}
+
+Package Package::from_flat_opc(const util::Bytes& data) {
+    pugi::xml_document d;
+    auto r = d.load_buffer(data.data(), data.size(), pugi::parse_default | pugi::parse_declaration | pugi::parse_ws_pcdata);
+    if (!r) throw std::runtime_error(std::string("malformed Flat OPC XML: ") + r.description());
+    auto root = d.document_element();
+    // the pkg prefix as the file declares it
+    std::string pre;
+    for (auto a : root.attributes()) {
+        std::string an = a.name();
+        if (std::string(a.value()) == NS_PKG && an.rfind("xmlns:", 0) == 0) pre = an.substr(6) + ":";
+    }
+    if (std::string(root.name()) != pre + "package") throw std::runtime_error("not a Flat OPC package (root is " + std::string(root.name()) + ")");
+    // build a zip in memory with the same parts and hand it to the normal reader
+    mz_zip_archive za{};
+    if (!mz_zip_writer_init_heap(&za, 0, 1 << 16)) throw std::runtime_error("zip init failed");
+    struct Guard {
+        mz_zip_archive* z;
+        ~Guard() { mz_zip_writer_end(z); }
+    } guard{&za};
+    pugi::xml_document ct;
+    auto types = ct.append_child("Types");
+    types.append_attribute("xmlns") = NS_CT;
+    auto def = types.append_child("Default");
+    def.append_attribute("Extension") = "rels";
+    def.append_attribute("ContentType") = ct::rels;
+    auto add = [&](const std::string& name, const std::string& bytes) {
+        std::string zn = name[0] == '/' ? name.substr(1) : name;
+        if (!mz_zip_writer_add_mem(&za, zn.c_str(), bytes.data(), bytes.size(), MZ_BEST_SPEED))
+            throw std::runtime_error("zip write failed for " + zn);
+    };
+    for (auto part : root.children((pre + "part").c_str())) {
+        std::string name = part.attribute((pre + "name").c_str()).value();
+        std::string ctype = part.attribute((pre + "contentType").c_str()).value();
+        if (name.empty()) continue;
+        if (name[0] != '/') name = "/" + name;
+        std::string bytes;
+        if (auto xd = part.child((pre + "xmlData").c_str())) {
+            // the part's root element, serialized with its own namespace declarations
+            pugi::xml_document one;
+            for (auto c : xd.children())
+                if (c.type() == pugi::node_element) { one.append_copy(c); break; }
+            // namespaces declared above the element (on pkg:package) must come along
+            if (auto e = one.document_element()) {
+                for (auto a : root.attributes()) {
+                    std::string an = a.name();
+                    if ((an == "xmlns" || an.rfind("xmlns:", 0) == 0) && !e.attribute(an.c_str()) && std::string(a.value()) != NS_PKG)
+                        e.append_attribute(an.c_str()) = a.value();
+                }
+            }
+            bytes = xml_to_string(one);
+        } else if (auto bd = part.child((pre + "binaryData").c_str())) {
+            std::string b64;
+            for (char c : std::string(bd.text().get())) if (!std::isspace((unsigned char)c)) b64 += c;
+            auto dec = util::base64_decode(b64);
+            if (!dec) throw std::runtime_error("bad base64 in Flat OPC part " + name);
+            bytes.assign(dec->begin(), dec->end());
+        } else continue;
+        bool is_rels = name.size() > 5 && name.substr(name.size() - 5) == ".rels";
+        if (!is_rels && !ctype.empty()) {
+            auto o = types.append_child("Override");
+            o.append_attribute("PartName") = name.c_str();
+            o.append_attribute("ContentType") = ctype.c_str();
+        }
+        add(name, bytes);
+    }
+    add("[Content_Types].xml", xml_to_string(ct));
+    void* buf = nullptr;
+    std::size_t sz = 0;
+    if (!mz_zip_writer_finalize_heap_archive(&za, &buf, &sz)) throw std::runtime_error("zip finalize failed");
+    util::Bytes zip((std::uint8_t*)buf, (std::uint8_t*)buf + sz);
+    mz_free(buf);
+    return from_bytes(zip);
+}
+
+std::string Package::to_flat_opc() const {
+    // from the zip form, so every fix-up to_bytes makes applies here too
+    Package p = from_bytes(to_bytes(1));
+    std::string out = XML_DECL;
+    out += "<?mso-application progid=\"Word.Document\"?>";
+    out += std::string("<pkg:package xmlns:pkg=\"") + NS_PKG + "\">";
+    auto part_xml = [&](const std::string& name, const std::string& ctype, const std::string& bytes, bool xml_data) {
+        out += "<pkg:part pkg:name=\"" + util::xml_escape(name) + "\" pkg:contentType=\"" + util::xml_escape(ctype) + "\"";
+        if (!xml_data) out += " pkg:compression=\"store\"";
+        out += ">";
+        if (xml_data) {
+            std::string body = bytes;
+            if (body.size() >= 3 && (unsigned char)body[0] == 0xEF && (unsigned char)body[1] == 0xBB && (unsigned char)body[2] == 0xBF) body.erase(0, 3);
+            while (!body.empty() && std::isspace((unsigned char)body[0])) body.erase(0, 1);
+            // drop the part's own XML declaration
+            if (body.rfind("<?xml", 0) == 0) body = body.substr(body.find("?>") + 2);
+            while (!body.empty() && (body[0] == '\r' || body[0] == '\n')) body.erase(0, 1);
+            out += "<pkg:xmlData>" + body + "</pkg:xmlData>";
+        } else {
+            out += "<pkg:binaryData>" + util::base64_encode(util::Bytes(bytes.begin(), bytes.end())) + "</pkg:binaryData>";
+        }
+        out += "</pkg:part>";
+    };
+    if (auto it = p.rels_.find("/"); it != p.rels_.end() && !it->second.items.empty())
+        part_xml("/_rels/.rels", ct::rels, serialize_rels(it->second), true);
+    for (auto& k : p.order_) {
+        auto it = p.parts_.find(k);
+        if (it == p.parts_.end()) continue;
+        const Part& part = it->second;
+        std::string bytes(part.bytes.begin(), part.bytes.end());
+        // inline only parts that really are XML (an embedded .xlsx has "xml" in its type but is a zip)
+        bool xmlish = part.content_type.find("xml") != std::string::npos && !(part.bytes.size() > 1 && part.bytes[0] == 'P' && part.bytes[1] == 'K');
+        if (xmlish) {
+            pugi::xml_document probe;
+            xmlish = (bool)probe.load_buffer(part.bytes.data(), part.bytes.size());
+        }
+        part_xml(part.name, part.content_type, bytes, xmlish);
+        if (auto r = p.rels_.find(k); r != p.rels_.end() && !r->second.items.empty())
+            part_xml(rels_name_of(part.name), ct::rels, serialize_rels(r->second), true);
+    }
+    out += "</pkg:package>";
+    return out;
+}
 
 bool Package::has(std::string_view name) const { return parts_.count(key_of(name)) > 0; }
 Part* Package::part(std::string_view name) {

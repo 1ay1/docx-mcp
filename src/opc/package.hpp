@@ -139,6 +139,11 @@ public:
     // A part name not in use, e.g. unique_name("/word/header", ".xml") -> /word/header3.xml
     std::string unique_name(std::string_view stem, std::string_view ext) const;
 
+    // Flat OPC (Word's single-file .xml: <pkg:package> holding every part).
+    static bool is_flat_opc(const util::Bytes& data);
+    static Package from_flat_opc(const util::Bytes& data);
+    std::string to_flat_opc() const;
+
     std::string content_type_of(std::string_view name) const;
     void set_override(std::string name, std::string content_type);
 

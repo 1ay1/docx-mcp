@@ -27,7 +27,7 @@ Every tool that edits takes `doc` (a handle or a file path), and most take `trac
 
 ### `open_document`
 
-Open a .docx file for reading/editing. Returns a handle. Opening an already open path returns the same handle.
+Open a .docx/.docm/.dotx file (or Word's single-file .xml) for reading/editing. .doc, .rtf and .odt are converted through LibreOffice and saved as .docx beside the original. Returns a handle. Opening an already open path returns the same handle.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
@@ -49,7 +49,7 @@ Create a new document: blank exactly like Word's File > New > Blank document (Ca
 
 ### `save_document`
 
-Write the document to disk (atomic replace). `path` saves a copy elsewhere (Save As) and retargets the handle. The extension picks the kind: .docx, .dotx (template), .docm/.dotm (macros kept).
+Write the document to disk (atomic replace). `path` saves a copy elsewhere (Save As) and retargets the handle. The extension picks the kind: .docx, .dotx (template), .docm/.dotm (macros kept), .xml (Word's single-file Flat OPC). For PDF use export_pdf.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|

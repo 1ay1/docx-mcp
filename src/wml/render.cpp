@@ -295,4 +295,30 @@ PageMap page_map(Document& d, int timeout_ms) {
     return pm;
 }
 
+util::Bytes convert_to_docx(const std::string& path, int timeout_ms) {
+    std::string office = renderer();
+    if (office.empty())
+        throw std::runtime_error("opening this format needs LibreOffice to convert it, and it isn't installed (or set "
+                                 "DOCX_MCP_SOFFICE to soffice's path)");
+    TempDir t;
+    // a plain name in the temp folder: soffice derives the output name from it
+    std::string ext = util::lower(util::path_utf8(util::u8path(path).extension()));
+    auto in = t.p / util::u8path("in" + ext);
+    std::error_code ec;
+    fs::copy_file(util::u8path(path), in, ec);
+    if (ec) throw std::runtime_error("can't read " + path + ": " + ec.message());
+    auto profile = t.p / "profile";
+    std::string prof_url = "file:///" + util::path_utf8(fs::absolute(profile));
+    std::replace(prof_url.begin(), prof_url.end(), '\\', '/');
+    if (prof_url.rfind("file:////", 0) == 0) prof_url.erase(7, 1);
+    auto r = util::run_process({office, "--headless", "--norestore", "--nologo", "-env:UserInstallation=" + prof_url, "--convert-to",
+                                "docx:MS Word 2007 XML", "--outdir", util::path_utf8(t.p), util::path_utf8(in)},
+                               timeout_ms);
+    auto out = t.p / "in.docx";
+    if (r.timed_out) throw std::runtime_error("converting " + path + " timed out");
+    if (!fs::exists(out, ec))
+        throw std::runtime_error("LibreOffice couldn't convert " + path + " (exit " + std::to_string(r.exit_code) + ")");
+    return util::read_file(util::path_utf8(out));
+}
+
 }  // namespace docx::wml

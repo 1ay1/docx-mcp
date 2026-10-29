@@ -456,7 +456,13 @@ def main():
         r = R.call("open_document", path=os.path.join(work, "edited", edited[0]))
         if r:
             R.call("save_document", doc=r["doc"], path=tpl)
+            # Word's single-file XML out and back
+            R.call("save_document", doc=r["doc"], path=os.path.join(work, "flat.xml"))
             R.call("close_document", doc=r["doc"])
+            f = R.call("open_document", path=os.path.join(work, "flat.xml"))
+            if f:
+                R.call("save_document", doc=f["doc"], path=os.path.join(work, "edited", "from_flat.docx"))
+                R.call("close_document", doc=f["doc"])
             r = R.call("create_document", path=os.path.join(work, "edited", "from_template.docx"), template=tpl)
             if r:
                 R.call("save_document", doc=r["doc"])

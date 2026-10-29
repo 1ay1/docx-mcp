@@ -5,6 +5,8 @@
 
 #include "schema/schema.hpp"
 #include "util/fsio.hpp"
+#include "wml/render.hpp"
+#include <set>
 
 namespace docx::server {
 
@@ -49,6 +51,31 @@ std::string Sessions::open(const std::string& path_in, bool create_missing) {
     s->path = path;
     if (util::file_exists(path)) {
         s->opened = util::read_file(path);
+        // legacy formats (.doc, .rtf, .odt, ...) convert to .docx; saving writes a new .docx next to it
+        std::string ext = util::lower(util::path_utf8(util::u8path(path).extension()));
+        static const std::set<std::string> legacy = {".doc", ".rtf", ".odt", ".wpd", ".wps", ".dot", ".fodt", ".sxw", ".abw", ".htm", ".html", ".txt", ".xml"};
+        bool flat = opc::Package::is_flat_opc(s->opened);
+        // .odt and .sxw are zips too, so the extension decides; an .xml that isn't Flat OPC is Word 2003 XML
+        bool convert = legacy.count(ext) && !flat;
+        if (convert && (ext == ".doc" || ext == ".dot") && s->opened.size() > 2 && s->opened[0] == 'P' && s->opened[1] == 'K')
+            convert = false;  // a .docx with the wrong name
+        if (convert) {
+            s->opened = wml::convert_to_docx(path);
+            // a fresh .docx name: never overwrite a file that's already there
+            auto p = util::u8path(path);
+            p.replace_extension(".docx");
+            std::string target = util::path_utf8(p);
+            for (int k = 2; util::file_exists(target); k++) {
+                auto q = util::u8path(path);
+                q.replace_filename(util::path_utf8(q.stem()) + " (" + std::to_string(k) + ").docx");
+                target = util::path_utf8(q);
+            }
+            for (auto& [h, o] : by_handle_)
+                if (same_path(o->path, target)) throw std::runtime_error(target + " is already open as " + h);
+            s->path = target;
+            s->converted_from = path;
+            s->dirty = true;
+        }
         s->doc = wml::Document::from_bytes(s->opened);
         s->baseline_issues = -1;  // counted on first need (only when a save finds issues)
     } else if (create_missing) {

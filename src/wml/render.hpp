@@ -40,4 +40,7 @@ PageMap page_map(Document& d, int timeout_ms = 120000);
 // Field starts in the body, in document order: w:fldChar begin and w:fldSimple.
 std::vector<pugi::xml_node> field_anchors(pugi::xml_node body);
 
+// A .doc, .rtf, .odt, .wpd (anything LibreOffice reads) as .docx bytes.
+util::Bytes convert_to_docx(const std::string& path, int timeout_ms = 120000);
+
 }  // namespace docx::wml

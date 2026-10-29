@@ -406,7 +406,8 @@ std::vector<ToolDef> make_tools() {
 
     // ── documents ────────────────────────────────────────────────────────
     add({"open_document", "Open document",
-         "Open a .docx file for reading/editing. Returns a handle. Opening an already open path returns the same handle.",
+         "Open a .docx/.docm/.dotx file (or Word's single-file .xml) for reading/editing. .doc, .rtf and .odt are converted "
+         "through LibreOffice and saved as .docx beside the original. Returns a handle. Opening an already open path returns the same handle.",
          obj({{"path", str("Path to the .docx file.")}, {"author", str("Name used for tracked changes and comments (default from server).")},
               {"create_if_missing", boolean("Create a blank document when the file doesn't exist.")}},
              {"path"}),
@@ -415,9 +416,11 @@ std::vector<ToolDef> make_tools() {
              auto& s = S.get(h);
              if (a.contains("author")) s.doc.author.name = sarg(a, "author");
              auto st = statistics(s.doc);
-             return Json{{"doc", h}, {"path", s.path}, {"paragraphs", st["paragraphs"]}, {"words", st["words"]},
+             Json out = Json{{"doc", h}, {"path", s.path}, {"paragraphs", st["paragraphs"]}, {"words", st["words"]},
                          {"tables", st["tables"]}, {"comments", st["comments"]}, {"revisions", st["revisions"]},
                          {"track_changes", s.doc.track_changes()}, {"protection", protection_info(s.doc)}};
+             if (!s.converted_from.empty()) out["converted_from"] = s.converted_from;
+             return out;
          }});
     add({"create_document", "New document",
          "Create a new document: blank exactly like Word's File > New > Blank document (Calibri 11, Office theme, Letter), "
@@ -461,7 +464,8 @@ std::vector<ToolDef> make_tools() {
          }});
     add({"save_document", "Save",
          "Write the document to disk (atomic replace). `path` saves a copy elsewhere (Save As) and retargets the handle. "
-         "The extension picks the kind: .docx, .dotx (template), .docm/.dotm (macros kept).",
+         "The extension picks the kind: .docx, .dotx (template), .docm/.dotm (macros kept), .xml (Word's single-file Flat OPC). "
+         "For PDF use export_pdf.",
          obj({{"doc", kDoc}, {"path", str("Save As path (optional).")}, {"validate", boolean("Refuse to save if the result is not schema-valid (default true).")}}, {"doc"}),
          false, false, [](Sessions& S, const Json& a) {
              auto& s = sess(S, a);
