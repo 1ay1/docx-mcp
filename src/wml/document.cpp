@@ -85,7 +85,13 @@ Document Document::from_bytes(const util::Bytes& b) {
     d.pkg_ = opc::Package::is_flat_opc(b) ? opc::Package::from_flat_opc(b) : opc::Package::from_bytes(b);
     d.pkg_.normalizer = [](pugi::xml_document& x) { xml::normalize(x); };
     d.main_ = d.pkg_.main_part();
-    if (d.main_.empty() || !d.pkg_.has(d.main_)) throw std::runtime_error("package has no main document part");
+    if (d.main_.empty() || !d.pkg_.has(d.main_)) {
+        std::string parts;
+        for (auto& n : d.pkg_.part_names()) parts += (parts.empty() ? "" : ", ") + n;
+        const auto* r = d.pkg_.rels_if("/");
+        throw std::runtime_error("package has no main document part (root relationships: " +
+                                 std::to_string(r ? r->items.size() : 0) + "; parts: " + parts.substr(0, 300) + ")");
+    }
     std::string ct = d.pkg_.content_type_of(d.main_);
     if (ct.find("wordprocessingml") == std::string::npos && ct.find("ms-word") == std::string::npos)
         throw std::runtime_error("not a Word document (main part is " + ct + ")");

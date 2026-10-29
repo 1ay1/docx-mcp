@@ -103,10 +103,20 @@ struct Part {
     util::Bytes bytes;         // raw content when not parsed
     std::unique_ptr<pugi::xml_document> xml;  // parsed on demand
     bool dirty = false;
+    Part() = default;
+    Part(Part&&) noexcept = default;
+    Part& operator=(Part&&) noexcept = default;
+    Part(const Part&) = delete;
+    Part& operator=(const Part&) = delete;
 };
 
 class Package {
 public:
+    Package() = default;
+    Package(Package&&) noexcept = default;
+    Package& operator=(Package&&) noexcept = default;
+    Package(const Package&) = delete;
+    Package& operator=(const Package&) = delete;
     static Package open(const std::string& path);
     static Package from_bytes(const util::Bytes& zip);
     void save(const std::string& path) const;

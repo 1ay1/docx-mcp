@@ -22,6 +22,11 @@ struct Author {
 
 class Document {
 public:
+    Document() = default;
+    Document(Document&&) noexcept = default;
+    Document& operator=(Document&&) noexcept = default;
+    Document(const Document&) = delete;
+    Document& operator=(const Document&) = delete;
     static Document create();               // Word's blank document
     static Document open(const std::string& path);
     static Document from_bytes(const util::Bytes& b);
