@@ -506,17 +506,37 @@ void Document::touch(const std::string& part) {
 // values. Word requires them unique per annotation type within a part;
 // renumber later duplicates. Range starts/ends keep their pairing.
 void Document::dedupe_ids() {
-    static const char* kinds[] = {"w:ins", "w:del", "w:moveFrom", "w:moveTo", "w:rPrChange", "w:pPrChange",
-                                  "w:sectPrChange", "w:tblPrChange", "w:trPrChange", "w:tcPrChange", "w:tblGridChange",
-                                  "w:tblPrExChange", "w:numberingChange", "w:cellIns", "w:cellDel", "w:cellMerge"};
+    static const std::set<std::string_view> kinds = {"w:ins", "w:del", "w:moveFrom", "w:moveTo", "w:rPrChange", "w:pPrChange",
+                                                    "w:sectPrChange", "w:tblPrChange", "w:trPrChange", "w:tcPrChange", "w:tblGridChange",
+                                                    "w:tblPrExChange", "w:numberingChange", "w:cellIns", "w:cellDel", "w:cellMerge"};
+    static const std::set<std::string_view> watched = {
+        "w:commentRangeStart", "w:commentRangeEnd", "w:commentReference", "w:moveFromRangeStart", "w:moveFromRangeEnd",
+        "w:moveToRangeStart", "w:moveToRangeEnd", "w:bookmarkStart", "w:bookmarkEnd"};
     for (auto& name : pkg_.part_names()) {
         auto* p = pkg_.part(name);
         if (!p || !p->xml) continue;
         if (schema::part_root_type(p->content_type) < 0) continue;
         auto root = p->xml->document_element();
+        // one walk (pre-order, document order) collects every element the rules below look at
+        std::map<std::string_view, std::vector<pugi::xml_node>> by;
+        {
+            std::vector<pugi::xml_node> st{root};
+            while (!st.empty()) {
+                auto n = st.back();
+                st.pop_back();
+                if (n != root) {
+                    std::string_view q = n.name();
+                    if (auto k = kinds.find(q); k != kinds.end()) by[*k].push_back(n);
+                    else if (auto w = watched.find(q); w != watched.end()) by[*w].push_back(n);
+                }
+                for (auto c = n.last_child(); c; c = c.previous_sibling())
+                    if (c.type() == pugi::node_element) st.push_back(c);
+            }
+        }
+        auto list = [&](std::string_view q) -> std::vector<pugi::xml_node>& { return by[q]; };
         for (auto q : kinds) {
             std::set<std::string> seen;
-            for (auto n : xml::descendants(root, q)) {
+            for (auto n : list(q)) {
                 std::string id = xml::attr(n, "w:id");
                 if (id.empty()) continue;
                 if (!seen.insert(id).second) {
@@ -530,7 +550,7 @@ void Document::dedupe_ids() {
         // reference is dropped, the original stays
         for (auto q : {"w:commentRangeStart", "w:commentRangeEnd", "w:commentReference"}) {
             std::set<std::string> seen;
-            for (auto n : xml::descendants(root, q)) {
+            for (auto n : list(q)) {
                 if (seen.insert(xml::attr(n, "w:id")).second) continue;
                 auto owner = n;
                 if (std::string_view(q) == "w:commentReference") {
@@ -545,8 +565,8 @@ void Document::dedupe_ids() {
         // move ranges: a duplicated start/end pair gets a fresh id together (name kept: the copies are separate moves)
         for (auto [qs, qe] : {std::pair{"w:moveFromRangeStart", "w:moveFromRangeEnd"}, std::pair{"w:moveToRangeStart", "w:moveToRangeEnd"}}) {
             std::map<std::string, std::vector<pugi::xml_node>> ss, es;
-            for (auto b : xml::descendants(root, qs)) ss[xml::attr(b, "w:id")].push_back(b);
-            for (auto b : xml::descendants(root, qe)) es[xml::attr(b, "w:id")].push_back(b);
+            for (auto b : list(qs)) ss[xml::attr(b, "w:id")].push_back(b);
+            for (auto b : list(qe)) es[xml::attr(b, "w:id")].push_back(b);
             for (auto& [id, v] : ss) {
                 auto& e = es[id];
                 for (std::size_t i = 1; i < v.size(); i++) {
@@ -558,24 +578,24 @@ void Document::dedupe_ids() {
             }
         }
         // bookmarks: a duplicated start/end pair gets a fresh id together
-        std::map<std::string, int> starts;
-        for (auto b : xml::descendants(root, "w:bookmarkStart")) starts[xml::attr(b, "w:id")]++;
-        for (auto& [id, cnt] : starts) {
-            if (cnt < 2) continue;
-            auto bs = xml::descendants(root, "w:bookmarkStart");
-            auto be = xml::descendants(root, "w:bookmarkEnd");
-            std::vector<pugi::xml_node> s2, e2;
-            for (auto b : bs) if (xml::attr(b, "w:id") == id) s2.push_back(b);
-            for (auto b : be) if (xml::attr(b, "w:id") == id) e2.push_back(b);
+        auto& bs = list("w:bookmarkStart");
+        auto& be = list("w:bookmarkEnd");
+        std::map<std::string, std::vector<pugi::xml_node>> s_by, e_by;
+        for (auto b : bs) s_by[xml::attr(b, "w:id")].push_back(b);
+        for (auto b : be) e_by[xml::attr(b, "w:id")].push_back(b);
+        std::map<std::string, int> names;
+        for (auto b : bs) names[xml::attr(b, "w:name")]++;
+        for (auto& [id, s2] : s_by) {
+            if (s2.size() < 2) continue;
+            auto& e2 = e_by[id];
             for (std::size_t i = 1; i < s2.size(); i++) {
-                // a copied bookmark start keeps the name only once; drop the copy
                 std::string nid = std::to_string(next_bookmark_id());
                 xml::set_attr(s2[i], "w:id", nid);
                 if (i < e2.size()) xml::set_attr(e2[i], "w:id", nid);
+                // a copied bookmark start keeps the name only once; drop the copy
                 std::string nm = xml::attr(s2[i], "w:name");
-                bool dup_name = false;
-                for (auto b : bs) if (b != s2[i] && xml::attr(b, "w:name") == nm) dup_name = true;
-                if (dup_name) {
+                if (names[nm] > 1) {
+                    names[nm]--;
                     s2[i].parent().remove_child(s2[i]);
                     if (i < e2.size()) e2[i].parent().remove_child(e2[i]);
                 }

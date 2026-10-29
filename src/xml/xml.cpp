@@ -83,59 +83,92 @@ struct Normalizer {
         return p;
     }
 
-    std::string rename(const std::string& q, const Scope& s, bool is_attr) {
+    std::string rename(std::string_view q, const Scope& s, bool is_attr) {
         auto c = q.find(':');
-        std::string pre = c == std::string::npos ? "" : q.substr(0, c);
-        std::string loc = c == std::string::npos ? q : q.substr(c + 1);
-        if (pre == "xml") return q;
-        if (pre.empty() && is_attr) return q;  // unqualified attributes have no namespace
-        auto it = s.map.find(pre);
-        if (it == s.map.end()) return q;  // undeclared; leave alone
-        if (it->second.empty()) return loc;
-        return prefix_for(it->second, pre) + ":" + loc;
+        std::string_view pre = c == std::string_view::npos ? std::string_view{} : q.substr(0, c);
+        std::string_view loc = c == std::string_view::npos ? q : q.substr(c + 1);
+        if (pre == "xml") return std::string(q);
+        if (pre.empty() && is_attr) return std::string(q);  // unqualified attributes have no namespace
+        auto it = s.map.find(std::string(pre));
+        if (it == s.map.end()) return std::string(q);  // undeclared; leave alone
+        if (it->second.empty()) return std::string(loc);
+        return prefix_for(it->second, std::string(pre)) + ":" + std::string(loc);
     }
 
-    void walk(pugi::xml_node n, Scope s, bool root) {
-        // read declarations
-        std::vector<pugi::xml_attribute> decls;
-        for (auto a : n.attributes()) {
-            std::string an = a.name();
-            if (an == "xmlns") { s.map[""] = canon_uri(a.value()); decls.push_back(a); }
-            else if (util::starts_with(an, "xmlns:")) { s.map[an.substr(6)] = canon_uri(a.value()); decls.push_back(a); }
+    // Does this scope map every prefix to itself? Then names stay as they are.
+    bool identity(const Scope& s) {
+        for (auto& [p, u] : s.map) {
+            if (p == "xml") continue;
+            if (u.empty()) return false;  // a default namespace: unprefixed names get renamed
+            if (prefix_for(u, p) != p) return false;
         }
-        for (auto& [p, u] : s.map) if (!u.empty()) prefix_for(u, p);
-        for (auto& d : decls) n.remove_attribute(d);
-        n.set_name(rename(n.name(), s, false).c_str());
+        return true;
+    }
+
+    void fix_mc(pugi::xml_attribute a, const std::string& nn, const Scope& s) {
+        // mc:Ignorable / ProcessContent / MustUnderstand hold prefix lists
+        if (nn == "mc:Ignorable" || nn == "mc:MustUnderstand" || nn == "mc:ProcessContent" ||
+            nn == "mc:PreserveElements" || nn == "mc:PreserveAttributes") {
+            std::string out;
+            for (auto tok : util::split(util::trim(a.value()), ' ')) {
+                if (tok.empty()) continue;
+                std::string t = tok, rest;
+                if (auto c = t.find(':'); c != std::string::npos) { rest = t.substr(c); t = t.substr(0, c); }
+                auto it = s.map.find(t);
+                std::string np = it == s.map.end() ? t : prefix_for(it->second, t);
+                out += (out.empty() ? "" : " ") + np + rest;
+            }
+            a.set_value(out.c_str());
+        }
+        if (nn == "mc:Requires") {
+            std::string out;
+            for (auto tok : util::split(util::trim(a.value()), ' ')) {
+                if (tok.empty()) continue;
+                auto it = s.map.find(tok);
+                out += (out.empty() ? "" : " ") + (it == s.map.end() ? tok : prefix_for(it->second, tok));
+            }
+            a.set_value(out.c_str());
+        }
+    }
+
+    void walk(pugi::xml_node n, const Scope& outer, bool outer_identity) {
+        // a new scope only when this element declares namespaces
+        bool declares = false;
         for (auto a : n.attributes()) {
-            std::string an = a.name();
-            std::string nn = rename(an, s, true);
-            if (nn != an) a.set_name(nn.c_str());
-            // mc:Ignorable / ProcessContent / MustUnderstand hold prefix lists
-            if (nn == "mc:Ignorable" || nn == "mc:MustUnderstand" || nn == "mc:ProcessContent" ||
-                nn == "mc:PreserveElements" || nn == "mc:PreserveAttributes") {
-                std::string out;
-                for (auto tok : util::split(util::trim(a.value()), ' ')) {
-                    if (tok.empty()) continue;
-                    std::string t = tok, rest;
-                    if (auto c = t.find(':'); c != std::string::npos) { rest = t.substr(c); t = t.substr(0, c); }
-                    auto it = s.map.find(t);
-                    std::string np = it == s.map.end() ? t : prefix_for(it->second, t);
-                    out += (out.empty() ? "" : " ") + np + rest;
-                }
-                a.set_value(out.c_str());
+            std::string_view an = a.name();
+            if (an == "xmlns" || an.rfind("xmlns:", 0) == 0) { declares = true; break; }
+        }
+        Scope local;
+        const Scope* s = &outer;
+        bool ident = outer_identity;
+        if (declares) {
+            local = outer;
+            std::vector<pugi::xml_attribute> decls;
+            for (auto a : n.attributes()) {
+                std::string an = a.name();
+                if (an == "xmlns") { local.map[""] = canon_uri(a.value()); decls.push_back(a); }
+                else if (util::starts_with(an, "xmlns:")) { local.map[an.substr(6)] = canon_uri(a.value()); decls.push_back(a); }
             }
-            if (nn == "mc:Requires") {
-                std::string out;
-                for (auto tok : util::split(util::trim(a.value()), ' ')) {
-                    if (tok.empty()) continue;
-                    auto it = s.map.find(tok);
-                    out += (out.empty() ? "" : " ") + (it == s.map.end() ? tok : prefix_for(it->second, tok));
-                }
-                a.set_value(out.c_str());
+            for (auto& [p, u] : local.map) if (!u.empty()) prefix_for(u, p);
+            for (auto& d : decls) n.remove_attribute(d);
+            s = &local;
+            ident = identity(local);
+        }
+        if (!ident) {
+            std::string nn = rename(n.name(), *s, false);
+            if (nn != n.name()) n.set_name(nn.c_str());
+        }
+        for (auto a : n.attributes()) {
+            std::string_view an = a.name();
+            if (!ident) {
+                std::string nn = rename(an, *s, true);
+                if (nn != an) a.set_name(nn.c_str());
             }
+            std::string_view cur = a.name();
+            if (cur.size() > 3 && cur.compare(0, 3, "mc:") == 0) fix_mc(a, std::string(cur), *s);
         }
         for (auto c : n.children())
-            if (c.type() == pugi::node_element) walk(c, s, false);
+            if (c.type() == pugi::node_element) walk(c, *s, ident);
     }
 };
 
@@ -171,7 +204,7 @@ void normalize(pugi::xml_document& doc) {
     if (!root) return;
     Normalizer nz;
     // Seed: keep the prefixes the document already uses for its known URIs.
-    nz.walk(root, Scope{{{"xml", "http://www.w3.org/XML/1998/namespace"}}}, true);
+    nz.walk(root, Scope{{{"xml", "http://www.w3.org/XML/1998/namespace"}}}, false);
     // Re-declare everything on the root, in a stable order.
     std::vector<std::pair<std::string, std::string>> decls;
     for (auto& [uri, p] : nz.uri_to_prefix) {

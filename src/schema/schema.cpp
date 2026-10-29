@@ -1,5 +1,6 @@
 #include "schema/schema.hpp"
 
+#include <atomic>
 #include <cctype>
 #include <charconv>
 #include <cmath>
@@ -29,9 +30,15 @@ std::string_view attr_qname(const RawAttr& a) {
     return q;
 }
 
+// Hash that takes std::string_view too, so lookups don't allocate.
+struct SvHash {
+    using is_transparent = void;
+    std::size_t operator()(std::string_view s) const noexcept { return std::hash<std::string_view>{}(s); }
+};
+
 struct Flat {
     // child qname -> (type, rank)
-    std::unordered_map<std::string, std::pair<TypeId, int>> kids;
+    std::unordered_map<std::string, std::pair<TypeId, int>, SvHash, std::equal_to<>> kids;
     std::vector<ChildInfo> order;
     bool has_any = false;
 };
@@ -43,7 +50,8 @@ struct Index {
     std::vector<std::int32_t> particle;  // effective root particle per type
     std::vector<std::pair<std::uint32_t, std::uint32_t>> attr_range;
     std::vector<std::pair<std::uint32_t, std::uint32_t>> text_vals;
-    mutable std::vector<std::unique_ptr<Flat>> flat;
+    mutable std::unique_ptr<std::atomic<Flat*>[]> flat;
+    mutable std::vector<std::unique_ptr<Flat>> flat_owned;
     mutable std::mutex mu;
 };
 
@@ -53,7 +61,8 @@ const Index& idx() {
         ix->particle.resize(n_types);
         ix->attr_range.resize(n_types);
         ix->text_vals.resize(n_types);
-        ix->flat.resize(n_types);
+        ix->flat.reset(new std::atomic<Flat*>[n_types]);
+        for (std::size_t i = 0; i < n_types; i++) ix->flat[i].store(nullptr, std::memory_order_relaxed);
         for (std::size_t i = 0; i < n_types; i++) {
             const RawType& t = types[i];
             if (t.qname) ix->by_qname[S(t.qname)].push_back(TypeId(i));
@@ -107,14 +116,16 @@ void flatten(std::int32_t pi, Flat& f, int& next, int shared) {
 
 const Flat& flat_of(TypeId t) {
     const Index& I = idx();
+    if (Flat* f = I.flat[t].load(std::memory_order_acquire)) return *f;
     std::lock_guard lk(I.mu);
-    auto& slot = I.flat[t];
-    if (!slot) {
-        slot = std::make_unique<Flat>();
-        int next = 0;
-        if (I.particle[t] >= 0) flatten(I.particle[t], *slot, next, -1);
-    }
-    return *slot;
+    if (Flat* f = I.flat[t].load(std::memory_order_relaxed)) return *f;
+    auto slot = std::make_unique<Flat>();
+    int next = 0;
+    if (I.particle[t] >= 0) flatten(I.particle[t], *slot, next, -1);
+    Flat* raw = slot.get();
+    I.flat_owned.push_back(std::move(slot));
+    I.flat[t].store(raw, std::memory_order_release);
+    return *raw;
 }
 
 std::string_view local(std::string_view q) {
@@ -441,7 +452,7 @@ TypeId part_root_type(std::string_view ct) {
 TypeId child_type(TypeId parent, std::string_view q) {
     if (parent < 0) return NoType;
     const Flat& f = flat_of(parent);
-    auto it = f.kids.find(std::string(q));
+    auto it = f.kids.find(q);
     return it == f.kids.end() ? NoType : it->second.first;
 }
 
@@ -590,8 +601,94 @@ void add(Ctx& c, pugi::xml_node n, std::string msg) {
 }
 
 // Element sequence matcher (greedy, like the SDK's particle validators).
+// FIRST(p): the element names an occurrence of particle p can start with, and
+// whether p can match nothing. Lets once() reject a branch without walking it.
+struct First {
+    std::vector<std::string_view> names;  // sorted
+    bool any = false;    // has an xsd:any somewhere at its start
+    bool empty = false;  // can match zero elements
+};
+
+const First& first_of(std::int32_t pi);
+
+First compute_first(std::int32_t pi) {
+    const RawParticle& p = particles[pi];
+    First f;
+    auto merge = [&](const First& o) {
+        f.names.insert(f.names.end(), o.names.begin(), o.names.end());
+        f.any = f.any || o.any;
+    };
+    switch (p.kind) {
+        case 0:
+            if (p.type >= 0) f.names.push_back(S(types[p.type].qname));
+            break;
+        case 5: f.any = true; break;
+        case 1:
+        case 3: {
+            f.empty = true;
+            for (auto c = p.child_begin; c < p.child_end; c++) {
+                const First& k = first_of(particle_children[c]);
+                bool kid_empty = k.empty || particles[particle_children[c]].min == 0;
+                merge(k);
+                if (!kid_empty) { f.empty = false; break; }
+            }
+            break;
+        }
+        case 2:
+        case 4: {
+            f.empty = p.child_begin == p.child_end || p.kind == 4;
+            for (auto c = p.child_begin; c < p.child_end; c++) {
+                const First& k = first_of(particle_children[c]);
+                merge(k);
+                if (k.empty || particles[particle_children[c]].min == 0) f.empty = true;
+            }
+            if (p.kind == 4) {
+                // all: empty only when every member is optional
+                f.empty = true;
+                for (auto c = p.child_begin; c < p.child_end; c++)
+                    if (particles[particle_children[c]].min > 0 && !first_of(particle_children[c]).empty) f.empty = false;
+            }
+            break;
+        }
+        default: f.any = true; f.empty = true;
+    }
+    std::sort(f.names.begin(), f.names.end());
+    f.names.erase(std::unique(f.names.begin(), f.names.end()), f.names.end());
+    return f;
+}
+
+const First& first_of(std::int32_t pi) {
+    static std::mutex mu;
+    static std::unique_ptr<std::atomic<First*>[]> cache = [] {
+        std::unique_ptr<std::atomic<First*>[]> c(new std::atomic<First*>[n_particles]);
+        for (std::size_t i = 0; i < n_particles; i++) c[i].store(nullptr, std::memory_order_relaxed);
+        return c;
+    }();
+    if (First* f = cache[pi].load(std::memory_order_acquire)) return *f;
+    // mark in progress with an "anything goes" entry so recursive models terminate
+    static First wildcard{{}, true, true};
+    {
+        std::lock_guard lk(mu);
+        if (First* f = cache[pi].load(std::memory_order_relaxed)) return *f;
+        cache[pi].store(&wildcard, std::memory_order_release);
+    }
+    auto* f = new First(compute_first(pi));
+    cache[pi].store(f, std::memory_order_release);
+    return *f;
+}
+
 struct Matcher {
     const std::vector<std::pair<std::string, pugi::xml_node>>& kids;
+    // once() results for (particle, position); a match is a pure function of these
+    mutable std::unordered_map<std::uint64_t, long> memo;
+
+    // Can particle pi start at pos? false means it certainly can't consume kids[pos].
+    bool may_start(std::int32_t pi, long pos) const {
+        if (pos >= (long)kids.size()) return true;
+        const First& f = first_of(pi);
+        if (f.any) return true;
+        return std::binary_search(f.names.begin(), f.names.end(), std::string_view(kids[pos].first));
+    }
 
     bool any_ok(std::uint8_t ns, std::string_view q, TypeId parent) const {
         std::string_view pre = prefix(q);
@@ -607,6 +704,16 @@ struct Matcher {
 
     // Try to match one occurrence of particle p at pos. Returns new pos or -1.
     long once(std::int32_t pi, long pos, TypeId parent) const {
+        const RawParticle& p = particles[pi];
+        if (p.kind == 0 || p.kind == 5) return once_raw(pi, pos, parent);
+        std::uint64_t key = (std::uint64_t(std::uint32_t(pi)) << 32) | std::uint32_t(pos);
+        if (auto it = memo.find(key); it != memo.end()) return it->second;
+        long r = once_raw(pi, pos, parent);
+        memo.emplace(key, r);
+        return r;
+    }
+
+    long once_raw(std::int32_t pi, long pos, TypeId parent) const {
         const RawParticle& p = particles[pi];
         switch (p.kind) {
             case 0: {
@@ -629,10 +736,22 @@ struct Matcher {
             }
             case 2: {
                 long best = -1;
-                for (auto c = p.child_begin; c < p.child_end; c++) {
-                    long n = occurs(particle_children[c], pos, parent);
-                    if (n > best) best = n;
-                    if (n > pos) return n;
+                // try branches that can start with this element first; the empty ones only if none takes it
+                bool at_end = pos >= (long)kids.size();
+                for (int pass = 0; pass < 2; pass++) {
+                    for (auto c = p.child_begin; c < p.child_end; c++) {
+                        std::int32_t ci = particle_children[c];
+                        bool starts = at_end || may_start(ci, pos);
+                        if (pass == 0 && !starts) continue;
+                        if (pass == 1 && (starts || !(first_of(ci).empty || particles[ci].min == 0))) continue;
+                        long n = occurs(ci, pos, parent);
+                        if (n > best) best = n;
+                        if (n > pos) return n;
+                    }
+                    if (best >= 0 && pass == 0 && !at_end) {
+                        // a starting branch matched empty; an empty-only branch can't do better
+                        return best;
+                    }
                 }
                 return best;
             }
@@ -661,6 +780,8 @@ struct Matcher {
         long cur = pos;
         std::uint32_t count = 0;
         while (p.max == 0 || count < p.max) {
+            // nothing more of this particle can start here: stop without trying
+            if (!may_start(pi, cur) && !first_of(pi).empty) break;
             long n = once(pi, cur, parent);
             if (n < 0) break;
             if (n == cur) { count = std::max<std::uint32_t>(count, p.min); break; }
@@ -746,9 +867,10 @@ pugi::xml_node ac_select(pugi::xml_node ac) {
 }
 
 struct Kid {
-    std::string q;
+    std::string_view q;
     pugi::xml_node n;
-    Ign ign;  // scope the child lives in
+    const Ign* ign;  // scope the child lives in (points at the parent's scope unless the child declares its own)
+    std::shared_ptr<Ign> own;
 };
 
 // Logical children after MCE preprocessing: ignorable elements skipped,
@@ -760,14 +882,25 @@ void collect_kids(pugi::xml_node n, TypeId t, const Ign& ign, std::vector<Kid>& 
         if (q == "mc:AlternateContent") {
             Ign s = scope_of(ign, k);
             auto br = ac_select(k);
-            if (br) collect_kids(br, t, scope_of(s, br), kids);
+            if (br) {
+                // branch children need a scope that outlives this call
+                auto sc = std::make_shared<Ign>(scope_of(s, br));
+                std::size_t before = kids.size();
+                collect_kids(br, t, *sc, kids);
+                for (std::size_t i = before; i < kids.size(); i++)
+                    if (kids[i].ign == sc.get()) kids[i].own = sc;
+            }
             continue;
         }
-        Ign s = scope_of(ign, k);
+        Kid kid{q, k, &ign, nullptr};
+        if (k.attribute("mc:Ignorable")) {
+            kid.own = std::make_shared<Ign>(scope_of(ign, k));
+            kid.ign = kid.own.get();
+        }
         // Like the SDK: an element the parent's model doesn't know is skipped
         // when its namespace is ignorable; known ones are always validated.
-        if (child_type(t, q) < 0 && ignorable(s, q)) continue;
-        kids.push_back({std::string(q), k, std::move(s)});
+        if (child_type(t, q) < 0 && ignorable(*kid.ign, q)) continue;
+        kids.push_back(std::move(kid));
     }
 }
 
@@ -791,7 +924,8 @@ void validate_node(Ctx& c, pugi::xml_node n, TypeId t, const Ign& ign) {
     std::vector<Kid> kids;
     collect_kids(n, t, ign, kids);
     std::vector<std::pair<std::string, pugi::xml_node>> known;
-    for (auto& k : kids) known.emplace_back(k.q, k.n);
+    known.reserve(kids.size());
+    for (auto& k : kids) known.emplace_back(std::string(k.q), k.n);
     std::int32_t pi = idx().particle[t];
     if (pi < 0) {
         if (!known.empty()) add(c, known[0].second, "element " + known[0].first + " is not allowed in " + std::string(n.name()));
@@ -822,7 +956,7 @@ void validate_node(Ctx& c, pugi::xml_node n, TypeId t, const Ign& ign) {
     }
     for (auto& k : kids) {
         TypeId ct = child_type(t, k.q);
-        if (ct >= 0) validate_node(c, k.n, ct, k.ign);
+        if (ct >= 0) validate_node(c, k.n, ct, *k.ign);
     }
 }
 

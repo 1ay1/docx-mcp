@@ -470,7 +470,7 @@ std::vector<ToolDef> make_tools() {
                  // refuse to write invalid markup we introduced; issues already in the
                  // file when it was opened don't block saving
                  auto v = validate_doc(s.doc);
-                 if (!v["valid"].get<bool>() && v["issue_count"].get<int>() > s.baseline_issues)
+                 if (!v["valid"].get<bool>() && v["issue_count"].get<int>() > s.baseline())
                      throw std::runtime_error("not saved: document has schema issues: " + v["issues"].dump());
              }
              path = util::normalize_path(path);

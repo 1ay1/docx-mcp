@@ -28,6 +28,18 @@ int count_issues(wml::Document& d) {
 }
 }  // namespace
 
+int Session::baseline() {
+    if (baseline_issues < 0) {
+        if (opened.empty()) baseline_issues = 0;
+        else {
+            auto d = wml::Document::from_bytes(opened);
+            baseline_issues = count_issues(d);
+            opened.clear();
+        }
+    }
+    return baseline_issues;
+}
+
 std::string Sessions::open(const std::string& path_in, bool create_missing) {
     std::lock_guard lk(mu);
     std::string path = canon(path_in);
@@ -36,8 +48,9 @@ std::string Sessions::open(const std::string& path_in, bool create_missing) {
     auto s = std::make_unique<Session>();
     s->path = path;
     if (util::file_exists(path)) {
-        s->doc = wml::Document::open(path);
-        s->baseline_issues = count_issues(s->doc);
+        s->opened = util::read_file(path);
+        s->doc = wml::Document::from_bytes(s->opened);
+        s->baseline_issues = -1;  // counted on first need (only when a save finds issues)
     } else if (create_missing) {
         s->doc = wml::Document::create();
         s->dirty = true;

@@ -288,13 +288,14 @@ std::vector<StyleInfo> list_styles(Document& d, bool latent) {
 std::string upsert_style(Document& d, const std::string& id_in, const Json& props) {
     auto st = d.styles();
     std::string id = id_in;
-    pugi::xml_node s = find_style(d, id);
-    if (!s && builtin(id)) { ensure_style(d, id); s = find_style(d, id); }
+    // no id: the name picks the style (or Word's derived id for a new one)
+    if (id.empty() && props.contains("name")) {
+        if (auto byname = find_style(d, props["name"].get<std::string>())) id = xml::attr(byname, "w:styleId");
+        else for (char c : props["name"].get<std::string>()) if (c != ' ') id += c;
+    }
+    pugi::xml_node s = id.empty() ? pugi::xml_node() : find_style(d, id);
+    if (!s && !id.empty() && builtin(id)) { ensure_style(d, id); s = find_style(d, id); }
     if (!s) {
-        // Word derives the id from the name by dropping spaces
-        if (id.empty() && props.contains("name")) {
-            for (char c : props["name"].get<std::string>()) if (c != ' ') id += c;
-        }
         if (id.empty()) throw std::runtime_error("style id or name required");
         s = st.append_child("w:style");
         xml::set_attr(s, "w:type", props.value("type", std::string("paragraph")));

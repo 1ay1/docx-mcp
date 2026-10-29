@@ -14,7 +14,9 @@ struct Session {
     std::string path;          // where it came from / saves to
     wml::Document doc;
     bool dirty = false;
-    int baseline_issues = 0;  // schema issues present when opened
+    int baseline_issues = 0;  // schema issues present when opened (-1: not counted yet)
+    util::Bytes opened;       // the file as opened, until the baseline is counted
+    int baseline();
     std::vector<util::Bytes> undo;  // snapshots before each mutating call
     long generation = 0;            // bumps on every change
     long pages_generation = -1;     // generation `pages` was laid out at

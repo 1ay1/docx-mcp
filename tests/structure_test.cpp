@@ -333,7 +333,12 @@ TEST(table_style_conditional) {
     CHECK(j["conditional"]["header_row"]["run"]["bold"].get<bool>());
     // remove a part, use the style on a table
     upsert_style(d, id, {{"conditional", {{"first_column", nullptr}}}});
-    CHECK(table_style_json(find_style(d, id))["conditional"].size() == 3);
+    // the same name again updates the style instead of adding a second one
+    CHECK_EQ(upsert_style(d, "", {{"name", "Report Table"}, {"type", "table"}, {"conditional", {{"even_rows", {{"bold", true}}}}}}), id);
+    int count = 0;
+    for (auto s2 : d.styles().children("w:style")) if (xml::attr(s2, "w:styleId") == id) count++;
+    CHECK_EQ(count, 1);
+    CHECK(table_style_json(find_style(d, id))["conditional"].size() == 4);
     auto tbl = insert_table(d, paragraphs(d.body())[0], true, {{"Item", "Cost"}, {"A", "1"}, {"B", "2"}, {"Total", "3"}},
                             {{"style", id}, {"header_row", true}}, {});
     format_table(d, tbl, {{"total_row", true}, {"banded_rows", true}}, {});
