@@ -79,6 +79,7 @@ TASKS = [
     ("paste this html into the document", "insert_html"),
     ("draw an arrow shape", "insert_shape"),
     ("add a bar chart of these numbers", "insert_chart"),
+    ("cite a book and add a bibliography", "insert_citation"),
     ("add a figure caption", "insert_caption"),
     ("insert a cross-reference to a figure", "insert_cross_reference"),
 ]

@@ -1335,6 +1335,7 @@ FieldUpdateResult update_fields(Document& d, const FieldUpdate& u) {
         r.updated += detail::rebuild_tocs(d);
     }
     r.updated += evaluate_fields(d, u, pm ? &*pm : nullptr);
+    r.updated += rebuild_bibliographies(d, "");
     if (pm) {
         // TOC page numbers: each entry's PAGEREF hidden bookmark now has a page
         // (handled by evaluate_fields through PAGEREF). Index entries next.

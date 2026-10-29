@@ -135,7 +135,19 @@ class Fuzz:
 
     def extra(self, pid, s, e, track):
         r = self.r
-        k = r.randint(0, 58)
+        k = r.randint(0, 59)
+        if k == 59:
+            c = r.random()
+            if c < 0.3:
+                return self.call("add_source", type=r.choice(["book", "article", "website"]), title=self.word() or "T", authors=["Doe, J"], year="2000")
+            if c < 0.6:
+                src, _ = self.call("add_source", list=True)
+                self.log.pop()
+                tags = [x["tag"] for x in (src or {}).get("sources", [])] if isinstance(src, dict) else []
+                if tags:
+                    return self.call("insert_citation", paragraph=pid, position=s, source=r.choice(tags), **track)
+                return self.call("add_source", list=True)
+            return self.call("insert_bibliography", paragraph=pid, style=r.choice(["APA", "MLA", "Chicago", "IEEE"]), **track)
         if k == 58:
             if r.random() < 0.4:
                 return self.call("set_chart_data", chart=r.randint(1, 2), series=[{"values": [r.randint(-5, 50) for _ in range(3)]}])

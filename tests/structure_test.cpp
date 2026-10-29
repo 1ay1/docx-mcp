@@ -499,6 +499,54 @@ TEST(charts) {
     save(d, "charts");
 }
 
+TEST(citations_and_bibliography) {
+    auto d = Document::create();
+    auto p = paragraphs(d.body())[0];
+    insert_text(d, p, 0, U"Results agree with prior work.", nullptr, {});
+    auto t1 = add_source(d, {{"type", "book"}, {"title", "The Art of Programming"}, {"authors", {"Knuth, Donald Ervin"}}, {"year", 1968},
+                             {"publisher", "Addison-Wesley"}, {"city", "Reading"}});
+    auto t2 = add_source(d, {{"type", "article"}, {"title", "A Relational Model of Data"}, {"authors", {"Edgar F. Codd"}}, {"year", "1970"},
+                             {"journal", "Communications of the ACM"}, {"volume", "13"}, {"issue", "6"}, {"pages", "377-387"}});
+    CHECK_EQ(t1, std::string("Knuth68"));
+    CHECK_EQ(t2, std::string("Codd70"));
+    insert_citation(d, p, 29, t2, "", {});
+    insert_citation(d, p, (int)analyze(p).vis.size(), t1, "12", {});
+    CHECK(analyze(p).utf8().find("(Codd, 1970)") != std::string::npos);
+    CHECK(analyze(p).utf8().find("(Knuth, 1968, p. 12)") != std::string::npos);
+    CHECK_EQ(insert_bibliography(d, p, "References", {}), 2);
+    auto text = to_text(d, "current", false);
+    // APA, sorted by author
+    auto codd = text.find("Codd, E. F. (1970). A Relational Model of Data. Communications of the ACM, 13(6), 377-387.");
+    auto knuth = text.find("Knuth, D. E. (1968). The Art of Programming. Addison-Wesley.");
+    CHECK(codd != std::string::npos);
+    CHECK(knuth != std::string::npos);
+    CHECK(codd < knuth);
+    // switch to IEEE: numbered in citation order
+    rebuild_bibliographies(d, "IEEE");
+    text = to_text(d, "current", false);
+    CHECK(text.find("[1] E. F. Codd") != std::string::npos);
+    CHECK(text.find("[2] D. E. Knuth") != std::string::npos);
+    CHECK_EQ(text.find("Knuth, D. E. (1968)"), std::string::npos);
+    rebuild_bibliographies(d, "IEEE");
+    text = to_text(d, "current", false);
+    CHECK_EQ(text.find("[2] D. E. Knuth"), text.rfind("[2] D. E. Knuth"));
+    CHECK(analyze(p).utf8().find("[1]") != std::string::npos);
+    auto srcs = list_sources(d);
+    CHECK_EQ(srcs.size(), std::size_t(2));
+    CHECK(srcs[0]["cited"].get<bool>());
+    bool bad = false;
+    try { insert_citation(d, p, 0, "Nope99", "", {}); } catch (std::exception&) { bad = true; }
+    CHECK(bad);
+    bad = false;
+    try { add_source(d, {{"type", "book"}, {"title", "x"}, {"tag", "Knuth68"}}); } catch (std::exception&) { bad = true; }
+    CHECK(bad);
+    std::string why;
+    CHECK_EQ(schema_issues(d, &why), 0);
+    save(d, "citations");
+    auto re = Document::from_bytes(d.to_bytes());
+    CHECK_EQ(list_sources(re).size(), std::size_t(2));
+}
+
 TEST(lists_tracked) {
     auto d = sample(true);
     auto p = paragraphs(d.body())[0];

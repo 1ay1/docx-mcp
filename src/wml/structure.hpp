@@ -237,6 +237,20 @@ int define_list(Document& d, const Json& spec);
 // The document's lists: num id, levels, how many paragraphs use each.
 Json list_definitions(Document& d);
 
+// ── citations and bibliography (References) ──
+// Sources live in the b:Sources custom XML part Word uses (Manage Sources).
+Json list_sources(Document& d);
+// src: {type: book|article|website|report|conference|chapter|..., title, authors: ["Last, First" | "First Last" | {last, first}],
+// year, publisher, city, journal, volume, issue, pages, url, tag}. Returns the tag.
+std::string add_source(Document& d, const Json& src);
+bool remove_source(Document& d, const std::string& tag);
+// A CITATION field for a source at pos of p (pages: \p page locator).
+void insert_citation(Document& d, pugi::xml_node p, int pos, const std::string& tag, const std::string& pages, const EditOpts& o);
+// A BIBLIOGRAPHY field after `after`, entries in the document's style. Returns the source count.
+int insert_bibliography(Document& d, pugi::xml_node after, const std::string& title, const EditOpts& o);
+// Re-render bibliographies and citations, optionally switching style (APA, MLA, Chicago, IEEE).
+int rebuild_bibliographies(Document& d, const std::string& style);
+
 // ── charts ──
 // Every chart: type, title, series with categories and values (Word's cached data).
 Json list_charts(Document& d);

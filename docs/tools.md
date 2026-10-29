@@ -1,6 +1,6 @@
 # Tool reference
 
-Generated from `docx-mcp --list-tools` by `tools/gen_tool_docs.py`. 118 tools.
+Generated from `docx-mcp --list-tools` by `tools/gen_tool_docs.py`. 121 tools.
 
 Every tool that edits takes `doc` (a handle or a file path), and most take `track` (record as a tracked change) and `author`. Paragraphs are addressed by the `id` that `read_document` returns.
 
@@ -15,7 +15,7 @@ Every tool that edits takes `doc` (a handle or a file path), and most take `trac
 - [Track changes](#track-changes): `set_track_changes`, `list_revisions`, `accept_revisions`, `reject_revisions`, `compare_documents`
 - [Comments](#comments): `add_comment`, `list_comments`, `reply_comment`, `resolve_comment`, `edit_comment`, `delete_comment`
 - [Tables](#tables): `insert_table`, `read_table`, `set_cell`, `table_rows`, `table_columns`, `merge_cells`, `split_cell`, `format_table`, `sort_table`, `convert_table`, `delete_table`
-- [Insert](#insert): `insert_picture`, `list_pictures`, `format_picture`, `delete_picture`, `insert_text_box`, `insert_shape`, `insert_chart`, `list_charts`, `set_chart_data`, `insert_break`, `insert_hyperlink`, `list_hyperlinks`, `remove_hyperlinks`, `add_bookmark`, `list_bookmarks`, `delete_bookmark`, `insert_note`, `list_notes`, `delete_note`, `insert_field`, `list_fields`, `update_fields`, `unlink_fields`, `insert_toc`, `mark_index_entry`, `insert_index`, `insert_equation`, `insert_caption`, `insert_cross_reference`, `list_reference_targets`, `add_content_control`, `list_content_controls`, `set_content_control`
+- [Insert](#insert): `insert_picture`, `list_pictures`, `format_picture`, `delete_picture`, `insert_text_box`, `insert_shape`, `insert_chart`, `list_charts`, `set_chart_data`, `insert_break`, `insert_hyperlink`, `list_hyperlinks`, `remove_hyperlinks`, `add_bookmark`, `list_bookmarks`, `delete_bookmark`, `insert_note`, `list_notes`, `delete_note`, `insert_field`, `list_fields`, `update_fields`, `unlink_fields`, `insert_toc`, `mark_index_entry`, `insert_index`, `insert_equation`, `insert_caption`, `insert_cross_reference`, `list_reference_targets`, `add_source`, `insert_citation`, `insert_bibliography`, `add_content_control`, `list_content_controls`, `set_content_control`
 - [Mailings](#mailings): `mail_merge`, `document_variables`
 - [Page layout](#page-layout): `get_page_setup`, `set_page_setup`, `set_header_footer`, `remove_header_footer`, `read_header_footer`, `set_watermark`, `theme`
 - [File](#file): `get_properties`, `set_properties`, `get_settings`, `set_settings`, `protect_document`, `unprotect_document`
@@ -1181,6 +1181,57 @@ What a cross-reference can point at: headings, figure/table captions, bookmarks,
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+
+### `add_source`
+
+References > Manage Sources: add a source (book, article, website, report, conference, chapter, ...) with title, authors (["Last, First"] or ["First Last"]), year, publisher, city, journal, volume, issue, pages, url. Returns its tag for insert_citation. Also list (list: true) or remove (remove: tag).
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `authors` | array of string |  |  |
+| `book_title` | string |  | For chapters. |
+| `city` | string |  |  |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `doi` | string |  |  |
+| `issue` | string |  |  |
+| `journal` | string |  |  |
+| `list` | boolean |  | List the sources instead. |
+| `pages` | string |  |  |
+| `publisher` | string |  |  |
+| `remove` | string |  | Remove the source with this tag. |
+| `site` | string |  | Website name. |
+| `tag` | string |  | Default: author + year. |
+| `title` | string |  |  |
+| `type` | string |  | book (default), article, website, report, conference, chapter, magazine, thesis, ... |
+| `url` | string |  |  |
+| `volume` | string |  |  |
+| `year` | string |  |  |
+
+### `insert_citation`
+
+Cite a source in the text (in-text citation by tag from add_source), at a position: (Smith, 2020) in APA, [1] in IEEE. pages adds a page locator. Then insert_bibliography lists the cited books and articles.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `after` | string |  | Insert after this text. |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `pages` | string |  | e.g. 12 or 12-14. |
+| `paragraph` | string | yes | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
+| `position` | integer |  | Character offset to insert at (default end). |
+| `source` | string | yes | Source tag. |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
+
+### `insert_bibliography`
+
+Insert a bibliography (References > Bibliography) after a paragraph, listing every source. style switches the citation style for the whole document: APA, MLA, Chicago or IEEE; Word refreshes it the same way.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `paragraph` | string |  | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
+| `style` | `APA` \\| `MLA` \\| `Chicago` \\| `IEEE` |  | Citation style. |
+| `title` | string |  | Heading above it (default "References"; empty for none). |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 
 ### `add_content_control`
 

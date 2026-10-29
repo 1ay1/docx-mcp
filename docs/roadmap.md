@@ -10,7 +10,7 @@ to touch raw XML to get there.
 
 ## Where we are (main, after v0.3.0)
 
-118 tools cover Word's Home, Insert, Design, Layout, References, Mailings and Review
+121 tools cover Word's Home, Insert, Design, Layout, References, Mailings and Review
 tabs: documents, text, paragraphs, styles, lists, tables, pictures, text
 boxes, links, bookmarks, notes, fields, TOC, table of figures, index,
 equations, content controls, sections, page borders and color, watermarks,
@@ -73,7 +73,7 @@ Status is checked against the code.
 | 1.5 | Page color and borders | Design | Done | `set_page_setup` `page_color`, `page_borders` |
 | 1.6 | Columns | Layout > Columns | Done | `columns`, `column_space`, `column_line`, `column_widths`; column breaks via `insert_break` |
 | 1.7 | Tables | Table Layout | Done | Split cells and nested tables, `sort_table`, `convert_table`, `repeat_header`, row height. Floating tables (`format_table float`), `cant_split`, alt text, RTL tables, vertical cell text (`text_direction: up/down`) |
-| 1.8 | Table of figures, index, bibliography | References | Figures and index done | `insert_toc` with `captions`, `mark_index_entry`, `insert_index`. Left: citations and bibliography |
+| 1.8 | Table of figures, index, bibliography | References | Done | `insert_toc` with `captions`, `mark_index_entry`, `insert_index`, `add_source`, `insert_citation`, `insert_bibliography` (APA, MLA, Chicago, IEEE, sources in Word's b:Sources store) |
 | 1.9 | Lists: multi-level control | Define New Multilevel List | Done (picture bullets left) | `define_list` presets (numbered, legal, outline, headings, chapters, bullets, checklist) with per-level format, text, start, restart, indents, linked heading styles; `list_lists`; `apply_list num_id` |
 | 1.10 | Styles: full definition | Modify Style | Done | `modify_style` sets any paragraph or run property, and for table styles whole-table borders and conditional formats (header row, total row, banded rows, first and last column). `import_styles` copies styles from a template with their based-on chains and numbering |
 | 1.11 | Themes | Design > Themes | Done | `theme` reads and sets theme colors and heading/body fonts, with Word's built-in color sets; cached theme-derived colors in styles are refreshed |

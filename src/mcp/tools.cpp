@@ -1761,6 +1761,59 @@ std::vector<ToolDef> make_tools() {
              return Json{{"inserted", a.contains("captions") ? "table of figures (" + sarg(a, "captions") + ")" : "table of contents"},
                          {"note", "page numbers: update_fields pages=true fills them in now, Word does on open"}};
          }});
+    add({"add_source", "Add citation source",
+         "References > Manage Sources: add a source (book, article, website, report, conference, chapter, ...) with title, "
+         "authors ([\"Last, First\"] or [\"First Last\"]), year, publisher, city, journal, volume, issue, pages, url. "
+         "Returns its tag for insert_citation. Also list (list: true) or remove (remove: tag).",
+         obj({{"doc", kDoc}, {"type", str("book (default), article, website, report, conference, chapter, magazine, thesis, ...")},
+              {"title", str("")}, {"authors", arr(str(""), "")}, {"year", str("")}, {"publisher", str("")}, {"city", str("")},
+              {"journal", str("")}, {"volume", str("")}, {"issue", str("")}, {"pages", str("")}, {"url", str("")},
+              {"book_title", str("For chapters.")}, {"site", str("Website name.")}, {"doi", str("")}, {"tag", str("Default: author + year.")},
+              {"list", boolean("List the sources instead.")}, {"remove", str("Remove the source with this tag.")}},
+             {"doc"}),
+         false, false, [](Sessions& S, const Json& a) {
+             if (barg(a, "list", false)) return Json{{"sources", list_sources(sess(S, a).doc)}};
+             auto& s = mut(S, a);
+             if (a.contains("remove")) {
+                 if (!remove_source(s.doc, need(a, "remove"))) throw std::runtime_error("no source with tag '" + sarg(a, "remove") + "'");
+                 return Json{{"removed", sarg(a, "remove")}, {"sources", list_sources(s.doc).size()}};
+             }
+             Json src = a;
+             for (auto k : {"doc", "list", "remove", "author"}) src.erase(k);
+             if (a.contains("authors")) src["authors"] = strs(a, "authors");
+             auto tag = add_source(s.doc, src);
+             return Json{{"tag", tag}, {"sources", list_sources(s.doc).size()}};
+         }});
+    add({"insert_citation", "Insert citation",
+         "Cite a source in the text (in-text citation by tag from add_source), at a position: (Smith, 2020) in APA, [1] in IEEE. "
+         "pages adds a page locator. Then insert_bibliography lists the cited books and articles.",
+         obj({{"doc", kDoc}, {"paragraph", kPara}, {"position", integer("")}, {"after", str("Insert after this text.")},
+              {"source", str("Source tag.")}, {"pages", str("e.g. 12 or 12-14.")}, {"track", kTrack}},
+             {"doc", "paragraph", "source"}),
+         false, false, [](Sessions& S, const Json& a) {
+             auto& s = mut(S, a);
+             auto r = para(s, a);
+             insert_citation(s.doc, r.p, pos_in(r.p, a), need(a, "source"), sarg(a, "pages"), track(a));
+             return Json{{"paragraph", para_brief(s.doc, r.p)}};
+         }});
+    add({"insert_bibliography", "Bibliography",
+         "Insert a bibliography (References > Bibliography) after a paragraph, listing every source. style switches the "
+         "citation style for the whole document: APA, MLA, Chicago or IEEE; Word refreshes it the same way.",
+         obj({{"doc", kDoc}, {"paragraph", kPara}, {"title", str("Heading above it (default \"References\"; empty for none).")},
+              {"style", enm({"APA", "MLA", "Chicago", "IEEE"}, "Citation style.")}, {"track", kTrack}},
+             {"doc"}),
+         false, false, [](Sessions& S, const Json& a) {
+             auto& s = mut(S, a);
+             if (a.contains("style") && !a.contains("paragraph")) {
+                 // restyle only
+                 int n = rebuild_bibliographies(s.doc, sarg(a, "style"));
+                 return Json{{"style", sarg(a, "style")}, {"bibliographies", n}};
+             }
+             auto r = para(s, a);
+             if (a.contains("style")) rebuild_bibliographies(s.doc, sarg(a, "style"));
+             int n = insert_bibliography(s.doc, r.p, a.contains("title") ? sarg(a, "title") : "References", track(a));
+             return Json{{"sources", n}};
+         }});
     add({"mark_index_entry", "Mark index entry",
          "Mark a word or phrase for the index (References > Mark Entry). Put it after `match` text (or at position). "
          "sub makes a sub-entry under term. Then insert_index builds the index.",
