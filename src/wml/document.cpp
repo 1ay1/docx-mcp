@@ -8,6 +8,7 @@
 
 #include "schema/schema.hpp"
 #include "util/assets.hpp"
+#include "util/fsio.hpp"
 #include "util/util.hpp"
 #include "wml/repair.hpp"
 #include "xml/xml.hpp"
@@ -110,6 +111,81 @@ util::Bytes Document::to_bytes() {
 }
 
 util::Bytes Document::snapshot() { return pkg_.to_bytes(0); }
+
+std::string Document::kind() const {
+    std::string ct = pkg_.content_type_of(main_);
+    if (ct == opc::ct::templateMain) return "dotx";
+    if (ct == opc::ct::templateMacro) return "dotm";
+    if (ct == opc::ct::documentMacro) return "docm";
+    return "docx";
+}
+
+bool Document::set_kind(const std::string& ext_in) {
+    std::string ext = util::lower(ext_in);
+    if (!ext.empty() && ext[0] == '.') ext = ext.substr(1);
+    const char* ct = ext == "docx" ? opc::ct::document
+                   : ext == "dotx" ? opc::ct::templateMain
+                   : ext == "docm" ? opc::ct::documentMacro
+                   : ext == "dotm" ? opc::ct::templateMacro
+                                   : nullptr;
+    if (!ct) return false;
+    std::string was = kind();
+    pkg_.set_override(main_, ct);
+    // a macro-free file can't carry a VBA project (Word refuses to open it)
+    if (ext == "docx" || ext == "dotx") {
+        if (const auto* r = pkg_.rels_if(main_)) {
+            std::vector<std::string> drop, parts;
+            for (auto& rel : r->items)
+                if (rel.type.find("vbaProject") != std::string::npos || rel.type.find("keyMapCustomizations") != std::string::npos ||
+                    rel.type.find("attachedToolbars") != std::string::npos) {
+                    drop.push_back(rel.id);
+                    parts.push_back(opc::Package::resolve(main_, rel.target));
+                }
+            for (auto& id : drop) pkg_.rels(main_).remove(id);
+            for (auto& p : parts) {
+                // the project's own rels (vbaData) go too
+                if (const auto* pr = pkg_.rels_if(p))
+                    for (auto& rel : pr->items) if (pkg_.has(opc::Package::resolve(p, rel.target))) pkg_.remove_part(opc::Package::resolve(p, rel.target));
+                if (pkg_.has(p)) pkg_.remove_part(p);
+            }
+        }
+    }
+    (void)was;
+    return true;
+}
+
+Document Document::from_template(const std::string& path) {
+    Document d = Document::open(path);
+    bool macros = d.kind() == "dotm";
+    d.set_kind(macros ? "docm" : "docx");
+    // File > New: the new document points back at its template
+    auto st = d.settings();
+    std::string sp = d.related(opc::rt::settings);
+    auto at = st.child("w:attachedTemplate");
+    if (!at) at = schema::ensure_child(st, "w:attachedTemplate");
+    std::string rid;
+    for (auto& rel : d.pkg_.rels(sp).items)
+        if (rel.type == opc::rt::attachedTemplate) rid = rel.id;
+    std::string target = "file:///" + util::normalize_path(path);
+    std::replace(target.begin(), target.end(), '\\', '/');
+    if (target.rfind("file:////", 0) == 0) target.erase(7, 1);
+    if (rid.empty()) rid = d.pkg_.rels(sp).add(opc::rt::attachedTemplate, target, opc::TargetMode::External);
+    else
+        for (auto& rel : d.pkg_.rels(sp).items)
+            if (rel.id == rid) { rel.target = target; rel.mode = opc::TargetMode::External; }
+    xml::set_attr(at, "r:id", rid);
+    xml::declare(xml::root_of(st), "r");
+    // a fresh document: new identity, and the template's revision history isn't ours
+    auto core = d.core_props(false);
+    if (core) {
+        for (auto q : {"cp:revision", "cp:lastPrinted", "dcterms:modified", "dcterms:created", "cp:lastModifiedBy"})
+            if (auto n = core.child(q)) core.remove_child(n);
+    }
+    if (auto d14 = st.child("w14:docId")) xml::set_attr(d14, "w14:val", d.new_hex_id());
+    if (auto d15 = st.child("w15:docId")) xml::set_attr(d15, "w15:val", util::new_guid());
+    if (auto rs = st.child("w:rsids")) st.remove_child(rs);
+    return d;
+}
 
 void Document::save(const std::string& path) {
     finalize();

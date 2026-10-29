@@ -37,18 +37,19 @@ Open a .docx file for reading/editing. Returns a handle. Opening an already open
 
 ### `create_document`
 
-Create a new blank document exactly like Word's File > New > Blank document (Calibri 11, Office theme, Letter). Saved to `path` on save_document.
+Create a new document: blank exactly like Word's File > New > Blank document (Calibri 11, Office theme, Letter), or from a template (.dotx / .dotm / .docx) with its styles, text, headers and settings, like File > New from a template. Saved to `path` on save_document; a .dotx path saves a template.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `author` | string |  | Author for revisions/comments and document properties. |
 | `paper` | `letter` \\| `a4` \\| `legal` \\| `a5` \\| `a3` |  | Paper size (default letter). |
 | `path` | string | yes | Where save_document will write it. |
+| `template` | string |  | Start from this .dotx/.dotm/.docx instead of blank. |
 | `title` | string |  | Document title property. |
 
 ### `save_document`
 
-Write the document to disk (atomic replace). `path` saves a copy elsewhere (Save As) and retargets the handle.
+Write the document to disk (atomic replace). `path` saves a copy elsewhere (Save As) and retargets the handle. The extension picks the kind: .docx, .dotx (template), .docm/.dotm (macros kept).
 
 | Argument | Type | Required | Description |
 |---|---|---|---|

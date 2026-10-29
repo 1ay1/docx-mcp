@@ -88,6 +88,13 @@ public:
     void finalize();
     // Renumber repeated revision / bookmark ids (copies made by edits).
     void dedupe_ids();
+    // Make the main part a .docx / .dotx / .docm / .dotm by extension ("docx", "dotx", ...).
+    // Macro-free kinds drop a VBA project. Returns false when the extension isn't a Word kind.
+    bool set_kind(const std::string& ext);
+    std::string kind() const;
+    // File > New from a template: a document carrying the template's styles,
+    // content, headers, numbering and settings, with attachedTemplate set.
+    static Document from_template(const std::string& path);
 
 private:
     opc::Package pkg_;

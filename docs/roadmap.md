@@ -78,7 +78,7 @@ Status is checked against the code.
 | 1.10 | Styles: full definition | Modify Style | Done | `modify_style` sets any paragraph or run property, and for table styles whole-table borders and conditional formats (header row, total row, banded rows, first and last column). `import_styles` copies styles from a template with their based-on chains and numbering |
 | 1.11 | Themes | Design > Themes | Done | `theme` reads and sets theme colors and heading/body fonts, with Word's built-in color sets; cached theme-derived colors in styles are refreshed |
 | 1.12 | Charts | Insert > Chart | Done | `list_charts` reads cached data of every chart type; `insert_chart` makes column, bar, line, pie, doughnut, area and scatter charts; `set_chart_data` edits them. Left: an embedded workbook for Edit Data |
-| 1.13 | Building blocks and templates | Quick Parts, .dotx | Open | Glossary document, create from `.dotx` |
+| 1.13 | Building blocks and templates | Quick Parts, .dotx | Templates done | `create_document template=` (File > New from a .dotx/.dotm/.docx, attachedTemplate set), Save As .dotx. Left: the glossary document (Quick Parts) |
 | 1.14 | Mail merge and document variables | Mailings | Done | `mail_merge` from records, CSV, TSV or JSON: one file per record or one document with a section each; IF, SKIPIF, NEXT, MERGEREC. `document_variables` reads and sets `w:docVars` |
 | 1.15 | Form fields and data binding | Developer | Partly | Content controls done. Left: legacy form fields, `w:dataBinding` to custom XML, repeating sections |
 | 1.16 | Drop caps, text effects, ruby | Font, Paragraph | Drop caps done | `drop_cap`. Left: `w14` text effects, ruby, East Asian layout |
@@ -124,8 +124,8 @@ insertion) and HTML in (`insert_html`: the same plus span styles, colspans, cell
 
 | # | Item | Notes |
 |---|---|---|
-| 3.1 | `.docm` and `.dotm` | Open, edit and save while keeping the VBA project bytes unchanged. Never run macros |
-| 3.2 | `.dotx` | Template in, document out (also 1.13) |
+| 3.1 | `.docm` and `.dotm` | Done: VBA bytes kept unchanged; Save As .docx/.dotx drops them like Word. Never run macros |
+| 3.2 | `.dotx` | Done: open, edit, save as template, new document from one |
 | 3.3 | Strict OOXML | Already read; add writing Strict when the input was Strict |
 | 3.4 | Flat OPC (`.xml` Word documents) | Read and write the single-file form |
 | 3.5 | `.doc` (Word 97-2003) | Convert in through LibreOffice when present; we don't write `.doc` |

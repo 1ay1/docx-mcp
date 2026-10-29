@@ -440,6 +440,16 @@ def main():
     if edited:
         R.call("compare_documents", original=os.path.join(work, "accepted", edited[0]),
                revised=os.path.join(work, "edited", edited[0]), output=os.path.join(work, "edited", "cmp_" + edited[0]))
+        # File > New from a template, and Save As .dotx
+        tpl = os.path.join(work, "cov_template.dotx")
+        r = R.call("open_document", path=os.path.join(work, "edited", edited[0]))
+        if r:
+            R.call("save_document", doc=r["doc"], path=tpl)
+            R.call("close_document", doc=r["doc"])
+            r = R.call("create_document", path=os.path.join(work, "edited", "from_template.docx"), template=tpl)
+            if r:
+                R.call("save_document", doc=r["doc"])
+                R.call("close_document", doc=r["doc"])
     tools = json.loads(subprocess.run([exe, "--list-tools"], capture_output=True, text=True).stdout)
     optional = set() if os.environ.get("COVER_RENDER") else {"render_pages", "export_pdf"}
     missing = sorted({t["name"] for t in tools} - R.used - optional)

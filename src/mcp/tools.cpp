@@ -419,25 +419,49 @@ std::vector<ToolDef> make_tools() {
                          {"tables", st["tables"]}, {"comments", st["comments"]}, {"revisions", st["revisions"]},
                          {"track_changes", s.doc.track_changes()}, {"protection", protection_info(s.doc)}};
          }});
-    add({"create_document", "New blank document",
-         "Create a new blank document exactly like Word's File > New > Blank document (Calibri 11, Office theme, Letter). "
-         "Saved to `path` on save_document.",
+    add({"create_document", "New document",
+         "Create a new document: blank exactly like Word's File > New > Blank document (Calibri 11, Office theme, Letter), "
+         "or from a template (.dotx / .dotm / .docx) with its styles, text, headers and settings, like File > New from a "
+         "template. Saved to `path` on save_document; a .dotx path saves a template.",
          obj({{"path", str("Where save_document will write it.")}, {"author", str("Author for revisions/comments and document properties.")},
-              {"title", str("Document title property.")}, {"paper", enm({"letter", "a4", "legal", "a5", "a3"}, "Paper size (default letter).")}},
+              {"title", str("Document title property.")}, {"paper", enm({"letter", "a4", "legal", "a5", "a3"}, "Paper size (default letter).")},
+              {"template", str("Start from this .dotx/.dotm/.docx instead of blank.")}},
              {"path"}),
          false, false, [](Sessions& S, const Json& a) {
              std::string h = S.create(need(a, "path"));
              auto& s = S.get(h);
+             if (a.contains("template") && !sarg(a, "template").empty()) {
+                 std::string tp = util::normalize_path(need(a, "template"));
+                 if (!util::file_exists(tp)) { S.close(h); throw std::runtime_error("no template at " + tp); }
+                 try {
+                     auto author = s.doc.author;
+                     s.doc = Document::from_template(tp);
+                     s.doc.author = author;
+                 } catch (...) {
+                     S.close(h);
+                     throw;
+                 }
+             }
              if (a.contains("author")) {
                  s.doc.author.name = sarg(a, "author");
                  set_core_properties(s.doc, {{"creator", s.doc.author.name}, {"last_modified_by", s.doc.author.name}});
              }
              if (a.contains("title")) set_core_properties(s.doc, {{"title", a["title"]}});
              if (a.contains("paper")) format_section(s.doc, 1, {{"paper", a["paper"]}}, {false});
-             return Json{{"doc", h}, {"path", s.path}};
+             // the kind follows the target name (.dotx makes a template)
+             auto dot = s.path.find_last_of('.');
+             if (dot != std::string::npos) s.doc.set_kind(s.path.substr(dot + 1));
+             Json out = {{"doc", h}, {"path", s.path}, {"kind", s.doc.kind()}};
+             if (a.contains("template")) {
+                 auto st = statistics(s.doc);
+                 out["from_template"] = sarg(a, "template");
+                 out["paragraphs"] = st["paragraphs"];
+             }
+             return out;
          }});
     add({"save_document", "Save",
-         "Write the document to disk (atomic replace). `path` saves a copy elsewhere (Save As) and retargets the handle.",
+         "Write the document to disk (atomic replace). `path` saves a copy elsewhere (Save As) and retargets the handle. "
+         "The extension picks the kind: .docx, .dotx (template), .docm/.dotm (macros kept).",
          obj({{"doc", kDoc}, {"path", str("Save As path (optional).")}, {"validate", boolean("Refuse to save if the result is not schema-valid (default true).")}}, {"doc"}),
          false, false, [](Sessions& S, const Json& a) {
              auto& s = sess(S, a);
@@ -450,10 +474,19 @@ std::vector<ToolDef> make_tools() {
                      throw std::runtime_error("not saved: document has schema issues: " + v["issues"].dump());
              }
              path = util::normalize_path(path);
+             std::string before = s.doc.kind();
+             if (auto dot = path.find_last_of('.'), slash = path.find_last_of("/\\"); dot != std::string::npos && (slash == std::string::npos || slash < dot)) {
+                 std::string ext = util::lower(path.substr(dot + 1));
+                 // saving a macro file as .docx/.dotx drops its macros, like Word does after asking
+                 if (s.doc.set_kind(ext) && before != s.doc.kind()) s.generation++;
+             }
              s.doc.save(path);
              s.path = path;
              s.dirty = false;
-             return Json{{"saved", s.path}, {"bytes", util::file_size(s.path)}};
+             Json out = {{"saved", s.path}, {"bytes", util::file_size(s.path)}};
+             if (before != s.doc.kind()) out["kind"] = s.doc.kind();
+             if ((before == "docm" || before == "dotm") && (s.doc.kind() == "docx" || s.doc.kind() == "dotx")) out["note"] = "macros removed (macro-free format)";
+             return out;
          }});
     add({"close_document", "Close", "Close a document without saving.", obj({{"doc", kDoc}}, {"doc"}), false, false,
          [](Sessions& S, const Json& a) {

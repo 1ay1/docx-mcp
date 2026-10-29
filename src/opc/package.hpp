@@ -41,6 +41,7 @@ inline constexpr const char* glossaryDocument = "http://schemas.openxmlformats.o
 inline constexpr const char* customXml = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml";
 inline constexpr const char* customXmlProps = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXmlProps";
 inline constexpr const char* chart = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart";
+inline constexpr const char* attachedTemplate = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/attachedTemplate";
 }  // namespace rt
 
 namespace ct {  // content types
