@@ -367,6 +367,10 @@ void Package::save(const std::string& path) const { util::write_file_atomic(path
 
 namespace {
 constexpr const char* NS_PKG = "http://schemas.microsoft.com/office/2006/xmlPackage";
+std::string_view local_name(std::string_view q) {
+    auto c = q.find(':');
+    return c == std::string_view::npos ? q : q.substr(c + 1);
+}
 }
 
 bool Package::is_flat_opc(const util::Bytes& data) {
@@ -381,38 +385,36 @@ Package Package::from_flat_opc(const util::Bytes& data) {
     auto r = d.load_buffer(data.data(), data.size(), pugi::parse_default | pugi::parse_declaration | pugi::parse_ws_pcdata);
     if (!r) throw std::runtime_error(std::string("malformed Flat OPC XML: ") + r.description());
     auto root = d.document_element();
-    // the pkg prefix as the file declares it
-    std::string pre;
-    for (auto a : root.attributes()) {
-        std::string an = a.name();
-        if (std::string(a.value()) == NS_PKG && an.rfind("xmlns:", 0) == 0) pre = an.substr(6) + ":";
-    }
-    if (std::string(root.name()) != pre + "package") throw std::runtime_error("not a Flat OPC package (root is " + std::string(root.name()) + ")");
-    // build a zip in memory with the same parts and hand it to the normal reader
-    mz_zip_archive za{};
-    if (!mz_zip_writer_init_heap(&za, 0, 1 << 16)) throw std::runtime_error("zip init failed");
-    struct Guard {
-        mz_zip_archive* z;
-        ~Guard() { mz_zip_writer_end(z); }
-    } guard{&za};
-    pugi::xml_document ct;
-    auto types = ct.append_child("Types");
-    types.append_attribute("xmlns") = NS_CT;
-    auto def = types.append_child("Default");
-    def.append_attribute("Extension") = "rels";
-    def.append_attribute("ContentType") = ct::rels;
-    auto add = [&](const std::string& name, const std::string& bytes) {
-        std::string zn = name[0] == '/' ? name.substr(1) : name;
-        if (!mz_zip_writer_add_mem(&za, zn.c_str(), bytes.data(), bytes.size(), MZ_BEST_SPEED))
-            throw std::runtime_error("zip write failed for " + zn);
+    if (local_name(root.name()) != "package") throw std::runtime_error("not a Flat OPC package (root is " + std::string(root.name()) + ")");
+    Package p;
+    auto local = [](pugi::xml_node n) {
+        std::string_view q = n.name();
+        auto c = q.find(':');
+        return c == std::string_view::npos ? q : q.substr(c + 1);
     };
-    for (auto part : root.children((pre + "part").c_str())) {
-        std::string name = part.attribute((pre + "name").c_str()).value();
-        std::string ctype = part.attribute((pre + "contentType").c_str()).value();
+    auto pattr = [&](pugi::xml_node n, const char* l) -> std::string {
+        for (auto a : n.attributes()) {
+            std::string_view q = a.name();
+            auto c = q.find(':');
+            if ((c == std::string_view::npos ? q : q.substr(c + 1)) == l) return a.value();
+        }
+        return "";
+    };
+    int found = 0;
+    for (auto part : root.children()) {
+        if (part.type() != pugi::node_element || local(part) != "part") continue;
+        std::string name = pattr(part, "name");
+        std::string ctype = pattr(part, "contentType");
         if (name.empty()) continue;
         if (name[0] != '/') name = "/" + name;
+        pugi::xml_node xd, bd;
+        for (auto c : part.children()) {
+            if (c.type() != pugi::node_element) continue;
+            if (local(c) == "xmlData") xd = c;
+            else if (local(c) == "binaryData") bd = c;
+        }
         std::string bytes;
-        if (auto xd = part.child((pre + "xmlData").c_str())) {
+        if (xd) {
             // the part's root element, serialized with its own namespace declarations
             pugi::xml_document one;
             for (auto c : xd.children())
@@ -426,28 +428,31 @@ Package Package::from_flat_opc(const util::Bytes& data) {
                 }
             }
             bytes = xml_to_string(one);
-        } else if (auto bd = part.child((pre + "binaryData").c_str())) {
+        } else if (bd) {
             std::string b64;
             for (char c : std::string(bd.text().get())) if (!std::isspace((unsigned char)c)) b64 += c;
             auto dec = util::base64_decode(b64);
             if (!dec) throw std::runtime_error("bad base64 in Flat OPC part " + name);
             bytes.assign(dec->begin(), dec->end());
         } else continue;
-        bool is_rels = name.size() > 5 && name.substr(name.size() - 5) == ".rels";
-        if (!is_rels && !ctype.empty()) {
-            auto o = types.append_child("Override");
-            o.append_attribute("PartName") = name.c_str();
-            o.append_attribute("ContentType") = ctype.c_str();
+        bool is_rels = name.size() > 5 && util::lower(name.substr(name.size() - 5)) == ".rels";
+        if (auto src = is_rels ? rels_source(name) : std::nullopt) {
+            p.rels_[key_of(*src)] = parse_rels(util::Bytes(bytes.begin(), bytes.end()));
+        } else {
+            std::string k = key_of(name);
+            Part part;
+            part.name = pct_decode(name);
+            part.content_type = ctype;
+            part.bytes.assign(bytes.begin(), bytes.end());
+            if (p.parts_.emplace(k, std::move(part)).second) p.order_.push_back(k);
         }
-        add(name, bytes);
+        found++;
     }
-    add("[Content_Types].xml", xml_to_string(ct));
-    void* buf = nullptr;
-    std::size_t sz = 0;
-    if (!mz_zip_writer_finalize_heap_archive(&za, &buf, &sz)) throw std::runtime_error("zip finalize failed");
-    util::Bytes zip((std::uint8_t*)buf, (std::uint8_t*)buf + sz);
-    mz_free(buf);
-    return from_bytes(zip);
+    if (!found) throw std::runtime_error("Flat OPC package has no parts");
+    // typical defaults so new parts of these kinds get a content type
+    p.defaults.try_emplace("rels", ct::rels);
+    p.defaults.try_emplace("xml", ct::xml);
+    return p;
 }
 
 std::string Package::to_flat_opc() const {
