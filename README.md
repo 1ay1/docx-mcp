@@ -5,17 +5,22 @@
 An MCP server that edits Word documents the way Word does.
 
 Agents get 123 tools that cover the Word ribbon: text, formatting, styles,
-lists (multilevel, numbered headings), tables (merge, split, nested, sort, convert), pictures (inline or
-floating with text wrap), text boxes, shapes, charts, headers and footers, watermarks, page
-borders and color, themes, drop caps, fields, tables of contents and figures, an
-index, captions and cross-references, citations and a bibliography (APA, MLA, Chicago, IEEE), footnotes, content controls, page
-setup, protection, Inspect Document, mail merge from CSV or JSON, and the
-whole **Review** tab: Track Changes (including moves), accept and reject,
-threaded comments and Compare. Fields are computed like Word's F9 (formulas,
-IF, dates, document properties), and with LibreOffice installed page numbers,
-TOC pages and the page each paragraph is on come from a real layout.
-A whole document can be written from Markdown or pasted as HTML in one call, and many edits
-can run as one all-or-nothing batch.
+multilevel lists and numbered headings, tables (merge, split, nested, sort,
+convert, floating, table styles), pictures, text boxes, shapes, charts,
+headers and footers, watermarks, page borders and color, themes, drop caps,
+fields, tables of contents and figures, an index, captions and
+cross-references, citations and a bibliography (APA, MLA, Chicago, IEEE),
+footnotes, content controls bound to data, page setup, protection, Inspect
+Document, mail merge from CSV or JSON, templates, and the whole **Review**
+tab: Track Changes (including moves), accept and reject, threaded comments
+and Compare.
+
+Fields are computed like Word's F9 (formulas, IF, dates, document
+properties), and with LibreOffice installed page numbers, TOC pages and the
+page each paragraph is on come from a real layout. A whole document can be
+written from Markdown or pasted as HTML in one call, and many edits can run
+as one all-or-nothing batch. It opens .docx, .docm, .dotx and Word's
+single-file .xml directly, and .doc, .rtf and .odt through LibreOffice.
 
 Every file it writes is schema-valid and is checked against Microsoft's own
 validator. Built in C++23 on [mcp-cpp](https://github.com/1ay1/mcp-cpp).
@@ -172,17 +177,18 @@ Details in [docs/conformance.md](docs/conformance.md).
 
 ## Limits
 
-- Page numbers in a TOC and `PAGE`/`NUMPAGES` results depend on page layout.
-  The fields are written correctly and Word refreshes them on open, but the
-  server doesn't paginate.
-- Not yet: charts, SmartArt and shape editing, floating (anchored) pictures,
-  mail merge, VBA, and password-encrypted files.
+- Page numbers (TOC pages, `PAGE`, `NUMPAGES`, `PAGEREF`, the page map) need
+  LibreOffice to lay the pages out. Without it the fields are still written
+  correctly and Word fills them in on open.
+- Not yet: SmartArt, editing the shapes inside an existing drawing, charts
+  with an embedded workbook for Edit Data, Quick Parts, password-encrypted
+  files. Macros are kept but never run, and `.doc` is read, not written.
 
 ## Tests
 
 ```sh
 cd build/tests
-./edit_test && ./comments_test && ./structure_test && ./docops_test
+./edit_test && ./comments_test && ./structure_test && ./docops_test && ./fields_test
 ./revisions_corpus ../../tests/corpus/oxpt/RP
 ./robustness ../../tests/corpus
 python3 ../../tests/e2e.py ../docx-mcp /tmp/e2e
@@ -190,6 +196,7 @@ python3 ../../tests/sloppy.py ../docx-mcp /tmp/sloppy
 python3 ../../tests/coverage.py ../docx-mcp /tmp/cov
 python3 ../../tests/discover.py ../docx-mcp           # a model with few tools can still find each one
 python3 ../../tests/fuzz.py ../docx-mcp /tmp/fuzz 60   # random tool-call chains, validity after every step
+python3 ../../tests/chaos.py ../docx-mcp /tmp/chaos      # fields, citations, charts, shapes, binding mixed at random
 ```
 
 The external checks are optional. Build oxval with

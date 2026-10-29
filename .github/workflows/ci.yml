@@ -69,6 +69,7 @@ jobs:
           ./comments_test
           ./structure_test
           ./docops_test
+          ./fields_test
       - name: Corpus tests
         shell: bash
         working-directory: build/tests
@@ -83,6 +84,7 @@ jobs:
           python3 tests/coverage.py ${{ matrix.exe }} "$RUNNER_TEMP/coverage"
           python3 tests/discover.py ${{ matrix.exe }}
           python3 tests/fuzz.py ${{ matrix.exe }} "$RUNNER_TEMP/fuzz" 60 ${{ github.run_number }}
+          python3 tests/chaos.py ${{ matrix.exe }} "$RUNNER_TEMP/chaos" ${{ github.run_number }} 25
       - name: .NET for the oracle
         if: matrix.name == 'linux-x86_64'
         uses: actions/setup-dotnet@v5
@@ -97,6 +99,7 @@ jobs:
           python3 tests/coverage.py ${{ matrix.exe }} "$RUNNER_TEMP/coverage-oracle"
           (cd build/tests && ROBUST_OUT="$RUNNER_TEMP/rob" ./robustness ../../tests/corpus)
           find "$RUNNER_TEMP/rob" -name '*.docx' > "$RUNNER_TEMP/rob.txt"
+          find "$RUNNER_TEMP/chaos" -name '*.docx' >> "$RUNNER_TEMP/rob.txt"
           out=$(xargs /tmp/oxval-bin/oxval < "$RUNNER_TEMP/rob.txt")
           echo "$out" | grep -E ': [1-9][0-9]* error' -A3 && exit 1
           echo "$(echo "$out" | grep -c ': 0 error') outputs, 0 Open XML SDK errors"
