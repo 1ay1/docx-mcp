@@ -23,6 +23,10 @@ add_executable(docops_test docops_test.cpp)
 target_link_libraries(docops_test PRIVATE docx_core)
 add_test(NAME docops_test COMMAND docops_test WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 
+add_executable(fields_test fields_test.cpp)
+target_link_libraries(fields_test PRIVATE docx_core)
+add_test(NAME fields_test COMMAND fields_test WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+
 add_executable(robustness robustness.cpp)
 target_link_libraries(robustness PRIVATE docx_core)
 add_test(NAME robustness COMMAND robustness ${CMAKE_SOURCE_DIR}/tests/corpus/oxpt)

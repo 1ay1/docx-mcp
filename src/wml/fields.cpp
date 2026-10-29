@@ -10,6 +10,7 @@
 
 #include "schema/schema.hpp"
 #include "util/util.hpp"
+#include "wml/fields_internal.hpp"
 #include "wml/structure.hpp"
 #include "wml/styles.hpp"
 #include "wml/text.hpp"
@@ -71,13 +72,17 @@ std::string cardinal(int n) {
     static const char* ones[] = {"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
                                  "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"};
     static const char* tens[] = {"", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"};
+    if (n < 0) return "minus " + cardinal(-n);
     if (n < 20) return ones[n];
     if (n < 100) return std::string(tens[n / 10]) + (n % 10 ? "-" + std::string(ones[n % 10]) : "");
     if (n < 1000) return std::string(ones[n / 100]) + " hundred" + (n % 100 ? " " + cardinal(n % 100) : "");
-    return std::to_string(n);
+    if (n < 1000000) return cardinal(n / 1000) + " thousand" + (n % 1000 ? " " + cardinal(n % 1000) : "");
+    return cardinal(n / 1000000) + " million" + (n % 1000000 ? " " + cardinal(n % 1000000) : "");
 }
 
 }  // namespace
+
+std::string detail::number_words(int n) { return cardinal(n); }
 
 std::string format_number(int n, const std::string& fmt) {
     if (fmt == "decimal" || fmt.empty()) return std::to_string(n);
@@ -93,6 +98,7 @@ std::string format_number(int n, const std::string& fmt) {
         return n <= 10 ? o[n] : std::to_string(n) + ordinal_suffix(n);
     }
     if (fmt == "decimalEnclosedParen") return "(" + std::to_string(n) + ")";
+    if (fmt == "hex") { char b[16]; std::snprintf(b, sizeof b, "%X", n); return b; }
     if (fmt == "bullet" || fmt == "none") return "";
     return std::to_string(n);
 }
@@ -116,22 +122,54 @@ void insert_field(Document& d, pugi::xml_node p, int pos, const std::string& ins
         fill(r);
         return r;
     };
-    mk([](pugi::xml_node r) { xml::set_attr(r.append_child("w:fldChar"), "w:fldCharType", "begin"); });
-    mk([&](pugi::xml_node r) {
-        auto t = r.append_child("w:instrText");
-        xml::set_attr(t, "xml:space", "preserve");
-        t.text().set((" " + util::trim(instr) + " ").c_str());
-    });
-    mk([](pugi::xml_node r) { xml::set_attr(r.append_child("w:fldChar"), "w:fldCharType", "separate"); });
+    auto chr = [&](const char* type) { mk([&](pugi::xml_node r) { xml::set_attr(r.append_child("w:fldChar"), "w:fldCharType", type); }); };
+    auto code = [&](const std::string& s) {
+        if (s.empty()) return;
+        mk([&](pugi::xml_node r) {
+            auto t = r.append_child("w:instrText");
+            xml::set_attr(t, "xml:space", "preserve");
+            t.text().set(s.c_str());
+        });
+    };
+    // { } in the instruction are nested fields (Word's Ctrl+F9 braces);
+    // braces inside quotes stay text unless they open a field
+    std::string s = " " + util::trim(instr) + " ";
+    std::string buf;
+    int depth = 0;
+    chr("begin");
+    for (std::size_t i = 0; i < s.size(); i++) {
+        char c = s[i];
+        if (c == '\\' && i + 1 < s.size() && (s[i + 1] == '{' || s[i + 1] == '}')) { buf += s[++i]; continue; }
+        if (c == '{') {
+            code(buf);
+            buf.clear();
+            chr("begin");
+            depth++;
+            continue;
+        }
+        if (c == '}' && depth > 0) {
+            code(buf);
+            buf.clear();
+            chr("separate");
+            chr("end");
+            depth--;
+            continue;
+        }
+        buf += c;
+    }
+    code(buf);
+    while (depth-- > 0) { chr("separate"); chr("end"); }
+    chr("separate");
     if (!result.empty()) mk([&](pugi::xml_node r) { append_text(r, util::to_u32(result)); });
-    mk([](pugi::xml_node r) { xml::set_attr(r.append_child("w:fldChar"), "w:fldCharType", "end"); });
+    chr("end");
 }
 
 // ── index (References > Mark Entry / Insert Index) ───────────────────────────────────────────
 
-namespace {
+namespace detail {
 void set_update_fields(Document& d);
 }
+using detail::set_update_fields;
 
 namespace {
 std::string xe_escape(const std::string& s) {
@@ -278,7 +316,7 @@ int insert_index(Document& d, pugi::xml_node before, const Json& opts_in, const 
                 if (!opened) { code(hp); opened = true; }
                 append_text(hp.append_child("w:r"), util::to_u32(letter));
             }
-            // page numbers need layout; Word fills them in on open (updateFields)
+            // page numbers need layout: update_fields with layout fills them in, Word does on open
             append_text(new_p("Index1").append_child("w:r"), util::to_u32(main + (subs.empty() ? ", 1" : "")));
             for (auto& s : subs) append_text(new_p("Index2").append_child("w:r"), util::to_u32(s + ", 1"));
         }
@@ -293,6 +331,83 @@ int insert_index(Document& d, pugi::xml_node before, const Json& opts_in, const 
     int n = 0;
     for (auto& [m, s] : terms) n += 1 + (int)s.size();
     return n;
+}
+
+int detail::rebuild_indexes(Document& d, const std::map<std::string, std::vector<std::string>>* pages) {
+    // Each index is a run of IndexHeading / Index1 / Index2 paragraphs; the
+    // field code sits in the first, the end mark in the last. Rewrite the
+    // entry text in place: "term, 3, 7".
+    int n = 0;
+    auto body = d.body();
+    // every (main, sub) pair the XE fields name
+    std::map<std::pair<std::string, std::string>, int> terms;
+    for (auto t : xe_terms(d)) {
+        auto c = t.find(':');
+        std::replace(t.begin(), t.end(), '\x01', ':');
+        if (c == std::string::npos) terms[{t, ""}] = 1;
+        else { terms[{t.substr(0, c), ""}] = 1; terms[{t.substr(0, c), t.substr(c + 1)}] = 1; }
+    }
+    auto* known = &terms;
+    auto kids = blocks(body);
+    for (std::size_t i = 0; i < kids.size(); i++) {
+        auto p = kids[i];
+        bool has_index = false;
+        for (auto it : xml::descendants(p, "w:instrText"))
+            if (util::starts_with(util::trim(it.text().get()), "INDEX")) has_index = true;
+        if (!has_index) continue;
+        std::string main;
+        for (std::size_t k = i; k < kids.size(); k++) {
+            auto q = kids[k];
+            std::string st = xml::attr(q.child("w:pPr").child("w:pStyle"), "w:val");
+            if (k > i && st != "IndexHeading" && st != "Index1" && st != "Index2") break;
+            if (st != "Index1" && st != "Index2") continue;
+            // the term is the longest known XE term the text starts with
+            auto pt = analyze(q);
+            std::string t = pt.utf8();
+            std::string term;
+            for (auto& [k2, v2] : *known) {
+                std::string cand = st == "Index1" ? k2.first : k2.second;
+                if (st == "Index2" && !util::iequals(k2.first, main)) continue;
+                if (cand.empty() || cand.size() <= term.size()) continue;
+                if (util::iequals(t.substr(0, cand.size()), cand) && (t.size() == cand.size() || t.compare(cand.size(), 2, ", ") == 0))
+                    term = t.substr(0, cand.size());
+            }
+            if (term.empty()) term = t;
+            std::string key = st == "Index1" ? util::lower(term) : util::lower(main) + "\x02" + util::lower(term);
+            if (st == "Index1") main = term;
+            if (!pages) continue;  // nothing new to say
+            std::string label;
+            if (auto f = pages->find(key); f != pages->end())
+                for (auto& pg : f->second) label += (label.empty() ? "" : ", ") + pg;
+            std::string want = term + (label.empty() ? "" : ", " + label);
+            if (want == t) continue;
+            // rewrite the visible text, keeping field chars in place
+            for (auto r : xml::children(q, "w:r")) {
+                if (r.child("w:fldChar") || r.child("w:instrText")) continue;
+                q.remove_child(r);
+            }
+            pugi::xml_node endrun;
+            for (auto r : xml::children(q, "w:r"))
+                if (auto fc = r.child("w:fldChar"); fc && xml::attr(fc, "w:fldCharType") == "end") endrun = r;
+            auto nr = endrun ? q.insert_child_before("w:r", endrun) : q.append_child("w:r");
+            append_text(nr, util::to_u32(want));
+            n++;
+        }
+    }
+    return n;
+}
+
+std::string detail::xe_term(const std::string& code) {
+    std::string s = util::trim(code);
+    if (!util::starts_with(s, "XE ")) return "";
+    auto a = s.find('"'), b = s.rfind('"');
+    if (a == std::string::npos || b <= a) return "";
+    std::string term;
+    for (std::size_t i = a + 1; i < b; i++) {
+        if (s[i] == '\\' && i + 1 < b) { ++i; term += s[i] == ':' ? '\x01' : s[i]; continue; }
+        term += s[i];
+    }
+    return term;
 }
 
 std::vector<FieldInfo> list_fields(Document& d) {
@@ -539,13 +654,16 @@ void build_toc_entries(Document& d, pugi::xml_node sdt_content, bool links, cons
     xml::set_attr(re.append_child("w:fldChar"), "w:fldCharType", "end");
 }
 
+}  // namespace
+
+namespace detail {
 void set_update_fields(Document& d) {
     auto st = d.settings();
     auto u = schema::ensure_child(st, "w:updateFields");
     xml::set_attr(u, "w:val", "true");
 }
-
-}  // namespace
+int outline_level(Document& d, pugi::xml_node p) { return heading_level(d, p); }
+}  // namespace detail
 
 void insert_toc(Document& d, pugi::xml_node p, const Json& opts_in, const EditOpts& o) {
     const Json opts = opts_in.is_object() ? opts_in : Json::object();
@@ -582,9 +700,8 @@ void insert_toc(Document& d, pugi::xml_node p, const Json& opts_in, const EditOp
     xml::declare(xml::root_of(p), "w14", true);
 }
 
-int update_fields(Document& d) {
+int detail::rebuild_tocs(Document& d) {
     int n = 0;
-    // TOCs: rebuild entries from headings
     for (auto sdt : xml::descendants(d.body(), "w:sdt")) {
         auto g = xml::first_descendant(sdt.child("w:sdtPr"), "w:docPartGallery");
         if (!g || xml::attr(g, "w:val") != "Table of Contents") continue;
@@ -609,95 +726,10 @@ int update_fields(Document& d) {
         build_toc_entries(d, content, links, instr);
         n++;
     }
-    // SEQ fields: renumber per identifier; REF/STYLEREF results from targets
-    std::map<std::string, int> seq;
-    auto bms = list_bookmarks(d);
-    for (auto p : paragraphs(d.body())) {
-        // complex fields in this paragraph
-        std::vector<pugi::xml_node> runs;
-        for (auto r : xml::descendants(p, "w:r")) runs.push_back(r);
-        for (std::size_t i = 0; i < runs.size(); i++) {
-            auto fc = runs[i].child("w:fldChar");
-            if (!fc || xml::attr(fc, "w:fldCharType") != "begin") continue;
-            std::string instr;
-            std::size_t j = i + 1, sep = 0, end = 0;
-            int depth = 0;
-            for (; j < runs.size(); j++) {
-                auto f2 = runs[j].child("w:fldChar");
-                std::string t = f2 ? xml::attr(f2, "w:fldCharType") : "";
-                if (t == "begin") depth++;
-                if (t == "end") { if (depth == 0) { end = j; break; } depth--; }
-                if (t == "separate" && depth == 0) sep = j;
-                if (depth == 0 && !sep) if (auto it = runs[j].child("w:instrText")) instr += it.text().get();
-            }
-            if (!end || !sep) continue;
-            instr = util::trim(instr);
-            std::string result;
-            bool have = false;
-            auto words = util::split(instr, ' ');
-            std::string kind = words.empty() ? "" : util::lower(words[0]);
-            if (kind == "seq" && words.size() > 1) {
-                std::string id = words[1];
-                if (instr.find("\\r") != std::string::npos) {
-                    auto k = instr.find("\\r");
-                    seq[id] = std::atoi(instr.c_str() + k + 2) - 1;
-                }
-                if (instr.find("\\c") == std::string::npos) seq[id]++;
-                std::string fmt = "decimal";
-                if (instr.find("ROMAN") != std::string::npos) fmt = instr.find("roman") != std::string::npos ? "lowerRoman" : "upperRoman";
-                if (instr.find("ALPHABETIC") != std::string::npos) fmt = "upperLetter";
-                if (instr.find("alphabetic") != std::string::npos) fmt = "lowerLetter";
-                result = format_number(seq[id], fmt);
-                have = true;
-            } else if (kind == "ref" && words.size() > 1) {
-                for (auto& b : bms) {
-                    if (b.name != words[1]) continue;
-                    result = b.text;
-                    have = true;
-                    // \n \r \w: the paragraph number (a heading's list label, a caption's label + number)
-                    bool num = instr.find("\\n") != std::string::npos || instr.find("\\r") != std::string::npos ||
-                               instr.find("\\w") != std::string::npos;
-                    if (num) {
-                        auto lbl = !b.para.empty() ? list_label(d, find_para(d, b.para).p) : std::string();
-                        if (!lbl.empty()) result = util::trim(lbl);
-                    }
-                }
-            } else if (kind == "noteref" && words.size() > 1) {
-                // the note's number: its position among notes of that kind, in document order
-                for (auto& b : bms) {
-                    if (b.name != words[1]) continue;
-                    auto bp = find_para(d, b.para).p;
-                    auto fr = xml::first_descendant(bp, "w:footnoteReference");
-                    const char* q = fr ? "w:footnoteReference" : "w:endnoteReference";
-                    auto ref = fr ? fr : xml::first_descendant(bp, "w:endnoteReference");
-                    if (!ref) break;
-                    int k = 0;
-                    for (auto r : xml::descendants(d.body(), q)) {
-                        k++;
-                        if (r == ref) break;
-                    }
-                    result = std::to_string(k);
-                    have = true;
-                }
-            }
-            if (!have) continue;
-            // replace the cached result runs between sep and end
-            for (std::size_t k = sep + 1; k < end; k++) {
-                for (auto t : xml::children(runs[k], "w:t")) runs[k].remove_child(t);
-            }
-            if (sep + 1 < end) append_text(runs[sep + 1], util::to_u32(result));
-            else {
-                auto nr = runs[end].parent().insert_child_before("w:r", runs[end]);
-                if (auto rp = runs[sep].child("w:rPr")) nr.append_copy(rp);
-                append_text(nr, util::to_u32(result));
-            }
-            n++;
-            i = end;
-        }
-    }
-    set_update_fields(d);  // page-dependent results (PAGE, PAGEREF, NUMPAGES) refresh on open
     return n;
 }
+
+int update_fields(Document& d) { return update_fields(d, FieldUpdate{}).updated; }
 
 // ── captions and cross-references ──────────────────────────────────────────────────
 

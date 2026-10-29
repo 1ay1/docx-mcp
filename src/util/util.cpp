@@ -368,6 +368,12 @@ std::string lower(std::string_view s) {
     return o;
 }
 
+std::string upper(std::string_view s) {
+    std::string o(s);
+    for (auto& c : o) if (c >= 'a' && c <= 'z') c = char(c - 'a' + 'A');
+    return o;
+}
+
 bool iequals(std::string_view a, std::string_view b) { return lower(a) == lower(b); }
 bool starts_with(std::string_view s, std::string_view p) { return s.substr(0, p.size()) == p; }
 

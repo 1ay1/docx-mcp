@@ -135,7 +135,19 @@ class Fuzz:
 
     def extra(self, pid, s, e, track):
         r = self.r
-        k = r.randint(0, 49)
+        k = r.randint(0, 52)
+        if k == 50:
+            return self.call("insert_field", paragraph=pid, position=s, code=r.choice([
+                "= 2 + 3 * 4 \\# \"0.00\"", "IF { = 1 + 1 } = 2 \"yes\" \"no\"", "MERGEFIELD Name", "DOCVARIABLE V",
+                "SEQ Figure \\* roman", "DOCPROPERTY Title \\* Upper", "STYLEREF 1", "QUOTE \"q\" \\* Caps",
+                "= SUM(ABOVE)", "COMPARE 3 > 2", "REF bm1 \\h", "DATE \\@ \"dddd, MMMM d\""]), **track)
+        if k == 51:
+            if r.random() < 0.5:
+                return self.call("unlink_fields", kinds=r.choice([["MERGEFIELD"], ["IF", "="], ["DATE"]]))
+            return self.call("document_variables", set={"V": self.word() or "v", "W": None})
+        if k == 52:
+            out = self.path.replace("run", "out").replace(".docx", "_merge%d.docx" % r.randint(0, 99))
+            return self.call("mail_merge", records=[{"Name": self.word() or "n"}, {"Name": "b"}], output=out)
         if k == 40:
             return self.call("insert_markdown", paragraph=pid, markdown=r.choice([
                 "## H\n\n**b** *i* `c` [l](https://example.com)", "- a\n  - b\n1. x\n2. y", "| A | B |\n|---|--:|\n| 1 | **2** |",

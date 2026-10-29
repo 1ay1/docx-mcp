@@ -6,6 +6,7 @@
 #include <string>
 
 #include "wml/document.hpp"
+#include "wml/render.hpp"
 
 namespace docx::server {
 
@@ -15,6 +16,9 @@ struct Session {
     bool dirty = false;
     int baseline_issues = 0;  // schema issues present when opened
     std::vector<util::Bytes> undo;  // snapshots before each mutating call
+    long generation = 0;            // bumps on every change
+    long pages_generation = -1;     // generation `pages` was laid out at
+    wml::PageMap pages;
 };
 
 class Sessions {

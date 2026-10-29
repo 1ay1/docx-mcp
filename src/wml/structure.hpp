@@ -2,6 +2,8 @@
 // footnotes/endnotes, bookmarks, hyperlinks, fields (TOC, PAGE, ...),
 // content controls, lists, equations. All edits honour track changes.
 #pragma once
+#include <ctime>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -135,6 +137,50 @@ void insert_toc(Document& d, pugi::xml_node p, const Json& opts, const EditOpts&
 // Recompute TOC entries, SEQ/REF/STYLEREF results that don't need layout.
 // Sets updateFields so Word refreshes page numbers on open.
 int update_fields(Document& d);
+
+// Update Fields (F9) with options.
+struct PageMap;
+struct MergeCursor {
+    const Json* rows = nullptr;  // array of objects
+    std::size_t row = 0;         // current record (NEXT / NEXTIF advance it)
+    bool skip = false;           // SKIPIF fired: drop this record
+    std::vector<std::string> missing;  // MERGEFIELD names with no column
+};
+struct FieldUpdate {
+    bool layout = false;        // lay pages out (LibreOffice) for PAGE, NUMPAGES, PAGEREF, index pages
+    MergeCursor* merge = nullptr;
+    std::string filename;       // the file's path, for FILENAME
+    pugi::xml_node only;        // update just this field (its fldChar begin or fldSimple)
+};
+struct FieldUpdateResult {
+    int updated = 0;
+    bool pages = false;  // page numbers came from a real layout
+};
+FieldUpdateResult update_fields(Document& d, const FieldUpdate& u);
+// Field results in every story (no TOC/index rebuild). pages may be null.
+int evaluate_fields(Document& d, const FieldUpdate& u, const PageMap* pages);
+// Replace fields by their results (Ctrl+Shift+F9). kinds: field names
+// ("MERGEFIELD", "IF"...), case-insensitive; empty = every field.
+int unlink_fields(Document& d, const std::vector<std::string>& kinds);
+// Word's date picture (\@ "dddd, MMMM d, yyyy h:mm am/pm").
+std::string format_date(const std::tm& t, const std::string& picture);
+// Word's numeric picture (\# "$#,##0.00;($#,##0.00)").
+std::string format_numeric(double v, const std::string& picture);
+// A number in Word's page/list formats (decimal, lowerRoman, upperLetter, ordinal, cardinalText...).
+std::string format_number(int n, const std::string& fmt);
+
+// ── mail merge (Mailings) and document variables ──
+// One merged document per record: MERGEFIELD / IF / MERGEREC filled in and
+// turned into text. single = every record in one document, a section each.
+// SKIPIF drops a record; NEXT moves to the next one inside a document.
+std::vector<Document> mail_merge(Document& tmpl, const Json& rows, bool single, const std::string& filename,
+                                 std::vector<std::string>* notes = nullptr, std::vector<std::size_t>* sources = nullptr);
+// Records from a .csv / .tsv (header row first) or .json (array of objects) file.
+Json load_merge_data(const std::string& path);
+// The MERGEFIELD names a document uses, in order.
+std::vector<std::string> merge_field_names(Document& d);
+Json document_variables(Document& d);
+void set_document_variable(Document& d, const std::string& name, const Json& value);  // null removes
 // Mark Entry: a hidden XE field at pos naming an index term (and sub-term).
 void mark_index_entry(Document& d, pugi::xml_node p, int pos, const std::string& term, const std::string& sub,
                       const EditOpts& o);

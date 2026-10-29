@@ -10,7 +10,7 @@ to touch raw XML to get there.
 
 ## Where we are (main, after v0.3.0)
 
-106 tools cover Word's Home, Insert, Design, Layout, References and Review
+109 tools cover Word's Home, Insert, Design, Layout, References, Mailings and Review
 tabs: documents, text, paragraphs, styles, lists, tables, pictures, text
 boxes, links, bookmarks, notes, fields, TOC, table of figures, index,
 equations, content controls, sections, page borders and color, watermarks,
@@ -79,7 +79,7 @@ Status is checked against the code.
 | 1.11 | Themes | Design > Themes | Open | Read and set theme colors and fonts |
 | 1.12 | Charts | Insert > Chart | Open | Read cached chart data; then basic bar/line/pie |
 | 1.13 | Building blocks and templates | Quick Parts, .dotx | Open | Glossary document, create from `.dotx` |
-| 1.14 | Mail merge and document variables | Mailings | Open | Fill `MERGEFIELD`s from JSON rows, `w:docVars` |
+| 1.14 | Mail merge and document variables | Mailings | Done | `mail_merge` from records, CSV, TSV or JSON: one file per record or one document with a section each; IF, SKIPIF, NEXT, MERGEREC. `document_variables` reads and sets `w:docVars` |
 | 1.15 | Form fields and data binding | Developer | Partly | Content controls done. Left: legacy form fields, `w:dataBinding` to custom XML, repeating sections |
 | 1.16 | Drop caps, text effects, ruby | Font, Paragraph | Drop caps done | `drop_cap`. Left: `w14` text effects, ruby, East Asian layout |
 | 1.17 | Line numbering and hyphenation | Layout | Done | `set_page_setup` `line_numbers`, `set_settings` `auto_hyphenation`, `format_paragraph` `suppress_line_numbers` / `suppress_auto_hyphens` |
@@ -101,7 +101,9 @@ Agents can't see layout today. Page numbers, page counts and "what does page
 
 **Done:** 2.1 `render_pages` (PNG pages as MCP image content) and 2.2
 `export_pdf`, through LibreOffice with pdftoppm, mutool or Ghostscript.
-Open: 2.3 to 2.5.
+2.3 and 2.4: a bookmark marks every paragraph and field in a copy, LibreOffice
+exports them as PDF destinations, and their pages become the page map.
+Open: 2.5 and SECTIONPAGES.
 
 | # | Item | Done when |
 |---|---|---|
@@ -158,10 +160,9 @@ insertion). Open: `insert_html` and the rest.
 Phases 0, most of 1, 2.1-2.2, 3.6 and 4.4 are done. Next, by how often real
 documents and agents need them:
 
-1. 2.4 field results computed by us (page numbers right before Word opens
-   the file) and 2.3 the page map.
+1. ~~2.4 field results and 2.3 the page map~~ (done).
 2. 1.9 multi-level lists and 1.10 table style conditional formats.
-3. 1.14 mail merge from JSON, then 1.15 data binding.
+3. ~~1.14 mail merge~~ (done), then 1.15 data binding.
 4. 1.7 floating tables, 1.2 shapes, 1.4 picture watermarks.
 5. 3.6 `insert_html`, then Phase 4 speed work and Phase 5 proof.
 

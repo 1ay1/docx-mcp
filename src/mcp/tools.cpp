@@ -7,6 +7,8 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <optional>
+#include <set>
 #include <stdexcept>
 
 #include "schema/schema.hpp"
@@ -190,7 +192,17 @@ Session& mut(Sessions& S, const Json& a) {
     }
     if (!g_txn) { g_txn = &s; g_txn_snap = true; }
     s.dirty = true;
+    s.generation++;
     return s;
+}
+
+// The laid-out page map, cached until the next change.
+const PageMap& pages_of(Session& s) {
+    if (s.pages_generation != s.generation) {
+        s.pages = page_map(s.doc);
+        s.pages_generation = s.generation;
+    }
+    return s.pages;
 }
 
 ParaRef para(Session& s, const Json& a, const char* key = "paragraph") { return find_para(s.doc, need(a, key)); }
@@ -466,21 +478,31 @@ std::vector<ToolDef> make_tools() {
                  done++;
              }
              s.doc.author = author;
+             s.generation++;
              return Json{{"undone", done}, {"remaining", s.undo.size()}};
          }});
 
     // ── reading ──────────────────────────────────────────────────────────
     add({"read_document", "Read",
          "Read paragraphs with their ids, styles, list labels, table positions and revision/comment markers. "
-         "Paginate with offset/limit. view=original shows the text before tracked changes.",
+         "Paginate with offset/limit. view=original shows the text before tracked changes. pages=true adds the page each "
+         "paragraph is on (laid out through LibreOffice, cached until the next edit).",
          obj({{"doc", kDoc}, {"offset", integer("1-based first paragraph (negative = from the end).")},
               {"limit", integer("Max paragraphs (default 200).")}, {"runs", boolean("Include formatted runs with offsets.")},
-              {"view", enm({"current", "original"}, "current = with changes applied (Word's 'Simple Markup'); original = before changes.")}},
+              {"view", enm({"current", "original"}, "current = with changes applied (Word's 'Simple Markup'); original = before changes.")},
+              {"pages", boolean("Add the page number of each paragraph (needs LibreOffice).")}},
              {"doc"}),
          true, false, [](Sessions& S, const Json& a) {
              auto& s = sess(S, a);
              assign_missing_para_ids(s.doc, s.doc.body(), s.doc.main());
-             return read_paragraphs(s.doc, iarg(a, "offset", 1), iarg(a, "limit", 200), barg(a, "runs", false), sarg(a, "view", "current"));
+             auto out = read_paragraphs(s.doc, iarg(a, "offset", 1), iarg(a, "limit", 200), barg(a, "runs", false), sarg(a, "view", "current"));
+             if (barg(a, "pages", false)) {
+                 auto& pm = pages_of(s);
+                 for (auto& p : out["paragraphs"])
+                     if (auto it = pm.para.find(p["id"].get<std::string>()); it != pm.para.end()) p["page"] = it->second;
+                 out["pages"] = pm.total;
+             }
+             return out;
          }});
     add({"get_text", "Plain text / Markdown", "The whole document as plain text or Markdown (headings, lists, tables).",
          obj({{"doc", kDoc}, {"format", enm({"text", "markdown"}, "Default markdown.")}, {"view", enm({"current", "original"}, "")}}, {"doc"}),
@@ -1367,7 +1389,9 @@ std::vector<ToolDef> make_tools() {
          }});
     add({"insert_field", "Insert field",
          "Insert a Word field: PAGE, NUMPAGES, DATE \\@ \"MMMM d, yyyy\", TIME, AUTHOR, TITLE, FILENAME, REF bookmark \\h, "
-         "PAGEREF bookmark \\h, SEQ Figure \\* ARABIC, STYLEREF \"Heading 1\", NUMWORDS, MERGEFIELD Name, IF ...",
+         "PAGEREF bookmark \\h, SEQ Figure \\* ARABIC, STYLEREF \"Heading 1\", NUMWORDS, MERGEFIELD Name, DOCPROPERTY Client, "
+         "DOCVARIABLE Version, = SUM(ABOVE) \\# \"#,##0.00\", IF { MERGEFIELD Total } > 100 \"big\" \"small\" ({ } nest fields). "
+         "The result is computed right away when it can be.",
          obj({{"doc", kDoc}, {"paragraph", kPara}, {"code", str("Field instruction.")}, {"result", str("Cached display text (Word updates it).")},
               {"position", integer("")}, {"after", str("")}, {"format", kRunFmt}, {"track", kTrack}, {"author", str("Author of this change.")}},
              {"doc", "paragraph", "code"}),
@@ -1375,6 +1399,12 @@ std::vector<ToolDef> make_tools() {
              auto& s = mut(S, a);
              auto r = para(s, a);
              insert_field(s.doc, r.p, pos_in(r.p, a), need(a, "code"), sarg(a, "result"), obj_arg(a, "format"), track(a));
+             // compute the result now when the cached one wasn't given
+             if (!a.contains("result")) {
+                 FieldUpdate u;
+                 u.filename = s.path;
+                 evaluate_fields(s.doc, u, nullptr);
+             }
              return Json{{"code", need(a, "code")}, {"paragraph", para_brief(s.doc, r.p)}};
          }});
     add({"list_fields", "Fields", "List fields (PAGE, DATE, TOC, REF, MERGEFIELD...) with their codes and current results.", obj({{"doc", kDoc}}, {"doc"}), true, false, [](Sessions& S, const Json& a) {
@@ -1383,8 +1413,123 @@ std::vector<ToolDef> make_tools() {
         return v;
     }});
     add({"update_fields", "Update fields",
-         "Update TOC entries, SEQ numbering and REF results now; page numbers are refreshed by Word on open (updateFields is set).",
-         obj({{"doc", kDoc}}, {"doc"}), false, false, [](Sessions& S, const Json& a) { return Json{{"updated", update_fields(mut(S, a).doc)}}; }});
+         "Update Fields (F9): every field's result is computed now: TOC entries, SEQ numbers, REF, IF, = formulas, DATE, "
+         "DOCPROPERTY, DOCVARIABLE, STYLEREF, ... With pages=true the document is laid out (LibreOffice) so PAGE, NUMPAGES, "
+         "PAGEREF, TOC and index page numbers are real too; otherwise Word fills those in on open.",
+         obj({{"doc", kDoc}, {"pages", boolean("Lay pages out for page numbers (needs LibreOffice). Default false.")},
+              {"paragraph", str("Only fields in this paragraph.")}}, {"doc"}),
+         false, false, [](Sessions& S, const Json& a) {
+             auto& s = mut(S, a);
+             FieldUpdate u;
+             u.layout = barg(a, "pages", false);
+             u.filename = s.path;
+             if (a.contains("paragraph") && !sarg(a, "paragraph").empty()) {
+                 // every field in that paragraph
+                 auto r = para(s, a);
+                 int n = 0;
+                 std::vector<pugi::xml_node> starts;
+                 for (auto f : xml::descendants(r.p, "w:fldChar"))
+                     if (xml::attr(f, "w:fldCharType") == "begin") starts.push_back(f);
+                 for (auto f : xml::descendants(r.p, "w:fldSimple")) starts.push_back(f);
+                 const PageMap* pm = u.layout ? &pages_of(s) : nullptr;
+                 for (auto f : starts) {
+                     u.only = f;
+                     n += evaluate_fields(s.doc, u, pm);
+                 }
+                 return Json{{"updated", n}, {"paragraph", para_brief(s.doc, r.p)}};
+             }
+             auto r = update_fields(s.doc, u);
+             Json out = {{"updated", r.updated}};
+             if (r.pages) out["page_numbers"] = "from the laid-out pages";
+             else out["page_numbers"] = "Word fills them in on open (pages=true computes them now)";
+             return out;
+         }});
+    add({"unlink_fields", "Unlink fields",
+         "Replace fields by their current results as plain text (Ctrl+Shift+F9). kinds limits it to some field types "
+         "(e.g. [\"MERGEFIELD\", \"IF\"]); omit for every field. Run update_fields first if results are stale.",
+         obj({{"doc", kDoc}, {"kinds", arr(str(""), "Field names to unlink, e.g. MERGEFIELD, DATE. Omit for all.")}}, {"doc"}),
+         false, true, [](Sessions& S, const Json& a) {
+             auto& s = mut(S, a);
+             return Json{{"unlinked", unlink_fields(s.doc, strs(a, "kinds"))}, {"fields_left", list_fields(s.doc).size()}};
+         }});
+    add({"mail_merge", "Mail merge",
+         "Mailings > Finish & Merge: fill the document's MERGEFIELDs (and IF, SKIPIF, NEXT, MERGEREC) from records and write "
+         "the results. records is a list of objects (column -> value), or data_file is a .csv / .tsv / .json. With output_dir "
+         "one file per record (name_field picks the file name); with output one document holding every record, a section each. "
+         "Without either it returns the fields the document uses. Insert fields with insert_field code=\"MERGEFIELD Name\".",
+         obj({{"doc", kDoc}, {"records", arr(anyobj(""), "Records: [{\"Name\": \"Ann\", \"City\": \"Paris\"}, ...]")},
+              {"data_file", str("A .csv, .tsv or .json data source instead of records.")},
+              {"output", str("One merged .docx with every record.")},
+              {"output_dir", str("A folder for one .docx per record.")},
+              {"name_field", str("Column used to name per-record files (default: numbered).")}},
+             {"doc"}),
+         false, false, [](Sessions& S, const Json& a) {
+             auto& s = sess(S, a);
+             auto fields = merge_field_names(s.doc);
+             Json rows;
+             if (a.contains("data_file") && !sarg(a, "data_file").empty()) rows = load_merge_data(util::normalize_path(need(a, "data_file")));
+             else if (a.contains("records")) rows = a["records"];
+             std::string output = sarg(a, "output"), dir = sarg(a, "output_dir");
+             if (rows.is_null() || (output.empty() && dir.empty())) {
+                 Json out = {{"merge_fields", fields}};
+                 if (rows.is_array()) out["records"] = rows.size();
+                 if (fields.empty()) out["note"] = "no MERGEFIELDs yet: insert_field code=\"MERGEFIELD ColumnName\"";
+                 else out["note"] = "give records (or data_file) and output or output_dir to merge";
+                 return out;
+             }
+             if (rows.is_object()) rows = Json::array({rows});
+             std::vector<std::string> notes;
+             Json written = Json::array();
+             if (!output.empty()) {
+                 auto docs = mail_merge(s.doc, rows, true, s.path, &notes);
+                 output = util::normalize_path(output);
+                 docs[0].save(output);
+                 written.push_back(output);
+             } else {
+                 std::vector<std::size_t> src;
+                 auto docs = mail_merge(s.doc, rows, false, s.path, &notes, &src);
+                 dir = util::normalize_path(dir);
+                 std::error_code ec;
+                 fs::create_directories(util::u8path(dir), ec);
+                 std::string stem = util::path_utf8(util::u8path(s.path).stem());
+                 std::string key = sarg(a, "name_field");
+                 std::set<std::string> used;
+                 for (std::size_t i = 0; i < docs.size(); i++) {
+                     std::string name = stem + "-" + std::to_string(src[i] + 1);
+                     auto& row = rows[src[i]];
+                     if (!key.empty() && row.contains(key)) {
+                         std::string v = row[key].is_string() ? row[key].get<std::string>() : row[key].dump();
+                         std::string clean;
+                         for (char c : v) clean += (std::isalnum((unsigned char)c) || c == '-' || c == '_' || c == ' ' || (unsigned char)c >= 0x80) ? c : '_';
+                         clean = util::trim(clean);
+                         if (!clean.empty()) name = clean;
+                     }
+                     std::string base = name;
+                     for (int n = 2; used.count(util::lower(name)); n++) name = base + "-" + std::to_string(n);
+                     used.insert(util::lower(name));
+                     std::string path = util::path_utf8(util::u8path(dir) / util::u8path(name + ".docx"));
+                     docs[i].save(path);
+                     written.push_back(path);
+                 }
+             }
+             Json out = {{"merged", written.size()}, {"files", written}, {"records", rows.size()}};
+             if (!notes.empty()) out["notes"] = notes;
+             return out;
+         }});
+    add({"document_variables", "Document variables",
+         "Read or set document variables (w:docVars): named values DOCVARIABLE fields show. set: {name: value, ...}; null removes.",
+         obj({{"doc", kDoc}, {"set", anyobj("Variables to set: {\"Version\": \"2.1\"}; null removes one.")},
+              {"update", boolean("Refresh DOCVARIABLE fields after setting (default true).")}},
+             {"doc"}),
+         false, false, [](Sessions& S, const Json& a) {
+             if (!a.contains("set")) return Json{{"variables", document_variables(sess(S, a).doc)}};
+             auto& s = mut(S, a);
+             Json set = obj_arg(a, "set");
+             for (auto& [k, v] : set.items()) set_document_variable(s.doc, k, v);
+             int n = 0;
+             if (barg(a, "update", true)) n = evaluate_fields(s.doc, FieldUpdate{}, nullptr);
+             return Json{{"variables", document_variables(s.doc)}, {"fields_updated", n}};
+         }});
     add({"insert_toc", "Table of contents",
          "Insert a table of contents (References > Table of Contents) before a paragraph, built from headings. "
          "captions: \"Figure\" (or Table, ...) makes a Table of Figures from those captions instead.",
@@ -1398,7 +1543,7 @@ std::vector<ToolDef> make_tools() {
              for (auto k : {"from_level", "to_level", "title", "hyperlinks", "captions"}) if (a.contains(k)) o[k] = a[k];
              insert_toc(s.doc, para(s, a).p, o, track(a));
              return Json{{"inserted", a.contains("captions") ? "table of figures (" + sarg(a, "captions") + ")" : "table of contents"},
-                         {"note", "page numbers fill in when the document is opened in Word or rendered (render_pages, export_pdf)"}};
+                         {"note", "page numbers: update_fields pages=true fills them in now, Word does on open"}};
          }});
     add({"mark_index_entry", "Mark index entry",
          "Mark a word or phrase for the index (References > Mark Entry). Put it after `match` text (or at position). "

@@ -102,6 +102,20 @@ int main(int argc, char** argv) {
                 add_hyperlink(d, p, 0, 0, "https://example.com", "link ", "", {});
                 add_note(d, p, 2, "footnote", "robot note", {});
             }
+            stage = "fields";
+            update_fields(d);
+            {
+                // unlinking every field must leave a valid document too
+                auto u = Document::from_bytes(d.snapshot());
+                unlink_fields(u, {});
+                u = Document::from_bytes(u.to_bytes());  // with save's fix-ups, as written
+                std::string wu;
+                if (int ui = issues(u, &wu)) {
+                    bad++;
+                    std::printf("UNLINK ISSUES %s (%d)\n  %s\n", f.filename().string().c_str(), ui, wu.c_str());
+                    continue;
+                }
+            }
             stage = "save";
             auto bytes = d.to_bytes();
             dump(bytes, "edited");

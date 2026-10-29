@@ -466,6 +466,21 @@ void Document::dedupe_ids() {
                 owner.parent().remove_child(owner);
             }
         }
+        // move ranges: a duplicated start/end pair gets a fresh id together (name kept: the copies are separate moves)
+        for (auto [qs, qe] : {std::pair{"w:moveFromRangeStart", "w:moveFromRangeEnd"}, std::pair{"w:moveToRangeStart", "w:moveToRangeEnd"}}) {
+            std::map<std::string, std::vector<pugi::xml_node>> ss, es;
+            for (auto b : xml::descendants(root, qs)) ss[xml::attr(b, "w:id")].push_back(b);
+            for (auto b : xml::descendants(root, qe)) es[xml::attr(b, "w:id")].push_back(b);
+            for (auto& [id, v] : ss) {
+                auto& e = es[id];
+                for (std::size_t i = 1; i < v.size(); i++) {
+                    std::string nid = std::to_string(next_annotation_id());
+                    xml::set_attr(v[i], "w:id", nid);
+                    if (i < e.size()) xml::set_attr(e[i], "w:id", nid);
+                }
+                for (std::size_t i = v.size(); i < e.size(); i++) e[i].parent().remove_child(e[i]);  // orphan copies
+            }
+        }
         // bookmarks: a duplicated start/end pair gets a fresh id together
         std::map<std::string, int> starts;
         for (auto b : xml::descendants(root, "w:bookmarkStart")) starts[xml::attr(b, "w:id")]++;

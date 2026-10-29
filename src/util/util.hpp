@@ -41,6 +41,7 @@ std::string xml_safe(std::string_view s);
 std::string xml_escape(std::string_view s);
 
 std::string lower(std::string_view s);
+std::string upper(std::string_view s);
 bool iequals(std::string_view a, std::string_view b);
 bool starts_with(std::string_view s, std::string_view p);
 std::string trim(std::string_view s);

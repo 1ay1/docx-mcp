@@ -1,6 +1,6 @@
 # Tool reference
 
-Generated from `docx-mcp --list-tools` by `tools/gen_tool_docs.py`. 106 tools.
+Generated from `docx-mcp --list-tools` by `tools/gen_tool_docs.py`. 109 tools.
 
 Every tool that edits takes `doc` (a handle or a file path), and most take `track` (record as a tracked change) and `author`. Paragraphs are addressed by the `id` that `read_document` returns.
 
@@ -15,7 +15,8 @@ Every tool that edits takes `doc` (a handle or a file path), and most take `trac
 - [Track changes](#track-changes): `set_track_changes`, `list_revisions`, `accept_revisions`, `reject_revisions`, `compare_documents`
 - [Comments](#comments): `add_comment`, `list_comments`, `reply_comment`, `resolve_comment`, `edit_comment`, `delete_comment`
 - [Tables](#tables): `insert_table`, `read_table`, `set_cell`, `table_rows`, `table_columns`, `merge_cells`, `split_cell`, `format_table`, `sort_table`, `convert_table`, `delete_table`
-- [Insert](#insert): `insert_picture`, `list_pictures`, `format_picture`, `delete_picture`, `insert_text_box`, `insert_break`, `insert_hyperlink`, `list_hyperlinks`, `remove_hyperlinks`, `add_bookmark`, `list_bookmarks`, `delete_bookmark`, `insert_note`, `list_notes`, `delete_note`, `insert_field`, `list_fields`, `update_fields`, `insert_toc`, `mark_index_entry`, `insert_index`, `insert_equation`, `insert_caption`, `insert_cross_reference`, `list_reference_targets`, `add_content_control`, `list_content_controls`, `set_content_control`
+- [Insert](#insert): `insert_picture`, `list_pictures`, `format_picture`, `delete_picture`, `insert_text_box`, `insert_break`, `insert_hyperlink`, `list_hyperlinks`, `remove_hyperlinks`, `add_bookmark`, `list_bookmarks`, `delete_bookmark`, `insert_note`, `list_notes`, `delete_note`, `insert_field`, `list_fields`, `update_fields`, `unlink_fields`, `insert_toc`, `mark_index_entry`, `insert_index`, `insert_equation`, `insert_caption`, `insert_cross_reference`, `list_reference_targets`, `add_content_control`, `list_content_controls`, `set_content_control`
+- [Mailings](#mailings): `mail_merge`, `document_variables`
 - [Page layout](#page-layout): `get_page_setup`, `set_page_setup`, `set_header_footer`, `remove_header_footer`, `read_header_footer`, `set_watermark`
 - [File](#file): `get_properties`, `set_properties`, `get_settings`, `set_settings`, `protect_document`, `unprotect_document`
 - [Expert](#expert): `validate_document`, `inspect_document`, `get_xml`, `set_paragraph_xml`
@@ -90,13 +91,14 @@ Run a list of tool calls on one document in order, as one change: if any step fa
 
 ### `read_document`
 
-Read paragraphs with their ids, styles, list labels, table positions and revision/comment markers. Paginate with offset/limit. view=original shows the text before tracked changes.
+Read paragraphs with their ids, styles, list labels, table positions and revision/comment markers. Paginate with offset/limit. view=original shows the text before tracked changes. pages=true adds the page each paragraph is on (laid out through LibreOffice, cached until the next edit).
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `limit` | integer |  | Max paragraphs (default 200). |
 | `offset` | integer |  | 1-based first paragraph (negative = from the end). |
+| `pages` | boolean |  | Add the page number of each paragraph (needs LibreOffice). |
 | `runs` | boolean |  | Include formatted runs with offsets. |
 | `view` | `current` \\| `original` |  | current = with changes applied (Word's 'Simple Markup'); original = before changes. |
 
@@ -918,7 +920,7 @@ Delete a footnote or endnote and its reference mark.
 
 ### `insert_field`
 
-Insert a Word field: PAGE, NUMPAGES, DATE \@ "MMMM d, yyyy", TIME, AUTHOR, TITLE, FILENAME, REF bookmark \h, PAGEREF bookmark \h, SEQ Figure \* ARABIC, STYLEREF "Heading 1", NUMWORDS, MERGEFIELD Name, IF ...
+Insert a Word field: PAGE, NUMPAGES, DATE \@ "MMMM d, yyyy", TIME, AUTHOR, TITLE, FILENAME, REF bookmark \h, PAGEREF bookmark \h, SEQ Figure \* ARABIC, STYLEREF "Heading 1", NUMWORDS, MERGEFIELD Name, DOCPROPERTY Client, DOCVARIABLE Version, = SUM(ABOVE) \# "#,##0.00", IF { MERGEFIELD Total } > 100 "big" "small" ({ } nest fields). The result is computed right away when it can be.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
@@ -942,11 +944,22 @@ List fields (PAGE, DATE, TOC, REF, MERGEFIELD...) with their codes and current r
 
 ### `update_fields`
 
-Update TOC entries, SEQ numbering and REF results now; page numbers are refreshed by Word on open (updateFields is set).
+Update Fields (F9): every field's result is computed now: TOC entries, SEQ numbers, REF, IF, = formulas, DATE, DOCPROPERTY, DOCVARIABLE, STYLEREF, ... With pages=true the document is laid out (LibreOffice) so PAGE, NUMPAGES, PAGEREF, TOC and index page numbers are real too; otherwise Word fills those in on open.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `pages` | boolean |  | Lay pages out for page numbers (needs LibreOffice). Default false. |
+| `paragraph` | string |  | Only fields in this paragraph. |
+
+### `unlink_fields`
+
+Replace fields by their current results as plain text (Ctrl+Shift+F9). kinds limits it to some field types (e.g. ["MERGEFIELD", "IF"]); omit for every field. Run update_fields first if results are stale.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `kinds` | array of string |  | Field names to unlink, e.g. MERGEFIELD, DATE. Omit for all. |
 
 ### `insert_toc`
 
@@ -1079,6 +1092,31 @@ Set a content control's value (text, checkbox true/false, drop-down choice, date
 | `control` | string | yes | id, tag or title |
 | `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `value` | any | yes | string or boolean |
+
+## Mailings
+
+### `mail_merge`
+
+Mailings > Finish & Merge: fill the document's MERGEFIELDs (and IF, SKIPIF, NEXT, MERGEREC) from records and write the results. records is a list of objects (column -> value), or data_file is a .csv / .tsv / .json. With output_dir one file per record (name_field picks the file name); with output one document holding every record, a section each. Without either it returns the fields the document uses. Insert fields with insert_field code="MERGEFIELD Name".
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `data_file` | string |  | A .csv, .tsv or .json data source instead of records. |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `name_field` | string |  | Column used to name per-record files (default: numbered). |
+| `output` | string |  | One merged .docx with every record. |
+| `output_dir` | string |  | A folder for one .docx per record. |
+| `records` | array of object |  | Records: [{"Name": "Ann", "City": "Paris"}, ...] |
+
+### `document_variables`
+
+Read or set document variables (w:docVars): named values DOCVARIABLE fields show. set: {name: value, ...}; null removes.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `set` | object |  | Variables to set: {"Version": "2.1"}; null removes one. |
+| `update` | boolean |  | Refresh DOCVARIABLE fields after setting (default true). |
 
 ## Page layout
 

@@ -4,13 +4,16 @@
 
 An MCP server that edits Word documents the way Word does.
 
-Agents get 106 tools that cover the Word ribbon: text, formatting, styles,
+Agents get 109 tools that cover the Word ribbon: text, formatting, styles,
 lists, tables (merge, split, nested, sort, convert), pictures (inline or
 floating with text wrap), text boxes, headers and footers, watermarks, page
 borders and color, drop caps, fields, tables of contents and figures, an
 index, captions and cross-references, footnotes, content controls, page
-setup, protection, Inspect Document, and the whole **Review** tab: Track
-Changes (including moves), accept and reject, threaded comments and Compare.
+setup, protection, Inspect Document, mail merge from CSV or JSON, and the
+whole **Review** tab: Track Changes (including moves), accept and reject,
+threaded comments and Compare. Fields are computed like Word's F9 (formulas,
+IF, dates, document properties), and with LibreOffice installed page numbers,
+TOC pages and the page each paragraph is on come from a real layout.
 A whole document can be written from Markdown in one call, and many edits
 can run as one all-or-nothing batch.
 
