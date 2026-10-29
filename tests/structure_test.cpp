@@ -450,6 +450,55 @@ TEST(picture_watermark) {
     CHECK(bad);
 }
 
+TEST(charts) {
+    // read Word's cached data
+    auto w = Document::open(std::string(DOCX_CORPUS) + "/oxpt/CU001-Chart-Cached-Data-01.docx");
+    auto cs = list_charts(w);
+    CHECK_EQ(cs.size(), std::size_t(1));
+    if (!cs.empty()) {
+        CHECK_EQ(cs[0]["type"].get<std::string>(), std::string("bar"));
+        auto& s0 = cs[0]["plots"][0]["series"][0];
+        CHECK_EQ(s0["name"].get<std::string>(), std::string("Car"));
+        CHECK_EQ(s0["categories"][1].get<std::string>(), std::string("Q2"));
+        CHECK_EQ(s0["values"][0].get<double>(), 320.0);
+    }
+    // write every kind
+    auto d = Document::create();
+    auto p = paragraphs(d.body())[0];
+    for (auto t : {"column", "bar", "line", "pie", "doughnut", "area", "scatter"}) {
+        Json spec = {{"type", t}, {"title", std::string("Sales ") + t}, {"categories", {"Q1", "Q2", "Q3"}},
+                     {"series", Json::array({{{"name", "North"}, {"values", {10, 20.5, "30"}}, {"color", "1F4E79"}}})},
+                     {"x_axis_title", "Quarter"}, {"y_axis_title", "Units"}, {"data_labels", true}};
+        if (std::string(t) != "pie") spec["series"].push_back({{"name", "South"}, {"values", {5, nullptr, 15}}});
+        p = insert_paragraph(d, p, true, U"", "", nullptr, {});
+        insert_chart(d, p, 0, spec, 300, 200, {});
+    }
+    auto all = list_charts(d);
+    CHECK_EQ(all.size(), std::size_t(7));
+    if (all.size() == 7) {
+        CHECK_EQ(all[0]["title"].get<std::string>(), std::string("Sales column"));
+        CHECK_EQ(all[0]["direction"].get<std::string>(), std::string("vertical"));
+        CHECK_EQ(all[1]["direction"].get<std::string>(), std::string("horizontal"));
+        CHECK(all[0]["plots"][0]["series"][1]["values"][1].is_null());
+        CHECK_EQ(all[6]["type"].get<std::string>(), std::string("scatter"));
+    }
+    set_chart_data(d, 1, {{"series", Json::array({{{"name", "East"}, {"values", {1, 2, 3}}}})}, {"grouping", "stacked"}});
+    auto c1 = list_charts(d)[0];
+    CHECK_EQ(c1["plots"][0]["series"].size(), std::size_t(1));
+    CHECK_EQ(c1["title"].get<std::string>(), std::string("Sales column"));
+    CHECK_EQ(c1["plots"][0]["grouping"].get<std::string>(), std::string("stacked"));
+    CHECK_EQ(c1["plots"][0]["series"][0]["categories"][0].get<std::string>(), std::string("Q1"));
+    bool bad = false;
+    try { insert_chart(d, p, 0, {{"type", "radar3d"}, {"series", {{1}}}}, 0, 0, {}); } catch (std::exception&) { bad = true; }
+    CHECK(bad);
+    bad = false;
+    try { insert_chart(d, p, 0, {{"series", Json::array({{{"values", {"abc"}}}})}}, 0, 0, {}); } catch (std::exception&) { bad = true; }
+    CHECK(bad);
+    std::string why;
+    CHECK_EQ(schema_issues(d, &why), 0);
+    save(d, "charts");
+}
+
 TEST(lists_tracked) {
     auto d = sample(true);
     auto p = paragraphs(d.body())[0];

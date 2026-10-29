@@ -78,6 +78,7 @@ TASKS = [
     ("mail merge letters from a csv of addresses", "mail_merge"),
     ("paste this html into the document", "insert_html"),
     ("draw an arrow shape", "insert_shape"),
+    ("add a bar chart of these numbers", "insert_chart"),
     ("add a figure caption", "insert_caption"),
     ("insert a cross-reference to a figure", "insert_cross_reference"),
 ]

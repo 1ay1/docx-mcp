@@ -1442,6 +1442,48 @@ std::vector<ToolDef> make_tools() {
              }
              return out;
          }});
+    add({"insert_chart", "Insert chart",
+         "Insert > Chart from data: type column, bar (horizontal), line, pie, doughnut, area or scatter. categories label the "
+         "x axis; series are [{name, values, color}]. grouping clustered|stacked|percent; title, x_axis_title, y_axis_title, "
+         "legend, legend_position, data_labels, smooth (lines), markers. Width/height in points (default 432 x 260).",
+         obj({{"doc", kDoc}, {"paragraph", kPara}, {"position", integer("")}, {"type", str("column (default), bar, line, pie, doughnut, area, scatter.")},
+              {"title", str("")}, {"categories", arr(str(""), "Category labels, e.g. [\"Q1\", \"Q2\"].")},
+              {"series", arr(anyobj(""), "[{\"name\": \"Sales\", \"values\": [10, 20], \"color\": \"1F4E79\"}]; scatter series take x too.")},
+              {"grouping", enm({"clustered", "stacked", "percent"}, "Bars, columns, lines, areas.")},
+              {"x_axis_title", str("")}, {"y_axis_title", str("")}, {"legend", boolean("Default true.")},
+              {"legend_position", enm({"bottom", "top", "left", "right"}, "")}, {"data_labels", boolean("Show values (percent on pies).")},
+              {"smooth", boolean("")}, {"markers", boolean("")}, {"width", num("pt")}, {"height", num("pt")},
+              {"alt_text", str("Defaults to the title.")}, {"track", kTrack}},
+             {"doc", "paragraph", "series"}),
+         false, false, [](Sessions& S, const Json& a) {
+             auto& s = mut(S, a);
+             auto r = para(s, a);
+             Json spec = a;
+             for (auto k : {"doc", "paragraph", "position", "width", "height", "track", "author", "after"}) spec.erase(k);
+             insert_chart(s.doc, r.p, pos_in(r.p, a), spec, darg(a, "width", 0.0), darg(a, "height", 0.0), track(a));
+             auto all = list_charts(s.doc);
+             int idx = 0;
+             for (auto& c : all) if (c.value("paragraph", std::string()) == para_id(r.p)) idx = c["chart"].get<int>();
+             return Json{{"chart", idx}, {"charts", all.size()}, {"paragraph", para_brief(s.doc, r.p)}};
+         }});
+    add({"list_charts", "Charts",
+         "List charts with their type, title, categories and series values (the data Word shows). Use the number with set_chart_data.",
+         obj({{"doc", kDoc}}, {"doc"}), true, false, [](Sessions& S, const Json& a) { return Json{{"charts", list_charts(sess(S, a).doc)}}; }});
+    add({"set_chart_data", "Edit chart data",
+         "Change a chart (number from list_charts): new series, categories, type, title, grouping... Anything not given keeps "
+         "what the chart shows now.",
+         obj({{"doc", kDoc}, {"chart", integer("1-based.")}, {"type", str("")}, {"title", str("")}, {"categories", arr(str(""), "")},
+              {"series", arr(anyobj(""), "")}, {"grouping", enm({"clustered", "stacked", "percent"}, "")},
+              {"x_axis_title", str("")}, {"y_axis_title", str("")}, {"legend", boolean("")}, {"data_labels", boolean("")}},
+             {"doc", "chart"}),
+         false, false, [](Sessions& S, const Json& a) {
+             auto& s = mut(S, a);
+             Json spec = a;
+             for (auto k : {"doc", "chart", "author"}) spec.erase(k);
+             int i = iarg(a, "chart", 1);
+             set_chart_data(s.doc, i, spec);
+             return list_charts(s.doc)[i - 1];
+         }});
     add({"list_pictures", "Pictures",
          "List the pictures in the document: number, size in points, layout (inline or how text wraps), alt text and "
          "the paragraph each sits in.",

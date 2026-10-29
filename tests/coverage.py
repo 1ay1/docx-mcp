@@ -278,6 +278,11 @@ def exercise(R, doc, track, work, tag):
                         "total_row": {"bold": True}})
     R.call("get_style", doc=doc, style="CovTable")
     R.call("theme", doc=doc)
+    R.call("insert_chart", doc=doc, paragraph=p1, type="column", title="Cov chart", categories=["Q1", "Q2"],
+           series=[{"name": "A", "values": [1, 2]}, {"name": "B", "values": [3, None], "color": "C00000"}], data_labels=True, **t)
+    R.call("insert_chart", doc=doc, paragraph=p2, type="pie", series=[{"values": [30, 70]}], categories=["x", "y"], width=200, height=150, **t)
+    R.call("list_charts", doc=doc)
+    R.call("set_chart_data", doc=doc, chart=1, series=[{"name": "C", "values": [5, 6]}], grouping="stacked")
     R.call("insert_shape", doc=doc, paragraph=p2, shape="ellipse", text="Start", width=100, height=50, **t)
     R.call("insert_shape", doc=doc, paragraph=p2, shape="line", width=40, end_arrow="triangle", border={"color": "404040", "size": 2},
            layout={"wrap": "in_front", "x": 100, "y": 20})

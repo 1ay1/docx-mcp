@@ -135,7 +135,12 @@ class Fuzz:
 
     def extra(self, pid, s, e, track):
         r = self.r
-        k = r.randint(0, 57)
+        k = r.randint(0, 58)
+        if k == 58:
+            if r.random() < 0.4:
+                return self.call("set_chart_data", chart=r.randint(1, 2), series=[{"values": [r.randint(-5, 50) for _ in range(3)]}])
+            return self.call("insert_chart", paragraph=pid, position=s, type=r.choice(["column", "bar", "line", "pie", "doughnut", "area", "scatter"]),
+                             title=self.word(), categories=["a", "b", "c"], series=[{"name": self.word(), "values": [1, 2.5, None]}], **track)
         if k == 57:
             if r.random() < 0.3:
                 return self.call("set_watermark", picture="data:image/png;base64," + PNG, washout=r.random() < 0.5)

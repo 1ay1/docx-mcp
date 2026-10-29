@@ -237,6 +237,17 @@ int define_list(Document& d, const Json& spec);
 // The document's lists: num id, levels, how many paragraphs use each.
 Json list_definitions(Document& d);
 
+// ── charts ──
+// Every chart: type, title, series with categories and values (Word's cached data).
+Json list_charts(Document& d);
+// Insert a chart at pos of p. spec: {"type": column|bar|line|pie|doughnut|area|scatter,
+// "title", "categories": [...], "series": [{"name", "values": [...], "color"}], "grouping":
+// clustered|stacked|percent, "x_axis_title", "y_axis_title", "legend", "data_labels"}.
+pugi::xml_node insert_chart(Document& d, pugi::xml_node p, int pos, const Json& spec, double width_pt, double height_pt,
+                            const EditOpts& o);
+// Replace a chart's data or settings (1-based); unspecified parts keep what the chart shows.
+void set_chart_data(Document& d, int index, const Json& spec);
+
 // ── math ──
 // Insert an Office Math equation from a linear-format-ish string ("x^2+y_1=\\frac{a}{b}").
 pugi::xml_node insert_equation(Document& d, pugi::xml_node p, int pos, const std::string& linear, bool display,

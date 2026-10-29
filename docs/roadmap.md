@@ -10,7 +10,7 @@ to touch raw XML to get there.
 
 ## Where we are (main, after v0.3.0)
 
-115 tools cover Word's Home, Insert, Design, Layout, References, Mailings and Review
+118 tools cover Word's Home, Insert, Design, Layout, References, Mailings and Review
 tabs: documents, text, paragraphs, styles, lists, tables, pictures, text
 boxes, links, bookmarks, notes, fields, TOC, table of figures, index,
 equations, content controls, sections, page borders and color, watermarks,
@@ -77,7 +77,7 @@ Status is checked against the code.
 | 1.9 | Lists: multi-level control | Define New Multilevel List | Done (picture bullets left) | `define_list` presets (numbered, legal, outline, headings, chapters, bullets, checklist) with per-level format, text, start, restart, indents, linked heading styles; `list_lists`; `apply_list num_id` |
 | 1.10 | Styles: full definition | Modify Style | Done | `modify_style` sets any paragraph or run property, and for table styles whole-table borders and conditional formats (header row, total row, banded rows, first and last column). `import_styles` copies styles from a template with their based-on chains and numbering |
 | 1.11 | Themes | Design > Themes | Done | `theme` reads and sets theme colors and heading/body fonts, with Word's built-in color sets; cached theme-derived colors in styles are refreshed |
-| 1.12 | Charts | Insert > Chart | Open | Read cached chart data; then basic bar/line/pie |
+| 1.12 | Charts | Insert > Chart | Done | `list_charts` reads cached data of every chart type; `insert_chart` makes column, bar, line, pie, doughnut, area and scatter charts; `set_chart_data` edits them. Left: an embedded workbook for Edit Data |
 | 1.13 | Building blocks and templates | Quick Parts, .dotx | Open | Glossary document, create from `.dotx` |
 | 1.14 | Mail merge and document variables | Mailings | Done | `mail_merge` from records, CSV, TSV or JSON: one file per record or one document with a section each; IF, SKIPIF, NEXT, MERGEREC. `document_variables` reads and sets `w:docVars` |
 | 1.15 | Form fields and data binding | Developer | Partly | Content controls done. Left: legacy form fields, `w:dataBinding` to custom XML, repeating sections |

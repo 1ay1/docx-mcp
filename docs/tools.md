@@ -1,6 +1,6 @@
 # Tool reference
 
-Generated from `docx-mcp --list-tools` by `tools/gen_tool_docs.py`. 115 tools.
+Generated from `docx-mcp --list-tools` by `tools/gen_tool_docs.py`. 118 tools.
 
 Every tool that edits takes `doc` (a handle or a file path), and most take `track` (record as a tracked change) and `author`. Paragraphs are addressed by the `id` that `read_document` returns.
 
@@ -15,7 +15,7 @@ Every tool that edits takes `doc` (a handle or a file path), and most take `trac
 - [Track changes](#track-changes): `set_track_changes`, `list_revisions`, `accept_revisions`, `reject_revisions`, `compare_documents`
 - [Comments](#comments): `add_comment`, `list_comments`, `reply_comment`, `resolve_comment`, `edit_comment`, `delete_comment`
 - [Tables](#tables): `insert_table`, `read_table`, `set_cell`, `table_rows`, `table_columns`, `merge_cells`, `split_cell`, `format_table`, `sort_table`, `convert_table`, `delete_table`
-- [Insert](#insert): `insert_picture`, `list_pictures`, `format_picture`, `delete_picture`, `insert_text_box`, `insert_shape`, `insert_break`, `insert_hyperlink`, `list_hyperlinks`, `remove_hyperlinks`, `add_bookmark`, `list_bookmarks`, `delete_bookmark`, `insert_note`, `list_notes`, `delete_note`, `insert_field`, `list_fields`, `update_fields`, `unlink_fields`, `insert_toc`, `mark_index_entry`, `insert_index`, `insert_equation`, `insert_caption`, `insert_cross_reference`, `list_reference_targets`, `add_content_control`, `list_content_controls`, `set_content_control`
+- [Insert](#insert): `insert_picture`, `list_pictures`, `format_picture`, `delete_picture`, `insert_text_box`, `insert_shape`, `insert_chart`, `list_charts`, `set_chart_data`, `insert_break`, `insert_hyperlink`, `list_hyperlinks`, `remove_hyperlinks`, `add_bookmark`, `list_bookmarks`, `delete_bookmark`, `insert_note`, `list_notes`, `delete_note`, `insert_field`, `list_fields`, `update_fields`, `unlink_fields`, `insert_toc`, `mark_index_entry`, `insert_index`, `insert_equation`, `insert_caption`, `insert_cross_reference`, `list_reference_targets`, `add_content_control`, `list_content_controls`, `set_content_control`
 - [Mailings](#mailings): `mail_merge`, `document_variables`
 - [Page layout](#page-layout): `get_page_setup`, `set_page_setup`, `set_header_footer`, `remove_header_footer`, `read_header_footer`, `set_watermark`, `theme`
 - [File](#file): `get_properties`, `set_properties`, `get_settings`, `set_settings`, `protect_document`, `unprotect_document`
@@ -879,6 +879,58 @@ Insert > Shapes: a floating shape anchored in a paragraph. shape: rect, rounded,
 | `text` | string |  | Text inside the shape. |
 | `track` | boolean |  | Record as a tracked change (default: the document's setting). |
 | `width` | number |  | pt, default 144 |
+
+### `insert_chart`
+
+Insert > Chart from data: type column, bar (horizontal), line, pie, doughnut, area or scatter. categories label the x axis; series are [{name, values, color}]. grouping clustered|stacked|percent; title, x_axis_title, y_axis_title, legend, legend_position, data_labels, smooth (lines), markers. Width/height in points (default 432 x 260).
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `alt_text` | string |  | Defaults to the title. |
+| `categories` | array of string |  | Category labels, e.g. ["Q1", "Q2"]. |
+| `data_labels` | boolean |  | Show values (percent on pies). |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `grouping` | `clustered` \\| `stacked` \\| `percent` |  | Bars, columns, lines, areas. |
+| `height` | number |  | pt |
+| `legend` | boolean |  | Default true. |
+| `legend_position` | `bottom` \\| `top` \\| `left` \\| `right` |  |  |
+| `markers` | boolean |  |  |
+| `paragraph` | string | yes | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
+| `position` | integer |  | Character offset to insert at (default end). |
+| `series` | array of object | yes | [{"name": "Sales", "values": [10, 20], "color": "1F4E79"}]; scatter series take x too. |
+| `smooth` | boolean |  |  |
+| `title` | string |  |  |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
+| `type` | string |  | column (default), bar, line, pie, doughnut, area, scatter. |
+| `width` | number |  | pt |
+| `x_axis_title` | string |  |  |
+| `y_axis_title` | string |  |  |
+
+### `list_charts`
+
+List charts with their type, title, categories and series values (the data Word shows). Use the number with set_chart_data.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+
+### `set_chart_data`
+
+Change a chart (number from list_charts): new series, categories, type, title, grouping... Anything not given keeps what the chart shows now.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `categories` | array of string |  |  |
+| `chart` | integer | yes | 1-based. |
+| `data_labels` | boolean |  |  |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `grouping` | `clustered` \\| `stacked` \\| `percent` |  |  |
+| `legend` | boolean |  |  |
+| `series` | array of object |  |  |
+| `title` | string |  |  |
+| `type` | string |  |  |
+| `x_axis_title` | string |  |  |
+| `y_axis_title` | string |  |  |
 
 ### `insert_break`
 
