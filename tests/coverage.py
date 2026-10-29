@@ -277,6 +277,9 @@ def exercise(R, doc, track, work, tag):
            conditional={"header_row": {"run": {"bold": True}, "cell": {"shading": "1F4E79"}}, "banded_rows": {"cell": {"shading": "DDEBF7"}},
                         "total_row": {"bold": True}})
     R.call("get_style", doc=doc, style="CovTable")
+    R.call("theme", doc=doc)
+    R.call("theme", doc=doc, preset="Blue II", heading_font="Georgia", colors={"accent2": "C00000", "hyperlink": "0000FF"}, name="Cov")
+    R.call("theme", doc=doc, fonts_preset="Garamond", colors_preset="Paper")
     R.call("import_styles", doc=doc, styles=["Heading 1", "ListParagraph"], **{"from": os.path.join(CORPUS, "DB007-Spec.docx")})
     R.call("import_styles", doc=doc, overwrite=False, defaults=True, **{"from": os.path.join(CORPUS, "DB007-Spec.docx")})
     R.call("define_list", doc=doc, preset="numbered", levels=[{"format": "upperLetter", "text": "%1)"}, {"text": "%1.%2", "restart_after": False}])

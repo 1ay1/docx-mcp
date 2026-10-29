@@ -370,6 +370,31 @@ TEST(import_styles_from_template) {
     save(d, "import_styles");
 }
 
+TEST(floating_table) {
+    auto d = Document::create();
+    auto p0 = paragraphs(d.body())[0];
+    insert_text(d, p0, 0, U"Body text that wraps around the table.", nullptr, {});
+    auto tbl = insert_table(d, p0, true, {{"A", "B"}, {"1", "2"}}, Json::object(), {});
+    format_table(d, tbl, {{"width", 200}, {"float", {{"x", "right"}, {"y", 36}, {"horizontal_relative", "margin"}, {"vertical_relative", "text"}, {"overlap", false}}},
+                          {"cant_split", true}, {"title", "Prices"}, {"description", "Two columns"}}, {});
+    auto pp = tbl.child("w:tblPr").child("w:tblpPr");
+    CHECK(pp);
+    CHECK_EQ(xml::attr(pp, "w:tblpXSpec"), std::string("right"));
+    CHECK_EQ(xml::attr(pp, "w:tblpY"), std::string("720"));
+    CHECK_EQ(xml::attr(pp, "w:leftFromText"), std::string("180"));
+    CHECK(table_json(tbl).contains("float"));
+    format_cell(d, cell(tbl, 0, 0), {{"text_direction", "up"}}, {});
+    CHECK_EQ(xml::attr(cell(tbl, 0, 0).child("w:tcPr").child("w:textDirection"), "w:val"), std::string("btLr"));
+    bool bad = false;
+    try { format_table(d, tbl, {{"float", {{"horizontal_relative", "column"}}}}, {}); } catch (std::exception&) { bad = true; }
+    CHECK(bad);
+    std::string why;
+    CHECK_EQ(schema_issues(d, &why), 0);
+    save(d, "floating_table");
+    format_table(d, tbl, {{"float", nullptr}}, {});
+    CHECK(!tbl.child("w:tblPr").child("w:tblpPr"));
+}
+
 TEST(lists_tracked) {
     auto d = sample(true);
     auto p = paragraphs(d.body())[0];

@@ -56,6 +56,14 @@ std::string to_text(Document& d, const std::string& view, bool markdown);
 // `original`. Paragraph-level LCS, then word-level diff inside matched paragraphs.
 Document compare(Document& original, Document& revised, const std::string& author, const Json& opts);
 
+// ── Design > Themes ──
+// Theme colors (dk1, lt1, dk2, lt2, accent1-6, hlink, folHlink) and fonts
+// (major = headings, minor = body).
+Json theme_json(Document& d);
+// props: {"preset": "Office|Office 2013|Blue|Green|Red Orange|Violet|Grayscale",
+// "colors": {"accent1": "1F4E79", ...}, "heading_font": "Georgia", "body_font": "Garamond", "name": "..."}
+void set_theme(Document& d, const Json& props);
+
 // ── File > Inspect Document ──
 // Counts what a document carries beyond its visible text: comments,
 // revisions, personal info (authors, last-modified-by, template), hidden

@@ -10,7 +10,7 @@ to touch raw XML to get there.
 
 ## Where we are (main, after v0.3.0)
 
-112 tools cover Word's Home, Insert, Design, Layout, References, Mailings and Review
+113 tools cover Word's Home, Insert, Design, Layout, References, Mailings and Review
 tabs: documents, text, paragraphs, styles, lists, tables, pictures, text
 boxes, links, bookmarks, notes, fields, TOC, table of figures, index,
 equations, content controls, sections, page borders and color, watermarks,
@@ -72,11 +72,11 @@ Status is checked against the code.
 | 1.4 | Watermark | Design > Watermark | Text done | `set_watermark` (diagonal or horizontal, remove). Left: picture watermarks |
 | 1.5 | Page color and borders | Design | Done | `set_page_setup` `page_color`, `page_borders` |
 | 1.6 | Columns | Layout > Columns | Done | `columns`, `column_space`, `column_line`, `column_widths`; column breaks via `insert_break` |
-| 1.7 | Tables | Table Layout | Mostly done | Split cells and nested tables (v0.3.0), `sort_table`, `convert_table`, `repeat_header`, row height. Left: floating tables (`w:tblpPr`), vertical cell text |
+| 1.7 | Tables | Table Layout | Done | Split cells and nested tables, `sort_table`, `convert_table`, `repeat_header`, row height. Floating tables (`format_table float`), `cant_split`, alt text, RTL tables, vertical cell text (`text_direction: up/down`) |
 | 1.8 | Table of figures, index, bibliography | References | Figures and index done | `insert_toc` with `captions`, `mark_index_entry`, `insert_index`. Left: citations and bibliography |
 | 1.9 | Lists: multi-level control | Define New Multilevel List | Done (picture bullets left) | `define_list` presets (numbered, legal, outline, headings, chapters, bullets, checklist) with per-level format, text, start, restart, indents, linked heading styles; `list_lists`; `apply_list num_id` |
 | 1.10 | Styles: full definition | Modify Style | Done | `modify_style` sets any paragraph or run property, and for table styles whole-table borders and conditional formats (header row, total row, banded rows, first and last column). `import_styles` copies styles from a template with their based-on chains and numbering |
-| 1.11 | Themes | Design > Themes | Open | Read and set theme colors and fonts |
+| 1.11 | Themes | Design > Themes | Done | `theme` reads and sets theme colors and heading/body fonts, with Word's built-in color sets; cached theme-derived colors in styles are refreshed |
 | 1.12 | Charts | Insert > Chart | Open | Read cached chart data; then basic bar/line/pie |
 | 1.13 | Building blocks and templates | Quick Parts, .dotx | Open | Glossary document, create from `.dotx` |
 | 1.14 | Mail merge and document variables | Mailings | Done | `mail_merge` from records, CSV, TSV or JSON: one file per record or one document with a section each; IF, SKIPIF, NEXT, MERGEREC. `document_variables` reads and sets `w:docVars` |
@@ -163,7 +163,7 @@ documents and agents need them:
 1. ~~2.4 field results and 2.3 the page map~~ (done).
 2. ~~1.9 multi-level lists and 1.10 table style conditional formats~~ (done).
 3. ~~1.14 mail merge~~ (done), then 1.15 data binding.
-4. 1.7 floating tables, 1.2 shapes, 1.4 picture watermarks.
+4. ~~1.7 floating tables, 1.11 themes~~ (done), 1.2 shapes, 1.4 picture watermarks.
 5. 3.6 `insert_html`, then Phase 4 speed work and Phase 5 proof.
 
 ## Not planned

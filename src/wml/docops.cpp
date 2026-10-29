@@ -10,6 +10,7 @@
 #include <stdexcept>
 
 #include "schema/schema.hpp"
+#include "util/assets.hpp"
 #include "util/util.hpp"
 #include "wml/comments.hpp"
 #include "wml/edit.hpp"
@@ -1157,6 +1158,264 @@ Json inspect_document(Document& d, const std::vector<std::string>& remove) {
     Json out = {{"found", found}};
     if (!removed.empty()) out["removed"] = removed;
     return out;
+}
+
+// ── themes ───────────────────────────────────────────────────────────────────────
+
+namespace {
+
+const char* kSlots[] = {"dk1", "lt1", "dk2", "lt2", "accent1", "accent2", "accent3", "accent4", "accent5", "accent6", "hlink", "folHlink"};
+
+pugi::xml_node theme_root(Document& d, bool create) {
+    std::string part = d.related(opc::rt::theme);
+    if (part.empty()) {
+        if (!create) return {};
+        auto x = assets::get("word/blank/theme1.xml");
+        part = d.add_related_part(opc::rt::theme, opc::ct::theme, "/word/theme/theme1", std::string(x));
+    }
+    return d.pkg().xml(part).document_element();
+}
+
+std::string slot_color(pugi::xml_node slot) {
+    if (auto s = slot.child("a:srgbClr")) return xml::attr(s, "val");
+    if (auto s = slot.child("a:sysClr")) return xml::attr(s, "lastClr");
+    return "";
+}
+
+// Word's built-in theme color sets (Design > Colors).
+const std::map<std::string, std::vector<const char*>>& presets() {
+    static const std::map<std::string, std::vector<const char*>> m = {
+        {"office", {"000000", "FFFFFF", "44546A", "E7E6E6", "4472C4", "ED7D31", "A5A5A5", "FFC000", "5B9BD5", "70AD47", "0563C1", "954F72"}},
+        {"office 2007", {"000000", "FFFFFF", "1F497D", "EEECE1", "4F81BD", "C0504D", "9BBB59", "8064A2", "4BACC6", "F79646", "0000FF", "800080"}},
+        {"office 2013", {"000000", "FFFFFF", "44546A", "E7E6E6", "5B9BD5", "ED7D31", "A5A5A5", "FFC000", "4472C4", "70AD47", "0563C1", "954F72"}},
+        {"grayscale", {"000000", "FFFFFF", "000000", "F8F8F8", "DDDDDD", "B2B2B2", "969696", "808080", "5F5F5F", "4D4D4D", "5F5F5F", "919191"}},
+        {"blue", {"000000", "FFFFFF", "17406D", "DBEFF9", "0F6FC6", "009DD9", "0BD0D9", "10CF9B", "7CCA62", "A5C249", "F49100", "85DFD0"}},
+        {"blue ii", {"000000", "FFFFFF", "335B74", "DFE3E5", "1CADE4", "2683C6", "27CED7", "42BA97", "3E8853", "62A39F", "6B9F25", "B26B02"}},
+        {"green", {"000000", "FFFFFF", "455F51", "E3DED1", "549E39", "8AB833", "C0CF3A", "029676", "4AB5C4", "0989B1", "6B9F25", "BA6906"}},
+        {"red orange", {"000000", "FFFFFF", "505046", "EEECE1", "E84C22", "FFBD47", "B64926", "FF8427", "CC9900", "B22600", "CC9900", "666699"}},
+        {"violet", {"000000", "FFFFFF", "373545", "DCD8DC", "AD84C6", "8784C7", "5D739A", "6997AF", "84ACB6", "6F8183", "69A020", "8C8C8C"}},
+        {"marquee", {"000000", "FFFFFF", "5E5E5E", "DDDDDD", "418AB3", "A6B727", "F69200", "838383", "FEC306", "DF5327", "F59E00", "B2B2B2"}},
+        {"paper", {"000000", "FFFFFF", "444D26", "FEFAC9", "A5B592", "F3A447", "E7BC29", "D092A7", "9C85C0", "809EC2", "8E58B6", "7F6F6F"}},
+    };
+    return m;
+}
+
+const std::map<std::string, std::pair<const char*, const char*>>& font_presets() {
+    static const std::map<std::string, std::pair<const char*, const char*>> m = {
+        {"office", {"Calibri Light", "Calibri"}}, {"office 2007", {"Cambria", "Calibri"}}, {"office 2013", {"Calibri Light", "Calibri"}},
+        {"arial", {"Arial", "Arial"}}, {"georgia", {"Georgia", "Georgia"}}, {"garamond", {"Garamond", "Garamond"}},
+        {"times new roman", {"Times New Roman", "Times New Roman"}}, {"corbel", {"Corbel", "Corbel"}},
+        {"candara", {"Candara", "Candara"}}, {"franklin gothic", {"Franklin Gothic Medium", "Franklin Gothic Book"}},
+        {"century gothic", {"Century Gothic", "Century Gothic"}}, {"tw cen mt", {"Tw Cen MT", "Tw Cen MT"}},
+        {"cambria", {"Cambria", "Cambria"}}, {"trebuchet ms", {"Trebuchet MS", "Trebuchet MS"}}};
+    return m;
+}
+
+void set_slot(pugi::xml_node scheme, const std::string& slot, std::string hex) {
+    if (!hex.empty() && hex[0] == '#') hex = hex.substr(1);
+    if (hex.size() != 6 || !std::all_of(hex.begin(), hex.end(), [](char c) { return std::isxdigit((unsigned char)c); }))
+        throw std::runtime_error("theme color " + slot + " must be a hex RGB like 1F4E79");
+    for (auto& c : hex) c = (char)std::toupper((unsigned char)c);
+    auto e = scheme.child(("a:" + slot).c_str());
+    if (!e) e = scheme.append_child(("a:" + slot).c_str());
+    // dk1/lt1 keep the system color form Word uses, with the new value
+    if (auto sys = e.child("a:sysClr")) {
+        if ((slot == "dk1" && hex == "000000") || (slot == "lt1" && hex == "FFFFFF")) { xml::set_attr(sys, "lastClr", hex); return; }
+        e.remove_child(sys);
+    }
+    auto s = e.child("a:srgbClr");
+    if (!s) { while (e.first_child()) e.remove_child(e.first_child()); s = e.append_child("a:srgbClr"); }
+    xml::set_attr(s, "val", hex);
+}
+
+// Word stores a theme color's resolved RGB next to the reference
+// (w:color w:val="2F5496" w:themeColor="accent1" w:themeShade="BF"); other
+// readers use that value, so keep it in step with the theme.
+void rgb_to_hsl(int r, int g, int b, double& h, double& s, double& l) {
+    double R = r / 255.0, G = g / 255.0, B = b / 255.0;
+    double mx = std::max({R, G, B}), mn = std::min({R, G, B});
+    l = (mx + mn) / 2;
+    if (mx == mn) { h = s = 0; return; }
+    double dd = mx - mn;
+    s = l > 0.5 ? dd / (2 - mx - mn) : dd / (mx + mn);
+    if (mx == R) h = (G - B) / dd + (G < B ? 6 : 0);
+    else if (mx == G) h = (B - R) / dd + 2;
+    else h = (R - G) / dd + 4;
+    h /= 6;
+}
+
+double hue(double p, double q, double t) {
+    if (t < 0) t += 1;
+    if (t > 1) t -= 1;
+    if (t < 1.0 / 6) return p + (q - p) * 6 * t;
+    if (t < 0.5) return q;
+    if (t < 2.0 / 3) return p + (q - p) * (2.0 / 3 - t) * 6;
+    return p;
+}
+
+std::string hsl_hex(double h, double s, double l) {
+    double r, g, b;
+    if (s == 0) r = g = b = l;
+    else {
+        double q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
+        r = hue(p, q, h + 1.0 / 3);
+        g = hue(p, q, h);
+        b = hue(p, q, h - 1.0 / 3);
+    }
+    char buf[8];
+    std::snprintf(buf, sizeof buf, "%02X%02X%02X", (int)std::lround(r * 255), (int)std::lround(g * 255), (int)std::lround(b * 255));
+    return buf;
+}
+
+std::string apply_tint_shade(const std::string& hex, const std::string& tint, const std::string& shade) {
+    if (hex.size() != 6) return hex;
+    int r = std::stoi(hex.substr(0, 2), nullptr, 16), g = std::stoi(hex.substr(2, 2), nullptr, 16), b = std::stoi(hex.substr(4, 2), nullptr, 16);
+    if (tint.empty() && shade.empty()) return hex;
+    double h, s, l;
+    rgb_to_hsl(r, g, b, h, s, l);
+    if (!shade.empty()) l = l * (std::stoi(shade, nullptr, 16) / 255.0);
+    if (!tint.empty()) {
+        double t = std::stoi(tint, nullptr, 16) / 255.0;
+        l = l * t + (1 - t);
+    }
+    return hsl_hex(h, s, std::clamp(l, 0.0, 1.0));
+}
+
+void refresh_theme_colors(Document& d) {
+    auto t = theme_root(d, false);
+    if (!t) return;
+    auto cs = t.child("a:themeElements").child("a:clrScheme");
+    std::map<std::string, std::string> rgb;
+    for (auto s : kSlots) rgb[s] = slot_color(cs.child((std::string("a:") + s).c_str()));
+    // WordprocessingML names -> scheme slots (settings/w:clrSchemeMapping can remap text/background; Word's default shown)
+    std::map<std::string, std::string> map = {
+        {"dark1", "dk1"}, {"light1", "lt1"}, {"dark2", "dk2"}, {"light2", "lt2"}, {"text1", "dk1"}, {"background1", "lt1"},
+        {"text2", "dk2"}, {"background2", "lt2"}, {"hyperlink", "hlink"}, {"followedHyperlink", "folHlink"}};
+    for (int i = 1; i <= 6; i++) map["accent" + std::to_string(i)] = "accent" + std::to_string(i);
+    if (auto st = d.settings(false))
+        if (auto m = st.child("w:clrSchemeMapping")) {
+            static const std::map<std::string, std::string> idx = {{"bg1", "background1"}, {"t1", "text1"}, {"bg2", "background2"}, {"t2", "text2"}};
+            static const std::map<std::string, std::string> val = {{"dark1", "dk1"}, {"light1", "lt1"}, {"dark2", "dk2"}, {"light2", "lt2"}};
+            for (auto& [a, name] : idx)
+                if (auto v = xml::attr(m, "w:" + a); !v.empty())
+                    if (auto it = val.find(v); it != val.end()) map[name] = it->second;
+        }
+    auto resolve = [&](const std::string& tc) -> std::string {
+        auto it = map.find(tc);
+        if (it == map.end()) return "";
+        return rgb[it->second];
+    };
+    std::vector<std::string> parts = d.story_parts();
+    for (auto& p : {d.related(opc::rt::styles), d.related(opc::rt::numbering)}) if (!p.empty()) parts.push_back(p);
+    for (auto& part : parts) {
+        if (!d.pkg().has(part)) continue;
+        auto root = d.pkg().xml(part).document_element();
+        for (auto x : root.select_nodes(".//*[@w:themeColor or @w:themeFill]")) {
+            auto e = x.node();
+            if (auto tc = xml::attr(e, "w:themeColor"); !tc.empty()) {
+                std::string base = resolve(tc);
+                if (!base.empty()) {
+                    // w:color keeps the RGB in w:val; shading, underline and borders in w:color
+                    const char* attr = xml::name_is(e, "w:color") ? "w:val" : "w:color";
+                    xml::set_attr(e, attr, apply_tint_shade(base, xml::attr(e, "w:themeTint"), xml::attr(e, "w:themeShade")));
+                }
+            }
+            if (auto tf = xml::attr(e, "w:themeFill"); !tf.empty()) {
+                std::string base = resolve(tf);
+                if (!base.empty())
+                    xml::set_attr(e, "w:fill", apply_tint_shade(base, xml::attr(e, "w:themeFillTint"), xml::attr(e, "w:themeFillShade")));
+            }
+        }
+    }
+}
+
+}  // namespace
+
+Json theme_json(Document& d) {
+    auto t = theme_root(d, false);
+    if (!t) return Json{{"theme", nullptr}, {"note", "no theme part: set_theme adds Office's"}};
+    auto el = t.child("a:themeElements");
+    auto cs = el.child("a:clrScheme");
+    Json colors = Json::object();
+    for (auto s : kSlots) colors[s] = slot_color(cs.child((std::string("a:") + s).c_str()));
+    auto fs = el.child("a:fontScheme");
+    return Json{{"name", xml::attr(t, "name")},
+                {"colors_name", xml::attr(cs, "name")},
+                {"colors", colors},
+                {"fonts_name", xml::attr(fs, "name")},
+                {"heading_font", xml::attr(fs.child("a:majorFont").child("a:latin"), "typeface")},
+                {"body_font", xml::attr(fs.child("a:minorFont").child("a:latin"), "typeface")}};
+}
+
+void set_theme(Document& d, const Json& props) {
+    auto t = theme_root(d, true);
+    auto el = t.child("a:themeElements");
+    auto cs = el.child("a:clrScheme");
+    auto fs = el.child("a:fontScheme");
+    if (!cs || !fs) throw std::runtime_error("the document's theme has no color or font scheme");
+    for (auto& [k, v] : props.items())
+        if (k != "preset" && k != "colors_preset" && k != "fonts_preset" && k != "colors" && k != "heading_font" && k != "body_font" && k != "name")
+            throw std::runtime_error(util::unknown_key("theme setting", k, {"preset", "colors_preset", "fonts_preset", "colors", "heading_font", "body_font", "name"}));
+    for (auto& [k, v] : props.items()) {
+        if (k == "preset" || k == "colors_preset") {
+            std::string p = util::lower(v.get<std::string>());
+            auto it = presets().find(p);
+            if (it == presets().end()) {
+                std::vector<std::string_view> valid;
+                for (auto& [n, _] : presets()) valid.push_back(n);
+                throw std::runtime_error(util::unknown_key("theme colors", p, valid));
+            }
+            for (int i = 0; i < 12; i++) set_slot(cs, kSlots[i], it->second[i]);
+            std::string nm = v.get<std::string>();
+            xml::set_attr(cs, "name", nm);
+            if (k == "preset") {
+                if (auto f = font_presets().find(p); f != font_presets().end()) {
+                    xml::set_attr(fs.child("a:majorFont").child("a:latin"), "typeface", f->second.first);
+                    xml::set_attr(fs.child("a:minorFont").child("a:latin"), "typeface", f->second.second);
+                    xml::set_attr(fs, "name", nm);
+                }
+            }
+        } else if (k == "fonts_preset") {
+            std::string p = util::lower(v.get<std::string>());
+            auto f = font_presets().find(p);
+            if (f == font_presets().end()) {
+                std::vector<std::string_view> valid;
+                for (auto& [n, _] : font_presets()) valid.push_back(n);
+                throw std::runtime_error(util::unknown_key("theme fonts", p, valid));
+            }
+            xml::set_attr(fs.child("a:majorFont").child("a:latin"), "typeface", f->second.first);
+            xml::set_attr(fs.child("a:minorFont").child("a:latin"), "typeface", f->second.second);
+            xml::set_attr(fs, "name", v.get<std::string>());
+        }
+    }
+    if (props.contains("colors")) {
+        if (!props["colors"].is_object()) throw std::runtime_error("colors is {\"accent1\": \"1F4E79\", ...}");
+        for (auto& [k, v] : props["colors"].items()) {
+            std::string slot = k;
+            static const std::map<std::string, std::string> alias = {
+                {"dark1", "dk1"}, {"light1", "lt1"}, {"dark2", "dk2"}, {"light2", "lt2"}, {"text", "dk1"}, {"background", "lt1"},
+                {"hyperlink", "hlink"}, {"followed_hyperlink", "folHlink"}, {"followed", "folHlink"}};
+            if (auto it = alias.find(util::lower(k)); it != alias.end()) slot = it->second;
+            bool ok = false;
+            for (auto s : kSlots) if (slot == s) ok = true;
+            if (!ok) throw std::runtime_error(util::unknown_key("theme color", k, {"dk1", "lt1", "dk2", "lt2", "accent1", "accent2", "accent3", "accent4", "accent5", "accent6", "hlink", "folHlink"}));
+            set_slot(cs, slot, v.get<std::string>());
+        }
+        if (!props.contains("preset") && !props.contains("colors_preset")) xml::set_attr(cs, "name", props.value("name", std::string("Custom")));
+    }
+    auto font = [&](const char* key, const char* which) {
+        if (!props.contains(key)) return;
+        std::string f = props[key].get<std::string>();
+        if (util::trim(f).empty()) throw std::runtime_error(std::string(key) + " can't be empty");
+        auto l = fs.child(which).child("a:latin");
+        xml::set_attr(l, "typeface", f);
+        xml::remove_attr(l, "panose");  // the old font's
+        if (!props.contains("preset") && !props.contains("fonts_preset")) xml::set_attr(fs, "name", props.value("name", std::string("Custom")));
+    };
+    font("heading_font", "a:majorFont");
+    font("body_font", "a:minorFont");
+    if (props.contains("name")) xml::set_attr(t, "name", props["name"].get<std::string>());
+    refresh_theme_colors(d);
 }
 
 }  // namespace docx::wml

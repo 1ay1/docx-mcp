@@ -1,5 +1,6 @@
 // Tables (ECMA 17.4) with Word's insert/delete/merge semantics.
 #include <map>
+#include <set>
 #include <cstdio>
 #include <algorithm>
 #include <functional>
@@ -781,8 +782,77 @@ void format_table(Document& d, pugi::xml_node tbl, const Json& props, const Edit
                 }
             }
             xml::set_attr(schema::ensure_child(tblpr, "w:tblLayout"), "w:type", "fixed");
+        } else if (k == "float" || k == "position") {
+            // Table Properties > Text wrapping: Around, with its position
+            if (v.is_null() || (v.is_boolean() && !v.get<bool>())) {
+                tblpr.remove_child("w:tblpPr");
+                tblpr.remove_child("w:tblOverlap");
+                continue;
+            }
+            Json f = v.is_object() ? v : Json::object();
+            auto pp = schema::ensure_child(tblpr, "w:tblpPr");
+            static const std::set<std::string> anchors_h = {"margin", "page", "text"}, anchors_v = {"margin", "page", "text"};
+            std::string ha = f.value("horizontal_relative", std::string("margin")), va = f.value("vertical_relative", std::string("text"));
+            if (!anchors_h.count(ha)) throw std::runtime_error("horizontal_relative is margin, page or text (column)");
+            if (!anchors_v.count(va)) throw std::runtime_error("vertical_relative is margin, page or text (paragraph)");
+            xml::set_attr(pp, "w:horzAnchor", ha);
+            xml::set_attr(pp, "w:vertAnchor", va);
+            for (auto a : {"w:tblpX", "w:tblpY", "w:tblpXSpec", "w:tblpYSpec"}) xml::remove_attr(pp, a);
+            auto spec_or_pos = [&](const char* key, const char* pos_attr, const char* spec_attr, std::initializer_list<const char*> specs) {
+                if (!f.contains(key)) return;
+                auto& x = f[key];
+                if (x.is_string()) {
+                    std::string s = x.get<std::string>();
+                    for (auto sp : specs) if (s == sp) { xml::set_attr(pp, spec_attr, s); return; }
+                }
+                xml::set_attr(pp, pos_attr, std::to_string(twips_of(x)));
+            };
+            spec_or_pos("x", "w:tblpX", "w:tblpXSpec", {"left", "center", "right", "inside", "outside"});
+            spec_or_pos("y", "w:tblpY", "w:tblpYSpec", {"top", "center", "bottom", "inside", "outside", "inline"});
+            // distance from surrounding text (default Word's 0.13" left/right)
+            long dl = f.contains("distance") ? twips_of(f["distance"]) : 180;
+            auto dist = [&](const char* key, const char* attr, long def) {
+                long val = f.contains(key) ? twips_of(f[key]) : def;
+                if (val) xml::set_attr(pp, attr, std::to_string(val));
+                else xml::remove_attr(pp, attr);
+            };
+            dist("distance_left", "w:leftFromText", dl);
+            dist("distance_right", "w:rightFromText", dl);
+            dist("distance_top", "w:topFromText", f.contains("distance") ? dl : 0);
+            dist("distance_bottom", "w:bottomFromText", f.contains("distance") ? dl : 0);
+            // attribute order as Word writes it
+            pugi::xml_document tmp;
+            auto n = tmp.append_child("w:tblpPr");
+            for (auto a : {"w:leftFromText", "w:rightFromText", "w:topFromText", "w:bottomFromText", "w:vertAnchor", "w:horzAnchor",
+                           "w:tblpXSpec", "w:tblpX", "w:tblpYSpec", "w:tblpY"})
+                if (auto at = pp.attribute(a)) n.append_attribute(a) = at.value();
+            while (pp.first_attribute()) pp.remove_attribute(pp.first_attribute());
+            for (auto at : n.attributes()) pp.append_attribute(at.name()) = at.value();
+            if (f.contains("overlap")) {
+                auto ov = schema::ensure_child(tblpr, "w:tblOverlap");
+                xml::set_attr(ov, "w:val", f["overlap"].get<bool>() ? "overlap" : "never");
+            }
+        } else if (k == "cant_split" || k == "rows_break_across_pages") {
+            bool cant = k == "cant_split" ? v.get<bool>() : !v.get<bool>();
+            for (auto tr : tbl.children("w:tr")) {
+                if (cant) schema::ensure_child(schema::ensure_child(tr, "w:trPr"), "w:cantSplit");
+                else if (auto trpr = tr.child("w:trPr")) trpr.remove_child("w:cantSplit");
+            }
+        } else if (k == "exact_row_height") {
+            for (auto tr : tbl.children("w:tr")) {
+                auto h = schema::ensure_child(schema::ensure_child(tr, "w:trPr"), "w:trHeight");
+                xml::set_attr(h, "w:val", std::to_string(twips_of(v)));
+                xml::set_attr(h, "w:hRule", "exact");
+            }
+        } else if (k == "title" || k == "description") {
+            // alt text
+            auto e = schema::ensure_child(tblpr, k == "title" ? "w:tblCaption" : "w:tblDescription");
+            xml::set_attr(e, "w:val", v.get<std::string>());
+        } else if (k == "rtl") {
+            if (v.get<bool>()) schema::ensure_child(tblpr, "w:bidiVisual");
+            else tblpr.remove_child("w:bidiVisual");
         } else {
-            throw std::runtime_error(util::unknown_key("table property", k, {"style", "alignment", "width", "indent", "layout", "borders", "cell_margins", "column_widths", "row_height", "header_row", "repeat_header", "first_column", "last_row", "total_row", "last_column", "banded_rows", "banded_columns"}));
+            throw std::runtime_error(util::unknown_key("table property", k, {"style", "alignment", "width", "indent", "layout", "borders", "cell_margins", "column_widths", "row_height", "exact_row_height", "header_row", "repeat_header", "first_column", "last_row", "total_row", "last_column", "banded_rows", "banded_columns", "float", "cant_split", "title", "description", "rtl"}));
         }
     }
 }
@@ -819,7 +889,15 @@ void format_cell(Document& d, pugi::xml_node tc, const Json& props, const EditOp
             xml::set_attr(w, "w:w", std::to_string(twips_of(v)));
             xml::set_attr(w, "w:type", "dxa");
         } else if (k == "borders") apply_borders(schema::ensure_child(tcpr, "w:tcBorders"), v, false);
-        else if (k == "text_direction") enum_attr(schema::ensure_child(tcpr, "w:textDirection"), "w:val", v.get<std::string>());
+        else if (k == "text_direction") {
+            // friendly names for Word's Text Direction dialog
+            static const std::map<std::string, std::string> alias = {
+                {"horizontal", "lrTb"}, {"normal", "lrTb"}, {"up", "btLr"}, {"bottom_to_top", "btLr"}, {"rotate_270", "btLr"},
+                {"down", "tbRl"}, {"top_to_bottom", "tbRl"}, {"rotate_90", "tbRl"}, {"vertical", "tbRl"}, {"stacked", "tbRlV"}};
+            std::string s = v.get<std::string>();
+            if (auto it = alias.find(util::lower(s)); it != alias.end()) s = it->second;
+            enum_attr(schema::ensure_child(tcpr, "w:textDirection"), "w:val", s);
+        }
         else if (k == "no_wrap") { if (v.get<bool>()) schema::ensure_child(tcpr, "w:noWrap"); else tcpr.remove_child("w:noWrap"); }
         else if (k == "paragraph") { for (auto p : xml::children(tc, "w:p")) format_paragraph(d, p, v, o); }
         else if (k == "run") {
@@ -882,6 +960,14 @@ Json table_json(pugi::xml_node tbl) {
     Json j;
     j["rows"] = rows;
     j["style"] = xml::attr(tbl.child("w:tblPr").child("w:tblStyle"), "w:val");
+    if (auto pp = tbl.child("w:tblPr").child("w:tblpPr")) {
+        Json f = {{"horizontal_relative", xml::attr(pp, "w:horzAnchor", "text")}, {"vertical_relative", xml::attr(pp, "w:vertAnchor", "margin")}};
+        if (auto s = xml::attr(pp, "w:tblpXSpec"); !s.empty()) f["x"] = s;
+        else f["x_pt"] = util::to_int(xml::attr(pp, "w:tblpX", "0")) / 20.0;
+        if (auto s = xml::attr(pp, "w:tblpYSpec"); !s.empty()) f["y"] = s;
+        else f["y_pt"] = util::to_int(xml::attr(pp, "w:tblpY", "0")) / 20.0;
+        j["float"] = f;
+    }
     j["columns"] = xml::children(tbl.child("w:tblGrid"), "w:gridCol").size();
     return j;
 }

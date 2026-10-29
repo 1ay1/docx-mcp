@@ -1,6 +1,6 @@
 # Tool reference
 
-Generated from `docx-mcp --list-tools` by `tools/gen_tool_docs.py`. 112 tools.
+Generated from `docx-mcp --list-tools` by `tools/gen_tool_docs.py`. 113 tools.
 
 Every tool that edits takes `doc` (a handle or a file path), and most take `track` (record as a tracked change) and `author`. Paragraphs are addressed by the `id` that `read_document` returns.
 
@@ -17,7 +17,7 @@ Every tool that edits takes `doc` (a handle or a file path), and most take `trac
 - [Tables](#tables): `insert_table`, `read_table`, `set_cell`, `table_rows`, `table_columns`, `merge_cells`, `split_cell`, `format_table`, `sort_table`, `convert_table`, `delete_table`
 - [Insert](#insert): `insert_picture`, `list_pictures`, `format_picture`, `delete_picture`, `insert_text_box`, `insert_break`, `insert_hyperlink`, `list_hyperlinks`, `remove_hyperlinks`, `add_bookmark`, `list_bookmarks`, `delete_bookmark`, `insert_note`, `list_notes`, `delete_note`, `insert_field`, `list_fields`, `update_fields`, `unlink_fields`, `insert_toc`, `mark_index_entry`, `insert_index`, `insert_equation`, `insert_caption`, `insert_cross_reference`, `list_reference_targets`, `add_content_control`, `list_content_controls`, `set_content_control`
 - [Mailings](#mailings): `mail_merge`, `document_variables`
-- [Page layout](#page-layout): `get_page_setup`, `set_page_setup`, `set_header_footer`, `remove_header_footer`, `read_header_footer`, `set_watermark`
+- [Page layout](#page-layout): `get_page_setup`, `set_page_setup`, `set_header_footer`, `remove_header_footer`, `read_header_footer`, `set_watermark`, `theme`
 - [File](#file): `get_properties`, `set_properties`, `get_settings`, `set_settings`, `protect_document`, `unprotect_document`
 - [Expert](#expert): `validate_document`, `inspect_document`, `get_xml`, `set_paragraph_xml`
 - [Seeing the page](#seeing-the-page): `render_pages`, `export_pdf`
@@ -301,7 +301,7 @@ Cut paragraphs and paste them elsewhere (before/after a target). With Track Chan
 
 ### `format_text`
 
-Apply character formatting to text in a paragraph (match or start/end; default the whole paragraph).
+Change the font, size, color, bold, italic, underline, highlight of text in a paragraph (match or start/end; default the whole paragraph).
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
@@ -721,7 +721,7 @@ Split table cells: undo a merge at a cell, or split a plain cell into several si
 
 ### `format_table`
 
-style, alignment, width (pt|"50%"|auto), borders ("all"|"none"|{top,insideH,..}), indent, layout (fixed|autofit), cell_margins, header_row, first_column, last_row, last_column, banded_rows, banded_columns, repeat_header, row_height, column_widths.
+style, alignment, width (pt|"50%"|auto), borders ("all"|"none"|{top,insideH,..}), indent, layout (fixed|autofit), cell_margins, header_row, first_column, total_row, last_column, banded_rows, banded_columns, repeat_header, row_height, exact_row_height, column_widths, cant_split, title/description (alt text), rtl, float (text wraps around: {x: pt|left|center|right, y: pt|top|bottom, horizontal_relative: margin|page|text, vertical_relative, distance, overlap}; null = inline).
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
@@ -1226,6 +1226,21 @@ Put a text watermark behind every page (Design > Watermark), e.g. DRAFT or CONFI
 | `remove` | boolean |  | Remove the watermark instead. |
 | `size` | number |  | Points; default fits the page width. |
 | `text` | string |  | Watermark text. |
+
+### `theme`
+
+Design > Themes: read or change the theme's colors and fonts. Headings use the heading font, text the body font, and theme colors (accent1-6, dk2, lt2, hlink) feed styles, tables and charts. preset: Office, Office 2007, Office 2013, Blue, Blue II, Green, Red Orange, Violet, Marquee, Paper, Grayscale. colors: {"accent1": "1F4E79"}. Without changes it returns the current theme.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `body_font` | string |  | Minor (body) typeface. |
+| `colors` | object |  | Theme color slots: dk1, lt1, dk2, lt2, accent1-6, hlink, folHlink -> RRGGBB. |
+| `colors_preset` | string |  | Only the colors of a preset. |
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `fonts_preset` | string |  | Only the fonts: Office, Georgia, Garamond, Arial, ... |
+| `heading_font` | string |  | Major (headings) typeface. |
+| `name` | string |  | Theme name. |
+| `preset` | string |  | Built-in theme colors (and fonts when it has them). |
 
 ## File
 

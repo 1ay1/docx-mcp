@@ -228,6 +228,36 @@ TEST(invalid_xml_chars_dropped) {
     CHECK_EQ(title, std::string("title\xEF\xBF\xBD"));
 }
 
+TEST(themes) {
+    auto d = Document::create();
+    auto t = theme_json(d);
+    CHECK_EQ(t["colors"]["accent1"].get<std::string>(), std::string("4472C4"));
+    CHECK_EQ(t["heading_font"].get<std::string>(), std::string("Calibri Light"));
+    set_theme(d, {{"preset", "Green"}});
+    t = theme_json(d);
+    CHECK_EQ(t["colors"]["accent1"].get<std::string>(), std::string("549E39"));
+    CHECK_EQ(t["colors_name"].get<std::string>(), std::string("Green"));
+    set_theme(d, {{"colors", {{"accent2", "#c00000"}, {"hyperlink", "0000ff"}}}, {"heading_font", "Georgia"}, {"body_font", "Garamond"}});
+    t = theme_json(d);
+    CHECK_EQ(t["colors"]["accent2"].get<std::string>(), std::string("C00000"));
+    CHECK_EQ(t["colors"]["hlink"].get<std::string>(), std::string("0000FF"));
+    CHECK_EQ(t["body_font"].get<std::string>(), std::string("Garamond"));
+    CHECK_EQ(t["colors"]["accent1"].get<std::string>(), std::string("549E39"));
+    set_theme(d, {{"colors", {{"dk1", "000000"}}}});
+    bool bad = false;
+    try { set_theme(d, {{"colors", {{"accent9", "000000"}}}}); } catch (std::exception&) { bad = true; }
+    CHECK(bad);
+    bad = false;
+    try { set_theme(d, {{"colors", {{"accent1", "blue"}}}}); } catch (std::exception&) { bad = true; }
+    CHECK(bad);
+    bad = false;
+    try { set_theme(d, {{"preset", "Nope"}}); } catch (std::exception&) { bad = true; }
+    CHECK(bad);
+    std::string why;
+    CHECK_EQ(schema_issues(d, &why), 0);
+    save(d, "themes");
+}
+
 TEST(lengths) {
     CHECK_EQ(util::length_twips(Json(12)), 240L);
     CHECK_EQ(util::length_twips(Json("1in")), 1440L);

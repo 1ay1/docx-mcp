@@ -719,7 +719,7 @@ std::vector<ToolDef> make_tools() {
          }});
 
     // ── formatting ───────────────────────────────────────────────────────
-    add({"format_text", "Format text (Font)", "Apply character formatting to text in a paragraph (match or start/end; default the whole paragraph).",
+    add({"format_text", "Format text (Font)", "Change the font, size, color, bold, italic, underline, highlight of text in a paragraph (match or start/end; default the whole paragraph).",
          obj({{"doc", kDoc}, {"paragraph", kPara}, {"match", str("")}, {"occurrence", integer("")}, {"start", integer("")}, {"end", integer("")},
               {"all_occurrences", boolean("Format every occurrence of match in the paragraph.")}, {"format", kRunFmt}, {"track", kTrack}, {"author", str("Author of this change.")}},
              {"doc", "paragraph", "format"}),
@@ -1235,7 +1235,9 @@ std::vector<ToolDef> make_tools() {
          }});
     add({"format_table", "Table properties",
          "style, alignment, width (pt|\"50%\"|auto), borders (\"all\"|\"none\"|{top,insideH,..}), indent, layout (fixed|autofit), "
-         "cell_margins, header_row, first_column, last_row, last_column, banded_rows, banded_columns, repeat_header, row_height, column_widths.",
+         "cell_margins, header_row, first_column, total_row, last_column, banded_rows, banded_columns, repeat_header, row_height, "
+         "exact_row_height, column_widths, cant_split, title/description (alt text), rtl, float (text wraps around: "
+         "{x: pt|left|center|right, y: pt|top|bottom, horizontal_relative: margin|page|text, vertical_relative, distance, overlap}; null = inline).",
          obj({{"doc", kDoc}, {"table", integer("")}, {"format", anyobj("")}, {"track", kTrack}}, {"doc", "table", "format"}), false, false,
          [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
@@ -1858,6 +1860,25 @@ std::vector<ToolDef> make_tools() {
          false, true, [](Sessions& S, const Json& a) {
              remove_header_footer(mut(S, a).doc, iarg(a, "section", 1), need(a, "kind"), sarg(a, "which", "default"));
              return Json{{"removed", sarg(a, "which", "default") + " " + need(a, "kind")}, {"section", iarg(a, "section", 1)}};
+         }});
+    add({"theme", "Theme",
+         "Design > Themes: read or change the theme's colors and fonts. Headings use the heading font, text the body font, and "
+         "theme colors (accent1-6, dk2, lt2, hlink) feed styles, tables and charts. preset: Office, Office 2007, Office 2013, "
+         "Blue, Blue II, Green, Red Orange, Violet, Marquee, Paper, Grayscale. colors: {\"accent1\": \"1F4E79\"}. "
+         "Without changes it returns the current theme.",
+         obj({{"doc", kDoc}, {"preset", str("Built-in theme colors (and fonts when it has them).")},
+              {"colors_preset", str("Only the colors of a preset.")}, {"fonts_preset", str("Only the fonts: Office, Georgia, Garamond, Arial, ...")},
+              {"colors", anyobj("Theme color slots: dk1, lt1, dk2, lt2, accent1-6, hlink, folHlink -> RRGGBB.")},
+              {"heading_font", str("Major (headings) typeface.")}, {"body_font", str("Minor (body) typeface.")},
+              {"name", str("Theme name.")}},
+             {"doc"}),
+         false, false, [](Sessions& S, const Json& a) {
+             Json props = a;
+             props.erase("doc");
+             if (props.empty()) return theme_json(sess(S, a).doc);
+             auto& s = mut(S, a);
+             set_theme(s.doc, props);
+             return theme_json(s.doc);
          }});
     add({"set_watermark", "Watermark",
          "Put a text watermark behind every page (Design > Watermark), e.g. DRAFT or CONFIDENTIAL. remove: true takes it off.",

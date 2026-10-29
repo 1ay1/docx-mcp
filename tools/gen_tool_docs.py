@@ -21,7 +21,7 @@ GROUPS = [
                 "list_bookmarks", "delete_bookmark", "insert_note", "list_notes", "delete_note", "insert_field", "list_fields",
                 "update_fields", "unlink_fields", "insert_toc", "mark_index_entry", "insert_index", "insert_equation", "insert_caption", "insert_cross_reference", "list_reference_targets", "add_content_control", "list_content_controls", "set_content_control"]),
     ("Mailings", ["mail_merge", "document_variables"]),
-    ("Page layout", ["get_page_setup", "set_page_setup", "set_header_footer", "remove_header_footer", "read_header_footer", "set_watermark"]),
+    ("Page layout", ["get_page_setup", "set_page_setup", "set_header_footer", "remove_header_footer", "read_header_footer", "set_watermark", "theme"]),
     ("File", ["get_properties", "set_properties", "get_settings", "set_settings", "protect_document", "unprotect_document"]),
     ("Expert", ["validate_document", "inspect_document", "get_xml", "set_paragraph_xml"]),
     ("Seeing the page", ["render_pages", "export_pdf"]),
