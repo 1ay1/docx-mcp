@@ -414,11 +414,18 @@ int rebuild_bibliographies(Document& d, const std::string& want_style) {
     }
     std::stable_sort(order.begin(), order.end(), [](auto& a, auto& b) { return a.first < b.first; });
     int rebuilt = 0;
+    // one at a time from a fresh scan: rebuilding one result can remove fields nested in it
+    std::set<pugi::xml_node_struct*> done;
+    for (bool again = true; again;) {
+    again = false;
     for (auto a : field_anchors(d.body())) {
+        if (done.count(a.internal_object())) continue;
         if (!util::starts_with(util::upper(detail::field_code(a)), "BIBLIOGRAPHY")) continue;
         if (xml::name_is(a, "w:fldSimple")) continue;
         auto end = detail::field_end(a);
         if (!end) continue;
+        done.insert(a.internal_object());
+        again = true;
         auto p1 = xml::ancestor(a, "w:p");
         auto p2 = xml::ancestor(end, "w:p");
         // separate mark in the first paragraph
@@ -481,6 +488,8 @@ int rebuild_bibliographies(Document& d, const std::string& want_style) {
         if (cur != p1) cur.append_move(end_run);
         d.ensure_para_ids(p1.parent());
         rebuilt++;
+        break;  // rescan: this rebuild may have removed other anchors
+    }
     }
     // refresh citation results too
     for (auto a : field_anchors(d.body())) {

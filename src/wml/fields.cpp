@@ -682,6 +682,13 @@ void insert_toc(Document& d, pugi::xml_node p, const Json& opts_in, const EditOp
     std::string instr = captions.empty()
         ? "TOC \\o \"" + std::to_string(lo) + "-" + std::to_string(hi) + "\"" + (links ? " \\h" : "") + " \\z \\u"
         : "TOC " + std::string(links ? "\\h " : "") + "\\z \\c \"" + captions + "\"";
+    // a paragraph inside a TOC (an entry) anchors the new one before that whole TOC; and
+    // inside a table cell, before the table (a TOC is block-level body content)
+    for (auto up = p.parent(); up; up = up.parent()) {
+        if (xml::name_is(up, "w:sdt"))
+            if (auto g = xml::first_descendant(up.child("w:sdtPr"), "w:docPartGallery"); g && xml::attr(g, "w:val") == "Table of Contents")
+                p = up;
+    }
     auto sdt = p.parent().insert_child_before("w:sdt", p);
     auto pr = sdt.append_child("w:sdtPr");
     xml::set_attr(pr.append_child("w:id"), "w:val", std::to_string((std::int32_t)util::random_u32()));
@@ -715,9 +722,19 @@ void insert_toc(Document& d, pugi::xml_node p, const Json& opts_in, const EditOp
 
 int detail::rebuild_tocs(Document& d) {
     int n = 0;
+    // outermost TOC controls only: rebuilding one replaces anything nested in it
+    std::vector<pugi::xml_node> tocs;
     for (auto sdt : xml::descendants(d.body(), "w:sdt")) {
         auto g = xml::first_descendant(sdt.child("w:sdtPr"), "w:docPartGallery");
         if (!g || xml::attr(g, "w:val") != "Table of Contents") continue;
+        bool nested = false;
+        for (auto up = sdt.parent(); up; up = up.parent())
+            if (xml::name_is(up, "w:sdt"))
+                if (auto g2 = xml::first_descendant(up.child("w:sdtPr"), "w:docPartGallery"); g2 && xml::attr(g2, "w:val") == "Table of Contents")
+                    nested = true;
+        if (!nested) tocs.push_back(sdt);
+    }
+    for (auto sdt : tocs) {
         auto content = sdt.child("w:sdtContent");
         std::string instr;
         for (auto it : xml::descendants(content, "w:instrText")) {
