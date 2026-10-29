@@ -151,7 +151,7 @@ insertion) and HTML in (`insert_html`: the same plus span styles, colspans, cell
 |---|---|---|
 | 5.1 | Word as an oracle | On Windows CI, Word opens every output through COM automation with no repair prompt, and its accept/reject matches ours |
 | 5.2 | Bigger corpus | 2,000+ real documents (public government, academic, legal sources), each round-tripped |
-| 5.3 | Long fuzz | Nightly hour-long fuzz under ASan, crashes filed automatically |
+| 5.3 | Long fuzz | Partly: `tests/chaos.py` and `tests/fuzz.py` run clean under ASan+UBSan along with coverage, sloppy and the corpus robustness test. Left: a nightly CI job |
 | 5.4 | Model eval | A task suite (draft, review, redline, fill a form, fix formatting) run against several models through MCP, scored on the output file. Tracks success rate per release |
 | 5.5 | Spec coverage report | Which WordprocessingML elements we can read, write and edit, generated from the schema |
 
