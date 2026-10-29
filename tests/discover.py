@@ -43,6 +43,7 @@ TASKS = [
     ("make it a heading", "apply_style"),
     ("create a custom style", "modify_style"),
     ("make a bulleted list", "apply_list"),
+    ("number the headings 1, 1.1, 1.1.1", "define_list"),
     ("restart numbering", "restart_numbering"),
     ("insert a table", "insert_table"),
     ("change a cell's text", "set_cell"),
@@ -74,6 +75,7 @@ TASKS = [
     ("protect the document with a password", "protect_document"),
     ("undo the last change", "undo"),
     ("update fields", "update_fields"),
+    ("mail merge letters from a csv of addresses", "mail_merge"),
     ("add a figure caption", "insert_caption"),
     ("insert a cross-reference to a figure", "insert_cross_reference"),
 ]

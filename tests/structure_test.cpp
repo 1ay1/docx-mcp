@@ -255,6 +255,57 @@ TEST(lists) {
     CHECK_EQ(list_label(d, b), std::string(""));
 }
 
+TEST(multilevel_lists) {
+    auto d = Document::create();
+    auto p0 = paragraphs(d.body())[0];
+    // outline preset: I. / A. / 1.
+    int nid = define_list(d, {{"preset", "outline"}});
+    std::vector<pugi::xml_node> ps;
+    auto last = p0;
+    int lv[] = {0, 1, 2, 2, 1, 0, 1};
+    for (int k = 0; k < 7; k++) {
+        last = insert_paragraph(d, last, true, U"item", "", nullptr, {});
+        format_paragraph(d, last, {{"numbering", {{"num_id", nid}, {"level", lv[k]}}}}, {});
+        ps.push_back(last);
+    }
+    CHECK_EQ(list_label(d, ps[0]), std::string("I."));
+    CHECK_EQ(list_label(d, ps[1]), std::string("A."));
+    CHECK_EQ(list_label(d, ps[2]), std::string("1."));
+    CHECK_EQ(list_label(d, ps[3]), std::string("2."));
+    CHECK_EQ(list_label(d, ps[4]), std::string("B."));
+    CHECK_EQ(list_label(d, ps[5]), std::string("II."));
+    CHECK_EQ(list_label(d, ps[6]), std::string("A."));
+    // legal-style numbers with an override: level 2 never restarts
+    int n2 = define_list(d, {{"preset", "numbered"}, {"levels", Json::array({Json::object(), {{"text", "%1.%2)"}, {"restart_after", false}}})}});
+    std::vector<pugi::xml_node> qs;
+    int lv2[] = {0, 1, 1, 0, 1};
+    for (int k = 0; k < 5; k++) {
+        last = insert_paragraph(d, last, true, U"x", "", nullptr, {});
+        format_paragraph(d, last, {{"numbering", {{"num_id", n2}, {"level", lv2[k]}}}}, {});
+        qs.push_back(last);
+    }
+    CHECK_EQ(list_label(d, qs[1]), std::string("1.1)"));
+    CHECK_EQ(list_label(d, qs[2]), std::string("1.2)"));
+    CHECK_EQ(list_label(d, qs[4]), std::string("2.3)"));
+    // numbered headings through linked styles
+    define_list(d, {{"preset", "headings"}});
+    auto h1 = insert_paragraph(d, last, true, U"Intro", "Heading1", nullptr, {});
+    auto h2 = insert_paragraph(d, h1, true, U"Scope", "Heading2", nullptr, {});
+    auto h2b = insert_paragraph(d, h2, true, U"Terms", "Heading2", nullptr, {});
+    auto h1b = insert_paragraph(d, h2b, true, U"Design", "Heading1", nullptr, {});
+    CHECK_EQ(list_label(d, h1), std::string("1"));
+    CHECK_EQ(list_label(d, h2b), std::string("1.2"));
+    CHECK_EQ(list_label(d, h1b), std::string("2"));
+    auto defs = list_definitions(d);
+    CHECK_EQ(defs.size(), std::size_t(3));
+    bool bad = false;
+    try { define_list(d, {{"levels", Json::array({{{"text", "%2."}}})}}); } catch (std::exception&) { bad = true; }
+    CHECK(bad);
+    std::string why;
+    CHECK_EQ(schema_issues(d, &why), 0);
+    save(d, "multilevel_lists");
+}
+
 TEST(lists_tracked) {
     auto d = sample(true);
     auto p = paragraphs(d.body())[0];

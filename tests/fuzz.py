@@ -135,7 +135,11 @@ class Fuzz:
 
     def extra(self, pid, s, e, track):
         r = self.r
-        k = r.randint(0, 52)
+        k = r.randint(0, 53)
+        if k == 53:
+            return self.call("define_list", preset=r.choice(["numbered", "legal", "outline", "headings", "chapters", "bullets", "checklist"]),
+                             paragraphs=[pid], level=r.randint(0, 3),
+                             levels=r.choice([[], [{"format": "lowerRoman"}], [{}, {"text": "%1-%2", "start": 3}]]), **track)
         if k == 50:
             return self.call("insert_field", paragraph=pid, position=s, code=r.choice([
                 "= 2 + 3 * 4 \\# \"0.00\"", "IF { = 1 + 1 } = 2 \"yes\" \"no\"", "MERGEFIELD Name", "DOCVARIABLE V",

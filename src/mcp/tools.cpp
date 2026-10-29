@@ -861,19 +861,74 @@ std::vector<ToolDef> make_tools() {
          "Make paragraphs a bulleted or numbered list (Word's default list definitions). Continues an adjacent list of the same kind.",
          obj({{"doc", kDoc}, {"paragraphs", arr(str(""), "")}, {"kind", enm({"bullet", "number", "lowerLetter", "upperLetter", "lowerRoman", "upperRoman"}, "")},
               {"level", integer("0-8 (indent level).")}, {"start", integer("First number.")}, {"text", str("Number format like \"%1)\" or \"(%1)\".")},
-              {"bullet", str("Bullet character.")}, {"continue_previous", boolean("Default true.")}, {"track", kTrack}, {"author", str("Author of this change.")}},
-             {"doc", "paragraphs", "kind"}),
+              {"bullet", str("Bullet character.")}, {"continue_previous", boolean("Default true.")},
+              {"num_id", integer("Use this existing list (from list_lists or define_list); kind is then ignored.")},
+              {"track", kTrack}, {"author", str("Author of this change.")}},
+             {"doc", "paragraphs"}),
          false, false, [](Sessions& S, const Json& a) {
              auto& s = mut(S, a);
              std::vector<pugi::xml_node> ps;
              for (auto& id : strs(a, "paragraphs")) ps.push_back(find_para(s.doc, id).p);
-             Json o = Json::object();
-             for (auto k : {"start", "text", "bullet", "continue_previous"}) if (a.contains(k)) o[k] = a[k];
-             int nid = apply_list(s.doc, ps, need(a, "kind"), iarg(a, "level", 0), o, track(a));
+             int nid;
+             if (a.contains("num_id")) {
+                 nid = iarg(a, "num_id", 0);
+                 bool known = false;
+                 for (auto& l : list_definitions(s.doc)) if (l["num_id"] == nid) known = true;
+                 if (!known) throw std::runtime_error("no list with num_id " + std::to_string(nid) + " (list_lists shows them)");
+                 for (auto p : ps) format_paragraph(s.doc, p, {{"numbering", {{"num_id", nid}, {"level", iarg(a, "level", 0)}}}}, track(a));
+             } else {
+                 if (!a.contains("kind")) throw std::runtime_error("give kind (bullet, number, ...) or num_id");
+                 Json o = Json::object();
+                 for (auto k : {"start", "text", "bullet", "continue_previous"}) if (a.contains(k)) o[k] = a[k];
+                 nid = apply_list(s.doc, ps, need(a, "kind"), iarg(a, "level", 0), o, track(a));
+             }
              Json labels = Json::array();
              for (auto p : ps) labels.push_back(list_label(s.doc, p));
              return Json{{"num_id", nid}, {"labels", labels}};
          }});
+    add({"define_list", "Multilevel list",
+         "Define New Multilevel List: create a list definition and optionally apply it. preset: numbered (1. 1.1. 1.1.1.), "
+         "legal, outline (I. A. 1. a) (1)), headings (numbers Heading 1-9 as 1 / 1.1 / 1.1.1), chapters (Chapter 1 / Section 1.1 "
+         "on Heading 1-3), bullets, checklist. levels overrides levels from the top: format (decimal, lowerLetter, upperRoman, "
+         "bullet, ...), text (%1 is level 1's number: \"%1.%2)\"), start, style (link a heading style), indent, hanging, "
+         "after (tab|space|nothing), bullet, legal. paragraphs applies it at level.",
+         obj({{"doc", kDoc}, {"preset", enm({"numbered", "legal", "outline", "headings", "chapters", "bullets", "checklist"}, "Default numbered.")},
+              {"levels", arr(anyobj(""), "Per-level settings from level 1 down, e.g. [{\"format\": \"upperRoman\"}, {\"text\": \"%1.%2\"}].")},
+              {"name", str("Name shown in Word's list library.")},
+              {"paragraphs", arr(str(""), "Paragraphs to put in the new list.")}, {"level", integer("0-8 for paragraphs (default 0).")},
+              {"track", kTrack}},
+             {"doc"}),
+         false, false, [](Sessions& S, const Json& a) {
+             auto& s = mut(S, a);
+             Json spec = Json::object();
+             for (auto k : {"preset", "levels", "name"}) if (a.contains(k)) spec[k] = a[k];
+             int nid = define_list(s.doc, spec);
+             Json out = {{"num_id", nid}};
+             if (a.contains("paragraphs")) {
+                 Json labels = Json::array();
+                 for (auto& id : strs(a, "paragraphs")) {
+                     auto p = find_para(s.doc, id).p;
+                     format_paragraph(s.doc, p, {{"numbering", {{"num_id", nid}, {"level", iarg(a, "level", 0)}}}}, track(a));
+                 }
+                 for (auto& id : strs(a, "paragraphs")) labels.push_back(list_label(s.doc, find_para(s.doc, id).p));
+                 out["labels"] = labels;
+             }
+             // paragraphs numbered through linked styles
+             Json linked = Json::array();
+             for (auto p : paragraphs(s.doc.body(), false)) {
+                 if (p.child("w:pPr").child("w:numPr")) continue;
+                 auto lbl = list_label(s.doc, p);
+                 if (lbl.empty()) continue;
+                 if (linked.size() < 12) linked.push_back({{"id", para_id(p)}, {"label", lbl}, {"text", analyze(p).utf8().substr(0, 60)}});
+             }
+             if (!linked.empty()) out["numbered_by_style"] = linked;
+             for (auto& l : list_definitions(s.doc)) if (l["num_id"] == nid) out["levels"] = l["levels"];
+             return out;
+         }});
+    add({"list_lists", "Lists in use",
+         "The document's list definitions: num_id, each level's format and number text, linked styles, and how many "
+         "paragraphs use it. Pass num_id to apply_list to continue one.",
+         obj({{"doc", kDoc}}, {"doc"}), true, false, [](Sessions& S, const Json& a) { return Json{{"lists", list_definitions(sess(S, a).doc)}}; }});
     add({"set_list_level", "Increase / decrease list level", "Indent or outdent list items: change the list level (Tab / Shift+Tab in a bulleted or numbered list).",
          obj({{"doc", kDoc}, {"paragraphs", arr(str(""), "")}, {"level", integer("0-8")}, {"track", kTrack}}, {"doc", "paragraphs", "level"}), false, false,
          [](Sessions& S, const Json& a) {
@@ -881,9 +936,15 @@ std::vector<ToolDef> make_tools() {
              Json out = Json::array();
              for (auto& id : strs(a, "paragraphs")) {
                  auto p = find_para(s.doc, id).p;
-                 auto np = p.child("w:pPr").child("w:numPr");
-                 if (!np) throw std::runtime_error("paragraph " + id + " is not in a list");
-                 format_paragraph(s.doc, p, {{"numbering", {{"num_id", util::to_int(xml::attr(np.child("w:numId"), "w:val"))}, {"level", iarg(a, "level", 0)}}}}, track(a));
+                 int nid = 0;
+                 if (auto np = p.child("w:pPr").child("w:numPr")) nid = util::to_int(xml::attr(np.child("w:numId"), "w:val"));
+                 else {
+                     // numbered through its style: the style's list
+                     auto pp = effective_paragraph(s.doc, p);
+                     if (pp.contains("numbering")) nid = pp["numbering"].value("num_id", 0);
+                 }
+                 if (!nid) throw std::runtime_error("paragraph " + id + " is not in a list");
+                 format_paragraph(s.doc, p, {{"numbering", {{"num_id", nid}, {"level", iarg(a, "level", 0)}}}}, track(a));
                  Json j = para_brief(s.doc, p);
                  j["label"] = list_label(s.doc, p);
                  out.push_back(j);

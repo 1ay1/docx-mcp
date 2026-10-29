@@ -10,7 +10,7 @@ to touch raw XML to get there.
 
 ## Where we are (main, after v0.3.0)
 
-109 tools cover Word's Home, Insert, Design, Layout, References, Mailings and Review
+111 tools cover Word's Home, Insert, Design, Layout, References, Mailings and Review
 tabs: documents, text, paragraphs, styles, lists, tables, pictures, text
 boxes, links, bookmarks, notes, fields, TOC, table of figures, index,
 equations, content controls, sections, page borders and color, watermarks,
@@ -74,7 +74,7 @@ Status is checked against the code.
 | 1.6 | Columns | Layout > Columns | Done | `columns`, `column_space`, `column_line`, `column_widths`; column breaks via `insert_break` |
 | 1.7 | Tables | Table Layout | Mostly done | Split cells and nested tables (v0.3.0), `sort_table`, `convert_table`, `repeat_header`, row height. Left: floating tables (`w:tblpPr`), vertical cell text |
 | 1.8 | Table of figures, index, bibliography | References | Figures and index done | `insert_toc` with `captions`, `mark_index_entry`, `insert_index`. Left: citations and bibliography |
-| 1.9 | Lists: multi-level control | Define New Multilevel List | Open | Edit a list's level formats, picture bullets, link levels to headings, legal numbering |
+| 1.9 | Lists: multi-level control | Define New Multilevel List | Done (picture bullets left) | `define_list` presets (numbered, legal, outline, headings, chapters, bullets, checklist) with per-level format, text, start, restart, indents, linked heading styles; `list_lists`; `apply_list num_id` |
 | 1.10 | Styles: full definition | Modify Style | Partly | `modify_style` sets any paragraph or run property (borders, shading, tabs, numbering). Left: table style conditional formats, `import_styles` from a template |
 | 1.11 | Themes | Design > Themes | Open | Read and set theme colors and fonts |
 | 1.12 | Charts | Insert > Chart | Open | Read cached chart data; then basic bar/line/pie |
@@ -161,7 +161,7 @@ Phases 0, most of 1, 2.1-2.2, 3.6 and 4.4 are done. Next, by how often real
 documents and agents need them:
 
 1. ~~2.4 field results and 2.3 the page map~~ (done).
-2. 1.9 multi-level lists and 1.10 table style conditional formats.
+2. ~~1.9 multi-level lists~~ (done) and 1.10 table style conditional formats.
 3. ~~1.14 mail merge~~ (done), then 1.15 data binding.
 4. 1.7 floating tables, 1.2 shapes, 1.4 picture watermarks.
 5. 3.6 `insert_html`, then Phase 4 speed work and Phase 5 proof.

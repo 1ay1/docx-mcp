@@ -13,7 +13,7 @@ GROUPS = [
                       "split_paragraph", "merge_paragraphs", "move_paragraphs"]),
     ("Formatting", ["format_text", "format_paragraph", "apply_style", "clear_formatting", "drop_cap"]),
     ("Styles", ["list_styles", "get_style", "modify_style", "delete_style"]),
-    ("Lists", ["apply_list", "set_list_level", "remove_list", "restart_numbering"]),
+    ("Lists", ["apply_list", "set_list_level", "remove_list", "restart_numbering", "define_list", "list_lists"]),
     ("Track changes", ["set_track_changes", "list_revisions", "accept_revisions", "reject_revisions", "compare_documents"]),
     ("Comments", ["add_comment", "list_comments", "reply_comment", "resolve_comment", "edit_comment", "delete_comment"]),
     ("Tables", ["insert_table", "read_table", "set_cell", "table_rows", "table_columns", "merge_cells", "split_cell", "format_table", "sort_table", "convert_table", "delete_table"]),

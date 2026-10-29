@@ -4,8 +4,8 @@
 
 An MCP server that edits Word documents the way Word does.
 
-Agents get 109 tools that cover the Word ribbon: text, formatting, styles,
-lists, tables (merge, split, nested, sort, convert), pictures (inline or
+Agents get 111 tools that cover the Word ribbon: text, formatting, styles,
+lists (multilevel, numbered headings), tables (merge, split, nested, sort, convert), pictures (inline or
 floating with text wrap), text boxes, headers and footers, watermarks, page
 borders and color, drop caps, fields, tables of contents and figures, an
 index, captions and cross-references, footnotes, content controls, page

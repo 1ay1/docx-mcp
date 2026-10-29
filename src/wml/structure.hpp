@@ -222,6 +222,14 @@ void remove_list(Document& d, const std::vector<pugi::xml_node>& ps, const EditO
 // The rendered list label of a paragraph ("1.", "a)", "•"), "" if none.
 std::string list_label(Document& d, pugi::xml_node p);
 void restart_numbering(Document& d, pugi::xml_node p, int start);
+// Define New Multilevel List: a list definition from a preset (numbered, legal,
+// outline, headings, chapters, bullets, checklist) with per-level overrides:
+// {"preset":"outline","levels":[{"format":"upperRoman","text":"%1.","start":1,
+//  "style":"Heading1","indent":"0.5in","hanging":"0.25in","after":"space"}, ...]}.
+// Levels linked to a style number every paragraph in that style. Returns the num id.
+int define_list(Document& d, const Json& spec);
+// The document's lists: num id, levels, how many paragraphs use each.
+Json list_definitions(Document& d);
 
 // ── math ──
 // Insert an Office Math equation from a linear-format-ish string ("x^2+y_1=\\frac{a}{b}").

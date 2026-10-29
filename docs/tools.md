@@ -1,6 +1,6 @@
 # Tool reference
 
-Generated from `docx-mcp --list-tools` by `tools/gen_tool_docs.py`. 109 tools.
+Generated from `docx-mcp --list-tools` by `tools/gen_tool_docs.py`. 111 tools.
 
 Every tool that edits takes `doc` (a handle or a file path), and most take `track` (record as a tracked change) and `author`. Paragraphs are addressed by the `id` that `read_document` returns.
 
@@ -11,7 +11,7 @@ Every tool that edits takes `doc` (a handle or a file path), and most take `trac
 - [Editing text](#editing-text): `insert_text`, `replace_text`, `delete_text`, `find_replace`, `insert_paragraph`, `insert_markdown`, `delete_paragraph`, `split_paragraph`, `merge_paragraphs`, `move_paragraphs`
 - [Formatting](#formatting): `format_text`, `format_paragraph`, `apply_style`, `clear_formatting`, `drop_cap`
 - [Styles](#styles): `list_styles`, `get_style`, `modify_style`, `delete_style`
-- [Lists](#lists): `apply_list`, `set_list_level`, `remove_list`, `restart_numbering`
+- [Lists](#lists): `apply_list`, `set_list_level`, `remove_list`, `restart_numbering`, `define_list`, `list_lists`
 - [Track changes](#track-changes): `set_track_changes`, `list_revisions`, `accept_revisions`, `reject_revisions`, `compare_documents`
 - [Comments](#comments): `add_comment`, `list_comments`, `reply_comment`, `resolve_comment`, `edit_comment`, `delete_comment`
 - [Tables](#tables): `insert_table`, `read_table`, `set_cell`, `table_rows`, `table_columns`, `merge_cells`, `split_cell`, `format_table`, `sort_table`, `convert_table`, `delete_table`
@@ -425,8 +425,9 @@ Make paragraphs a bulleted or numbered list (Word's default list definitions). C
 | `bullet` | string |  | Bullet character. |
 | `continue_previous` | boolean |  | Default true. |
 | `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
-| `kind` | `bullet` \\| `number` \\| `lowerLetter` \\| `upperLetter` \\| `lowerRoman` \\| `upperRoman` | yes | Kind. |
+| `kind` | `bullet` \\| `number` \\| `lowerLetter` \\| `upperLetter` \\| `lowerRoman` \\| `upperRoman` |  | Kind. |
 | `level` | integer |  | 0-8 (indent level). |
+| `num_id` | integer |  | Use this existing list (from list_lists or define_list); kind is then ignored. |
 | `paragraphs` | array of string | yes | Paragraph ids or numbers. |
 | `start` | integer |  | First number. |
 | `text` | string |  | Number format like "%1)" or "(%1)". |
@@ -462,6 +463,28 @@ Restart a numbered list at a paragraph, from 1 or any number (Set Numbering Valu
 | `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 | `paragraph` | string | yes | Paragraph `id` from read_document (e.g. "1A2B3C4D") or its number ("3"). |
 | `start` | integer |  | Default 1. |
+
+### `define_list`
+
+Define New Multilevel List: create a list definition and optionally apply it. preset: numbered (1. 1.1. 1.1.1.), legal, outline (I. A. 1. a) (1)), headings (numbers Heading 1-9 as 1 / 1.1 / 1.1.1), chapters (Chapter 1 / Section 1.1 on Heading 1-3), bullets, checklist. levels overrides levels from the top: format (decimal, lowerLetter, upperRoman, bullet, ...), text (%1 is level 1's number: "%1.%2)"), start, style (link a heading style), indent, hanging, after (tab|space|nothing), bullet, legal. paragraphs applies it at level.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
+| `level` | integer |  | 0-8 for paragraphs (default 0). |
+| `levels` | array of object |  | Per-level settings from level 1 down, e.g. [{"format": "upperRoman"}, {"text": "%1.%2"}]. |
+| `name` | string |  | Name shown in Word's list library. |
+| `paragraphs` | array of string |  | Paragraphs to put in the new list. |
+| `preset` | `numbered` \\| `legal` \\| `outline` \\| `headings` \\| `chapters` \\| `bullets` \\| `checklist` |  | Default numbered. |
+| `track` | boolean |  | Record as a tracked change (default: the document's setting). |
+
+### `list_lists`
+
+The document's list definitions: num_id, each level's format and number text, linked styles, and how many paragraphs use it. Pass num_id to apply_list to continue one.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `doc` | string | yes | Handle from open_document (e.g. "doc1") or the .docx path. |
 
 ## Track changes
 

@@ -98,6 +98,14 @@ std::string format_number(int n, const std::string& fmt) {
         return n <= 10 ? o[n] : std::to_string(n) + ordinal_suffix(n);
     }
     if (fmt == "decimalEnclosedParen") return "(" + std::to_string(n) + ")";
+    if (fmt == "decimalEnclosedCircle" && n >= 1 && n <= 20) return util::to_utf8(char32_t(0x2460 + n - 1));
+    if (fmt == "decimalEnclosedFullstop") return std::to_string(n) + ".";
+    if (fmt == "decimalFullWidth" || fmt == "decimalFullWidth2") {
+        std::string s;
+        for (char c : std::to_string(n)) s += util::to_utf8(char32_t(0xFF10 + (c - '0')));
+        return s;
+    }
+    if (fmt == "numberInDash") return "- " + std::to_string(n) + " -";
     if (fmt == "hex") { char b[16]; std::snprintf(b, sizeof b, "%X", n); return b; }
     if (fmt == "bullet" || fmt == "none") return "";
     return std::to_string(n);
@@ -1226,14 +1234,26 @@ std::string list_label(Document& d, pugi::xml_node p) {
             if (l.attribute("w:ilvl").as_int() == lvl) return util::to_int(xml::attr(l.child("w:start"), "w:val", "1"));
         return 1;
     };
-    // Word keeps counters per num instance; a deeper level resets when a
-    // shallower one advances.
+    // Word keeps counters per abstract list when nums share one with no
+    // overrides, else per num; a deeper level resets when a shallower one
+    // advances (unless its lvlRestart says otherwise).
+    auto restart_of = [&](int lvl) {
+        for (auto l : a.children("w:lvl"))
+            if (l.attribute("w:ilvl").as_int() == lvl)
+                if (auto r = l.child("w:lvlRestart")) return r.attribute("w:val").as_int();
+        return -1;  // default: any shallower level restarts it
+    };
     for (auto q : paragraphs(d.body(), false)) {
         auto [qn, ql] = num_of(d, q);
         if (qn == num_id) {
             if (counters[ql] == 0) counters[ql] = start_of(ql) - 1;
             counters[ql]++;
-            for (int k = ql + 1; k < 9; k++) counters[k] = 0;
+            for (int k = ql + 1; k < 9; k++) {
+                int r = restart_of(k);
+                if (r == 0) continue;               // never restarts
+                if (r > 0 && ql + 1 > r) continue;  // restarts only after level r (1-based) or shallower
+                counters[k] = 0;
+            }
         }
         if (q == p) break;
     }
@@ -1246,8 +1266,14 @@ std::string list_label(Document& d, pugi::xml_node p) {
         // map private-use symbol chars to their Unicode look
         if (text == "\xEF\x82\xB7") return "\u2022";
         if (text == "\xEF\x82\xA7") return "\u25AA";
+        if (text == "\xEF\x83\x98") return "\u27A2";
+        if (text == "\xEF\x83\xBC") return "\u2713";
+        if (text == "\xEF\x82\xA8") return "\u25A1";
         return text;
     }
+    // levels shallower than one that's never been used count from their start
+    for (int k = 0; k < ilvl; k++)
+        if (counters[k] == 0) counters[k] = start_of(k);
     std::string out;
     for (std::size_t i = 0; i < text.size(); i++) {
         if (text[i] == '%' && i + 1 < text.size() && text[i + 1] >= '1' && text[i + 1] <= '9') {
@@ -1283,6 +1309,266 @@ void restart_numbering(Document& d, pugi::xml_node p, int start) {
         xml::set_attr(schema::ensure_child(np, "w:ilvl"), "w:val", std::to_string(ql));
         xml::set_attr(schema::ensure_child(np, "w:numId"), "w:val", std::to_string(nid));
     }
+}
+
+// ── multilevel lists (Define New Multilevel List) ──
+
+namespace {
+
+struct LevelSpec {
+    std::string fmt = "decimal", text, bullet_font, style, suffix = "tab", align = "left";
+    int start = 1, restart = -1;
+    bool legal = false;
+    long left = -1, hanging = -1;
+    Json run;
+};
+
+// Word's presets from the Multilevel List gallery.
+std::vector<LevelSpec> preset_levels(const std::string& name) {
+    std::vector<LevelSpec> v(9);
+    if (name == "numbered" || name == "decimal" || name == "legal") {
+        // 1. / 1.1. / 1.1.1. with growing indents (Word's "1, 1.1, 1.1.1" gallery entry)
+        static const long left[9] = {360, 792, 1224, 1728, 2232, 2736, 3240, 3744, 4320};
+        static const long hang[9] = {360, 432, 504, 648, 792, 936, 1080, 1224, 1440};
+        for (int l = 0; l < 9; l++) {
+            v[l].fmt = "decimal";
+            std::string t;
+            for (int k = 0; k <= l; k++) t += "%" + std::to_string(k + 1) + ".";
+            v[l].text = t;
+            v[l].left = left[l];
+            v[l].hanging = hang[l];
+            v[l].legal = name == "legal";
+        }
+    } else if (name == "outline") {
+        // I. / A. / 1. / a) / (1) / (a) / (i) / (a) / (i)
+        static const char* fmts[9] = {"upperRoman", "upperLetter", "decimal", "lowerLetter", "decimal", "lowerLetter", "lowerRoman", "lowerLetter", "lowerRoman"};
+        static const char* texts[9] = {"%1.", "%2.", "%3.", "%4)", "(%5)", "(%6)", "(%7)", "(%8)", "(%9)"};
+        for (int l = 0; l < 9; l++) {
+            v[l].fmt = fmts[l];
+            v[l].text = texts[l];
+            v[l].left = 720 * (l + 1);
+            v[l].hanging = 360;
+            if (l == 0) { v[l].align = "right"; v[l].hanging = 180; }
+        }
+    } else if (name == "headings") {
+        // Heading 1..9 numbered 1 / 1.1 / 1.1.1, flush left (Word's "1 Heading 1" gallery entry)
+        for (int l = 0; l < 9; l++) {
+            v[l].fmt = "decimal";
+            std::string t;
+            for (int k = 0; k <= l; k++) t += (k ? "." : "") + std::string("%") + std::to_string(k + 1);
+            v[l].text = t;
+            v[l].left = 432 + 144 * l;
+            v[l].hanging = 432 + 144 * l;
+            v[l].style = "Heading" + std::to_string(l + 1);
+        }
+    } else if (name == "chapters") {
+        // Chapter 1 / Section 1.1 / 1.1.1 on Heading 1..3
+        for (int l = 0; l < 9; l++) {
+            v[l].fmt = "decimal";
+            std::string t;
+            for (int k = 0; k <= l; k++) t += (k ? "." : "") + std::string("%") + std::to_string(k + 1);
+            v[l].text = l == 0 ? "Chapter %1" : l == 1 ? "Section " + t : t;
+            v[l].left = 0;
+            v[l].hanging = 0;
+            v[l].suffix = l < 2 ? "space" : "tab";
+            if (l < 3) v[l].style = "Heading" + std::to_string(l + 1);
+        }
+    } else if (name == "bullets") {
+        static const char* chars[3] = {"\xEF\x82\xB7", "o", "\xEF\x82\xA7"};
+        static const char* fonts[3] = {"Symbol", "Courier New", "Wingdings"};
+        for (int l = 0; l < 9; l++) {
+            v[l].fmt = "bullet";
+            v[l].text = chars[l % 3];
+            v[l].bullet_font = fonts[l % 3];
+            v[l].left = 720 * (l + 1);
+            v[l].hanging = 360;
+        }
+    } else if (name == "checklist") {
+        static const char* chars[3] = {"\xEF\x82\xA8", "\xEF\x83\xBC", "\xEF\x82\xA7"};  // box, check, square (Wingdings)
+        for (int l = 0; l < 9; l++) {
+            v[l].fmt = "bullet";
+            v[l].text = chars[l == 0 ? 0 : l % 3];
+            v[l].bullet_font = "Wingdings";
+            v[l].left = 720 * (l + 1);
+            v[l].hanging = 360;
+        }
+    } else {
+        throw std::runtime_error(util::unknown_key("list preset", name, {"numbered", "legal", "outline", "headings", "chapters", "bullets", "checklist"}));
+    }
+    return v;
+}
+
+const std::set<std::string>& num_formats() {
+    static const std::set<std::string> s = {"decimal", "decimalZero", "upperRoman", "lowerRoman", "upperLetter", "lowerLetter",
+                                            "ordinal", "cardinalText", "ordinalText", "bullet", "none", "decimalEnclosedCircle",
+                                            "decimalEnclosedParen", "decimalEnclosedFullstop", "decimalFullWidth", "numberInDash"};
+    return s;
+}
+
+// Model spellings: "1", "a", "A", "i", "I", "roman", "letter", "number"...
+std::string canon_format(const std::string& f0) {
+    std::string f = util::trim(f0);
+    static const std::map<std::string, std::string> alias = {
+        {"1", "decimal"}, {"number", "decimal"}, {"numbers", "decimal"}, {"arabic", "decimal"}, {"01", "decimalZero"},
+        {"a", "lowerLetter"}, {"A", "upperLetter"}, {"i", "lowerRoman"}, {"I", "upperRoman"}, {"letter", "lowerLetter"},
+        {"roman", "lowerRoman"}, {"bullets", "bullet"}, {"1st", "ordinal"}, {"one", "cardinalText"}, {"first", "ordinalText"}};
+    if (auto it = alias.find(f); it != alias.end()) return it->second;
+    for (auto& k : num_formats()) if (util::iequals(k, f)) return k;
+    std::vector<std::string_view> valid(num_formats().begin(), num_formats().end());
+    throw std::runtime_error(util::unknown_key("number format", f, valid));
+}
+
+}  // namespace
+
+int define_list(Document& d, const Json& spec_in) {
+    const Json spec = spec_in.is_object() ? spec_in : Json::object();
+    std::vector<LevelSpec> lv = preset_levels(spec.value("preset", std::string(spec.contains("levels") ? "numbered" : "numbered")));
+    if (spec.contains("levels")) {
+        auto& levels = spec["levels"];
+        if (!levels.is_array() || levels.empty()) throw std::runtime_error("levels is a list of level settings, one per level (up to 9)");
+        if (levels.size() > 9) throw std::runtime_error("a list has at most 9 levels");
+        for (std::size_t l = 0; l < levels.size(); l++) {
+            auto& j = levels[l];
+            if (j.is_string()) { lv[l].text = j.get<std::string>(); continue; }  // just the number text
+            if (!j.is_object()) throw std::runtime_error("each level is an object like {\"format\": \"lowerLetter\", \"text\": \"%2)\"}");
+            auto& L = lv[l];
+            if (j.contains("format")) {
+                L.fmt = canon_format(j["format"].get<std::string>());
+                if (!j.contains("text")) L.text = L.fmt == "bullet" ? "\xEF\x82\xB7" : "%" + std::to_string(l + 1) + ".";
+                if (L.fmt == "bullet" && !j.contains("font") && !j.contains("bullet")) L.bullet_font = "Symbol";
+            }
+            if (j.contains("text")) L.text = j["text"].get<std::string>();
+            if (j.contains("bullet")) {
+                L.fmt = "bullet";
+                L.text = j["bullet"].get<std::string>();
+                L.bullet_font = "";
+            }
+            if (j.contains("font")) L.bullet_font = j["font"].get<std::string>();
+            if (j.contains("start")) L.start = j["start"].get<int>();
+            if (j.contains("restart_after")) {
+                auto& r = j["restart_after"];
+                L.restart = r.is_null() || (r.is_boolean() && !r.get<bool>()) ? 0 : r.is_number() ? r.get<int>() : -1;
+            }
+            if (j.contains("legal")) L.legal = j["legal"].get<bool>();
+            if (j.contains("style")) L.style = j["style"].is_null() ? "" : j["style"].get<std::string>();
+            if (j.contains("indent")) L.left = util::length_twips(j["indent"]);
+            if (j.contains("hanging")) L.hanging = util::length_twips(j["hanging"]);
+            if (j.contains("after")) {
+                std::string s = j["after"].get<std::string>();
+                if (s != "tab" && s != "space" && s != "nothing") throw std::runtime_error("after is tab, space or nothing");
+                L.suffix = s;
+            }
+            if (j.contains("align")) {
+                std::string s = j["align"].get<std::string>();
+                if (s != "left" && s != "center" && s != "right") throw std::runtime_error("align is left, center or right");
+                L.align = s;
+            }
+            if (j.contains("format_run") || j.contains("run")) L.run = j.contains("run") ? j["run"] : j["format_run"];
+            // %N must refer to this level or a shallower one
+            for (std::size_t k = 0; k + 1 < L.text.size(); k++)
+                if (L.text[k] == '%' && L.text[k + 1] >= '1' && L.text[k + 1] <= '9' && L.text[k + 1] - '1' > (int)l)
+                    throw std::runtime_error("level " + std::to_string(l + 1) + " text '" + L.text + "' uses %" + L.text[k + 1] +
+                                             ", a deeper level; use %1..%" + std::to_string(l + 1));
+        }
+    }
+    auto num = d.numbering();
+    int aid = 0;
+    for (auto a : num.children("w:abstractNum")) aid = std::max(aid, a.attribute("w:abstractNumId").as_int() + 1);
+    auto a = schema::insert_child(num, "w:abstractNum");
+    xml::set_attr(a, "w:abstractNumId", std::to_string(aid));
+    xml::set_attr(a, "w15:restartNumberingAfterBreak", "0");
+    xml::set_attr(a.append_child("w:nsid"), "w:val", hex8());
+    xml::set_attr(a.append_child("w:multiLevelType"), "w:val", "multilevel");
+    xml::set_attr(a.append_child("w:tmpl"), "w:val", hex8());
+    if (spec.contains("name")) {
+        // the name shows in Word's list library
+        auto nm = schema::ensure_child(a, "w:name");
+        xml::set_attr(nm, "w:val", spec["name"].get<std::string>());
+    }
+    for (int l = 0; l < 9; l++) {
+        auto& L = lv[l];
+        auto lvl = a.append_child("w:lvl");
+        xml::set_attr(lvl, "w:ilvl", std::to_string(l));
+        xml::set_attr(lvl.append_child("w:start"), "w:val", std::to_string(L.start));
+        xml::set_attr(lvl.append_child("w:numFmt"), "w:val", L.fmt);
+        if (L.restart >= 0) xml::set_attr(lvl.append_child("w:lvlRestart"), "w:val", std::to_string(L.restart));
+        if (!L.style.empty()) {
+            std::string sid = ensure_style(d, L.style);
+            xml::set_attr(lvl.append_child("w:pStyle"), "w:val", sid);
+        }
+        if (L.legal) lvl.append_child("w:isLgl");
+        if (L.suffix != "tab") xml::set_attr(lvl.append_child("w:suff"), "w:val", L.suffix);
+        xml::set_attr(lvl.append_child("w:lvlText"), "w:val", L.text);
+        xml::set_attr(lvl.append_child("w:lvlJc"), "w:val", L.align);
+        auto ppr = lvl.append_child("w:pPr");
+        long left = L.left >= 0 ? L.left : 720 * (l + 1), hang = L.hanging >= 0 ? L.hanging : 360;
+        auto ind = ppr.append_child("w:ind");
+        xml::set_attr(ind, "w:left", std::to_string(left));
+        if (hang) xml::set_attr(ind, "w:hanging", std::to_string(hang));
+        if (!L.bullet_font.empty() || (L.run.is_object() && !L.run.empty())) {
+            auto rpr = lvl.append_child("w:rPr");
+            if (L.run.is_object() && !L.run.empty()) apply_rpr_json(d, rpr, L.run);
+            if (!L.bullet_font.empty()) {
+                auto rf = schema::ensure_child(rpr, "w:rFonts");
+                xml::set_attr(rf, "w:ascii", L.bullet_font);
+                xml::set_attr(rf, "w:hAnsi", L.bullet_font);
+                xml::set_attr(rf, "w:hint", "default");
+            }
+        }
+    }
+    xml::declare(xml::root_of(num), "w15", true);
+    int nid = add_num(d, aid);
+    // headings linked to levels number themselves: the style carries the numPr
+    for (int l = 0; l < 9; l++) {
+        if (lv[l].style.empty()) continue;
+        auto st = find_style(d, lv[l].style);
+        if (!st) continue;
+        auto ppr = schema::ensure_child(st, "w:pPr");
+        auto np = schema::ensure_child(ppr, "w:numPr");
+        if (l > 0) xml::set_attr(schema::ensure_child(np, "w:ilvl"), "w:val", std::to_string(l));
+        else if (auto il = np.child("w:ilvl")) np.remove_child(il);
+        xml::set_attr(schema::ensure_child(np, "w:numId"), "w:val", std::to_string(nid));
+    }
+    return nid;
+}
+
+Json list_definitions(Document& d) {
+    Json out = Json::array();
+    auto num = d.numbering(false);
+    if (!num) return out;
+    // how many paragraphs use each num
+    std::map<int, int> used;
+    for (auto& part : d.story_parts()) {
+        if (!d.pkg().has(part)) continue;
+        for (auto p : paragraphs(d.pkg().xml(part).document_element(), true))
+            if (auto n = num_of(d, p).first) used[n]++;
+    }
+    for (auto n : num.children("w:num")) {
+        int nid = n.attribute("w:numId").as_int();
+        auto a = abstract_of(d, nid);
+        if (!a) continue;
+        Json j = {{"num_id", nid}, {"paragraphs", used[nid]}};
+        if (auto nm = a.child("w:name")) j["name"] = xml::attr(nm, "w:val");
+        if (auto sl = a.child("w:styleLink")) j["style"] = xml::attr(sl, "w:val");
+        if (auto nsl = a.child("w:numStyleLink")) j["uses_style"] = xml::attr(nsl, "w:val");
+        Json levels = Json::array();
+        for (auto l : a.children("w:lvl")) {
+            int il = l.attribute("w:ilvl").as_int();
+            if (il > 2 && !used[nid] && levels.size() >= 3) break;  // keep it short for unused lists
+            Json L = {{"level", il}, {"format", xml::attr(l.child("w:numFmt"), "w:val", "decimal")},
+                      {"text", xml::attr(l.child("w:lvlText"), "w:val")}};
+            if (auto s = l.child("w:start"); s && xml::attr(s, "w:val") != "1") L["start"] = util::to_int(xml::attr(s, "w:val"));
+            if (auto s = l.child("w:pStyle")) L["style"] = xml::attr(s, "w:val");
+            if (l.child("w:isLgl")) L["legal"] = true;
+            levels.push_back(L);
+        }
+        j["levels"] = levels;
+        bool overrides = false;
+        for (auto ov : n.children("w:lvlOverride")) (void)ov, overrides = true;
+        if (overrides) j["restarted"] = true;
+        out.push_back(j);
+    }
+    return out;
 }
 
 // ── math ─────────────────────────────────────────────────────────────────

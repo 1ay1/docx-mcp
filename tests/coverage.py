@@ -272,6 +272,12 @@ def exercise(R, doc, track, work, tag):
     R.call("mark_index_entry", doc=doc, paragraph=p3, term="alpha", sub="beta: gamma", position=1, **t)
     R.call("insert_index", doc=doc, paragraph=p3, columns=2, **t)
     R.call("update_fields", doc=doc)
+    ml = R.call("define_list", doc=doc, preset="outline", paragraphs=[p1, p2], level=1, name="Cov outline", **t)
+    R.call("define_list", doc=doc, preset="numbered", levels=[{"format": "upperLetter", "text": "%1)"}, {"text": "%1.%2", "restart_after": False}])
+    R.call("define_list", doc=doc, preset="headings")
+    lists = R.call("list_lists", doc=doc) or {}
+    if isinstance(ml, dict) and "num_id" in ml:
+        R.call("apply_list", doc=doc, paragraphs=[p3], num_id=ml["num_id"], level=2, **t)
     R.call("update_fields", doc=doc, paragraph=p1)
     R.call("document_variables", doc=doc, set={"Version": "2.1", "Gone": None})
     R.call("document_variables", doc=doc)
